@@ -7,9 +7,13 @@ mod dimension;
 mod error;
 mod interval;
 mod quantity;
+mod settings;
+mod tolerance;
 mod units;
 
 pub use dimension::Dimension;
 pub use error::EngineError;
 pub use interval::Interval;
 pub use quantity::{AbsoluteTemperature, Measure, MeasureKind, Quantity, TemperatureDifference};
+pub use settings::DecisionConfig;
+pub use tolerance::{approx_eq, guard, ABS_TOL, REL_TOL};

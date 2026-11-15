@@ -8,6 +8,8 @@ Tranche 1 : 27 tests, 3 écarts au design, tous consignés.
 
 Tranche 2 : 40 tests, 2 écarts au design consignés.
 
+Tranche 3 : 58 tests, 3 écarts consignés, trou de couverture R-07.5 repéré par Kiro (doc strings).
+
 ## YYYY-MM-DD
 
 ### Decision

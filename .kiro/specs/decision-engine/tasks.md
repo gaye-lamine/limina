@@ -34,11 +34,11 @@ Rules for every task:
 
 ## Slice 3: DecisionConfig and error types
 
-- [ ] **T08 `tolerance.rs`.** `REL_TOL`, `ABS_TOL`, `approx_eq`, `guard`. Unit tests: `approx_eq` at 0 and at large values; `guard` takes the max of the two terms.
+- [x] **T08 `tolerance.rs`.** `REL_TOL`, `ABS_TOL`, `approx_eq`, `guard`. Unit tests: `approx_eq` at 0 and at large values; `guard` takes the max of the two terms.
   Covers: D-06, D-15 (formula of `g`).
-- [ ] **T09 `settings.rs`.** `DecisionConfig` with private fields, `new`, getters, `Default`, `DEFAULT_K`, `DEFAULT_MAX_CONFIGURATIONS`. Add `InvalidCoverageFactor`, `InvalidGuard`, `InvalidMaxConfigurations`. Unit tests: `k <= 0`, NaN, infinite; `guard_rel` equal to 1, above 1, negative, NaN, infinite rejected; `guard_rel = 0` and `0.999` accepted; negative or non-finite `guard_abs` rejected; `max_configurations = 0` rejected; defaults.
+- [x] **T09 `settings.rs`.** `DecisionConfig` with private fields, `new`, getters, `Default`, `DEFAULT_K`, `DEFAULT_MAX_CONFIGURATIONS`. Add `InvalidCoverageFactor`, `InvalidGuard`, `InvalidMaxConfigurations`. Unit tests: `k <= 0`, NaN, infinite; `guard_rel` equal to 1, above 1, negative, NaN, infinite rejected; `guard_rel = 0` and `0.999` accepted; negative or non-finite `guard_abs` rejected; `max_configurations = 0` rejected; defaults.
   Covers: R-02.3, R-02.4 (config part), D-18, D-20, D-21.
-- [ ] **T10 Complete `error.rs`.** Add `NegativeUncertainty`, `InvalidBound`, `UnknownAssumption`, `ConstraintOutsideDomain`, `UnknownParameter`, `EmptyConfigurationSet`, `ConfigurationSetTooLarge`. Test: the `Display` text of every variant avoids the words fraud, lie, scam, hoax.
+- [x] **T10 Complete `error.rs`.** Add `NegativeUncertainty`, `InvalidBound`, `UnknownAssumption`, `ConstraintOutsideDomain`, `UnknownParameter`, `EmptyConfigurationSet`, `ConfigurationSetTooLarge`. Test: the `Display` text of every variant avoids the words fraud, lie, scam, hoax.
   Covers: R-06.4, R-07.5.
 
 ## Slice 4: Limit trait and ConfigurationSet
