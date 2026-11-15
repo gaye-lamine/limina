@@ -43,11 +43,11 @@ Rules for every task:
 
 ## Slice 4: Limit trait and ConfigurationSet
 
-- [ ] **T11 `limit.rs`.** `AssumptionId`, `OptionId`, `ParameterId`, `Direction`, `AssumptionOption`, `Assumption`, `DomainRange`, `PlausibleDomain`, `ParameterSpec`, `ParameterEnclosure`, `Configuration`, trait `Limit`. Add `tests/common/mod.rs` with `TestLimit` (table of bound values, no physics). Unit tests: id ordering, `ParameterEnclosure::get`, `TestLimit::bound` on a point enclosure.
+- [x] **T11 `limit.rs`.** `AssumptionId`, `OptionId`, `ParameterId`, `Direction`, `AssumptionOption`, `Assumption`, `DomainRange`, `PlausibleDomain`, `ParameterSpec`, `ParameterEnclosure`, `Configuration`, trait `Limit`. Add `tests/common/mod.rs` with `TestLimit` (table of bound values, no physics). Unit tests: id ordering, `ParameterEnclosure::get`, `TestLimit::bound` on a point enclosure.
   Covers: R-08.1, R-08.7, D-04, D-20 (no guard on `Limit`).
-- [ ] **T12 `config.rs`.** `ConstraintsMap`, `ConfigurationSet::build` with the check order of design 5.1 and the size cap computed with checked multiplication before enumeration. Unit tests: unconstrained keeps the full domain; unknown assumption; constraint outside domain; empty allowed set and empty domain give `EmptyConfigurationSet`; above the cap gives `ConfigurationSetTooLarge` without enumeration; `usize` overflow gives the same error without panic; above the cap before narrowing but within it after narrowing succeeds; lexicographic order.
+- [x] **T12 `config.rs`.** `ConstraintsMap`, `ConfigurationSet::build` with the check order of design 5.1 and the size cap computed with checked multiplication before enumeration. Unit tests: unconstrained keeps the full domain; unknown assumption; constraint outside domain; empty allowed set and empty domain give `EmptyConfigurationSet`; above the cap gives `ConfigurationSetTooLarge` without enumeration; `usize` overflow gives the same error without panic; above the cap before narrowing but within it after narrowing succeeds; lexicographic order.
   Covers: R-08.1 to R-08.6, D-07, D-08, D-17.
-- [ ] **T13 `bound_range` in `engine.rs`.** `EnclosureKind`, `BoundRange` (in `verdict.rs`), `bound_range` with `InvalidBound` for negative or non-finite ends. Unit tests on `TestLimit` with point enclosures.
+- [x] **T13 `bound_range` in `engine.rs`.** `EnclosureKind`, `BoundRange` (in `verdict.rs`), `bound_range` with `InvalidBound` for negative or non-finite ends. Unit tests on `TestLimit` with point enclosures.
   Covers: R-02.5, R-02.6.
 
 ## Slice 5: verdict rules without missing parameters
@@ -92,3 +92,8 @@ Rules for every task:
   Covers: R-05.7, R-05.8, D-10, D-13, D-19.
 - [ ] **T30 Properties with missing parameters.** Extend the generators with parameters and plausible domains; run P-02 (permissive variant), P-03 (b), E-02 and E-04 with missing parameters. Move any shrunk failure found so far into `tests/regressions.rs`.
   Covers: P-02, P-03 (b), E-02, E-04, R-05, R-09.
+
+## Follow-up
+
+- [ ] **T31** test that the public doc strings and EngineError messages avoid the words fraud, lie, scam, hoax, covering R-07.5 as design.md 9.4 requires; match whole words only.
+  Covers: R-07.5.
