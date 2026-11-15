@@ -325,7 +325,8 @@ fn satisfying_configs(
 }
 
 /// Margin (D-12): hull of `lo/B_max`, `lo/B_min`, `hi/B_max`, `hi/B_min`
-/// when `B_min > 0`; `None` otherwise, without any division.
+/// when `B_min > 0`; `None` otherwise, without any division. `None` also
+/// when any ratio is not finite (D-23). The verdict never depends on it.
 fn margin(lo: f64, hi: f64, bounds: BoundRange) -> Option<Margin> {
     if bounds.b_min <= 0.0 {
         return None;
@@ -336,6 +337,9 @@ fn margin(lo: f64, hi: f64, bounds: BoundRange) -> Option<Margin> {
         hi / bounds.b_max,
         hi / bounds.b_min,
     ];
+    if ratios.iter().any(|r| !r.is_finite()) {
+        return None;
+    }
     Some(Margin {
         low: ratios.iter().copied().fold(f64::INFINITY, f64::min),
         high: ratios.iter().copied().fold(f64::NEG_INFINITY, f64::max),
@@ -1016,6 +1020,16 @@ mod margin_tests {
     fn zero_bound_gives_no_margin() {
         assert_eq!(margin(1.0, 2.0, range(0.0, 5.0)), None);
         assert_eq!(margin(0.0, 0.0, range(0.0, 0.0)), None);
+    }
+
+    #[test]
+    fn non_finite_ratio_gives_no_margin() {
+        // D-23: 1 / 1e-320 overflows to infinity.
+        assert_eq!(margin(1.0, 2.0, range(1e-320, 1.0)), None);
+        // f64::MAX / 0.5 overflows to infinity.
+        assert_eq!(margin(f64::MAX, f64::MAX, range(0.5, 1.0)), None);
+        // A tiny but harmless B_min still gives a margin.
+        assert!(margin(1e-300, 1e-300, range(1e-300, 1.0)).is_some());
     }
 }
 

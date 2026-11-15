@@ -14,6 +14,8 @@ Tranche 4 : 89 tests, 5 écarts consignés, tous liés à la visibilité Rust.
 
 Tranche 5 : 131 tests, tests écrits avant le code, oracle indépendant, expérience de mutation (garde cassé détecté par P-02 et P-03(a)), aucun bogue réel trouvé.
 
+Tranche 6 : 149 tests, 18 propriétés à 1024 cas en CI, aucune défaillance.
+
 ### Expérience de mutation (tranche 5)
 
 Bogue injecté volontairement, pas un bogue trouvé dans le code.

@@ -67,17 +67,17 @@ Rules for every task:
 
 ## Slice 6: properties
 
-- [ ] **T20 Test infrastructure (`tests/common/`).** Fixed-seed `runner()` (constant 32-byte seed, 256 cases, 1024 in CI via a constant), `Scenario` with a hand-written readable `Debug`, shared generators (bounds as integers `0..=1000`, 1 to 3 assumptions with 1 to 5 options, claim as `bound + offset`, `u` and `k` as integers, four guard modes), independent oracle with its own guard formula. Commit `proptest-regressions/`; create `tests/regressions.rs` (empty). Module doc notes that P-07 to P-09 are out of scope. One smoke property to prove the runner works. Check the proptest 1.12.0 API for the seeded runner.
+- [x] **T20 Test infrastructure (`tests/common/`).** Fixed-seed `runner()` (constant 32-byte seed, 256 cases, 1024 in CI via a constant), `Scenario` with a hand-written readable `Debug`, shared generators (bounds as integers `0..=1000`, 1 to 3 assumptions with 1 to 5 options, claim as `bound + offset`, `u` and `k` as integers, four guard modes), independent oracle with its own guard formula. Commit `proptest-regressions/`; create `tests/regressions.rs` (empty). Module doc notes that P-07 to P-09 are out of scope. One smoke property to prove the runner works. Check the proptest 1.12.0 API for the seeded runner.
   Covers: testing strategy 9.1, 9.2, D-05.
-- [ ] **T21 P-05 and P-06.** `tests/units.rs`.
+- [x] **T21 P-05 and P-06.** `tests/units.rs`.
   Covers: P-05, P-06, D-06.
-- [ ] **T22 P-04.** `tests/units_equivalence.rs`: integer-multiple variant and real-valued variant away from the guard.
+- [x] **T22 P-04.** `tests/units_equivalence.rs`: integer-multiple variant and real-valued variant away from the guard.
   Covers: P-04.
-- [ ] **T23 P-01 and P-10.** `tests/sets.rs`.
+- [x] **T23 P-01 and P-10.** `tests/sets.rs`.
   Covers: P-01, P-10, R-06.1.
-- [ ] **T24 P-02, P-03 and E-01.** `tests/rules.rs`, no missing parameters, both directions, four guard modes.
+- [x] **T24 P-02, P-03 and E-01.** `tests/rules.rs`, no missing parameters, both directions, four guard modes.
   Covers: P-02, P-03 (a), P-03 (b), E-01, R-09.
-- [ ] **T25 E-02, E-03 and E-04.** `tests/engine_props.rs`, no missing parameters.
+- [x] **T25 E-02, E-03 and E-04.** `tests/engine_props.rs`, no missing parameters.
   Covers: E-02, E-03, E-04.
 
 ## Slice 7: missing parameters, enclosures, Certain / Depends

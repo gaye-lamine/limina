@@ -165,3 +165,4 @@ Recorded from author review of the former open questions. Notation: `lo = v - k*
 - **D-20 (was OQ-03 of design v2) Guard scope.** The guard stays global in `DecisionConfig`. There is no per-limit guard in this spec.
 - **D-21 (was OQ-04 of design v2) Config validations confirmed.** `max_configurations = 0` and a negative or non-finite guard are typed errors, as in R-02.4.
 - **D-22 (was OQ-05 of design v2) NoDomain case.** When any required missing parameter has no declared domain, the `missing` list contains all missing parameters tagged `NoDomain` or `HasDomain`, and no enclosures are computed.
+- **D-23 (was the open point on infinite margins, slice 5) Non-finite margin.** If any of the four ratios of D-12 is not finite, the margin is `None`, exactly as when `B_min = 0`. The verdict is unaffected.

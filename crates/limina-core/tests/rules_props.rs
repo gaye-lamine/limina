@@ -10,9 +10,71 @@
 
 mod common;
 
+use std::fmt;
+
 use common::scenario::{config, g, observed, oracle, predicates, scenario, Expected, Scenario};
-use limina_core::{Direction, Verdict};
+use limina_core::{
+    decide, Dimension, Direction, DomainRange, Interval, MeasureKind, MissingStatus, ParameterId,
+    ParameterSpec, PlausibleDomain, Quantity, Support, Verdict,
+};
 use proptest::prelude::*;
+
+/// A parameter of the generated limit: required or not, with or without a
+/// plausible domain, supplied with a positive value or missing.
+#[derive(Clone, Debug)]
+struct Param {
+    required: bool,
+    has_domain: bool,
+    supplied: Option<u32>,
+}
+
+/// A scenario plus 0 to 3 parameters (P-03 (b)).
+#[derive(Clone)]
+struct ParamScenario {
+    base: Scenario,
+    params: Vec<Param>,
+}
+
+impl fmt::Debug for ParamScenario {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?} | params {:?}", self.base, self.params)
+    }
+}
+
+impl ParamScenario {
+    fn id(i: usize) -> ParameterId {
+        ParameterId::new(format!("p{i}"))
+    }
+
+    /// Ids and statuses of the required parameters that are not supplied.
+    fn expected_missing(&self) -> Vec<(ParameterId, MissingStatus)> {
+        self.params
+            .iter()
+            .enumerate()
+            .filter(|(_, p)| p.required && p.supplied.is_none())
+            .map(|(i, p)| {
+                let status = if p.has_domain {
+                    MissingStatus::HasDomain
+                } else {
+                    MissingStatus::NoDomain
+                };
+                (Self::id(i), status)
+            })
+            .collect()
+    }
+}
+
+fn param_scenario() -> impl Strategy<Value = ParamScenario> {
+    let param = (any::<bool>(), any::<bool>(), proptest::option::of(1u32..=5)).prop_map(
+        |(required, has_domain, supplied)| Param {
+            required,
+            has_domain,
+            supplied,
+        },
+    );
+    (scenario(), proptest::collection::vec(param, 0..=3))
+        .prop_map(|(base, params)| ParamScenario { base, params })
+}
 
 /// P-02 scenarios: a chosen configuration `c`, and a claim at or below
 /// `B(c)` (Max-bound) or at or above it (Min-bound), or within the guard of
@@ -99,6 +161,67 @@ proptest! {
         prop_assert_eq!(applied, 1);
         let d = s.decide().expect("valid scenario");
         prop_assert_eq!(observed(&d.verdict), oracle(&s));
+    }
+
+    /// P-03 (b): with or without missing parameters, `decide` returns exactly
+    /// one verdict with a consistent payload, and never panics.
+    #[test]
+    fn p03b_exactly_one_verdict_with_a_consistent_payload(ps in param_scenario()) {
+        let dimless = MeasureKind::Plain(Dimension::DIMENSIONLESS);
+        let mut limit = ps.base.limit();
+        let mut input = ps.base.input();
+        for (i, p) in ps.params.iter().enumerate() {
+            let plausible = p.has_domain.then(|| PlausibleDomain {
+                range: DomainRange::Interval(Interval::new(1.0, 5.0).expect("valid")),
+                source: "test".to_string(),
+            });
+            limit = limit.with_parameter(ParameterSpec {
+                id: ParamScenario::id(i),
+                kind: dimless,
+                required: p.required,
+                plausible,
+            });
+            if let Some(x) = p.supplied {
+                let q = Quantity::from_si(f64::from(x), Dimension::DIMENSIONLESS).expect("valid");
+                input
+                    .known_parameters
+                    .insert(ParamScenario::id(i), limina_core::Measure::Plain(q));
+            }
+        }
+        let d = decide(&limit, &input).expect("valid input never errors");
+        let expected_missing = ps.expected_missing();
+
+        for e in [d.enclosures.map(|e| e.permissive), d.enclosures.map(|e| e.restrictive)]
+            .into_iter()
+            .flatten()
+        {
+            prop_assert!(e.bounds.b_min <= e.bounds.b_max);
+            if let Some(m) = e.margin {
+                prop_assert!(m.low <= m.high, "margin {m:?}");
+            }
+        }
+        match &d.verdict {
+            Verdict::InsufficientData { missing } => {
+                prop_assert!(!missing.is_empty());
+                let got: Vec<(ParameterId, MissingStatus)> =
+                    missing.iter().map(|m| (m.id.clone(), m.status)).collect();
+                prop_assert_eq!(got, expected_missing);
+            }
+            Verdict::Conditional { satisfying } => {
+                prop_assert!(!satisfying.is_empty());
+                prop_assert!(d.enclosures.is_some());
+                if expected_missing.is_empty() {
+                    prop_assert!(satisfying.iter().all(|s| s.support == Support::Certain));
+                }
+            }
+            Verdict::Impossible | Verdict::Compatible => {
+                prop_assert!(d.enclosures.is_some());
+            }
+        }
+        if d.enclosures.is_none() {
+            let is_insufficient = matches!(d.verdict, Verdict::InsufficientData { .. });
+            prop_assert!(is_insufficient);
+        }
     }
 
     /// E-01: with no guard and `u = 0`, the engine equals the original rules.
