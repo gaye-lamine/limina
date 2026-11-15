@@ -6,7 +6,7 @@ inclusion: always
 
 # Tech stack
 
-- Rust workspace. Typed physical quantities with the `uom` crate. Property-based tests with `proptest`.
+- Rust workspace. Typed physical quantities via an in-house runtime Dimension type (SI exponents). uom was rejected: compile-time checks only. Property-based tests with `proptest`.
 
 - API: axum + tokio. Persistence: SQLite via sqlx. WASM build via wasm-bindgen.
 
@@ -28,6 +28,5 @@ inclusion: always
 
 ## Pinned versions
 
-- uom = "=0.38.0"
 - thiserror = "=2.0.21"
 - proptest = "=1.12.0" (dev)

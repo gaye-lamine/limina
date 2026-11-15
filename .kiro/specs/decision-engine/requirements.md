@@ -1,6 +1,6 @@
 # Requirements: decision-engine
 
-Crate: `limina-core`. Status: v5, decisions D-18 to D-22 recorded, awaiting author review.
+Crate: `limina-core`. Status: v5, frozen.
 
 ## Introduction
 

@@ -1,6 +1,6 @@
 # Design: decision-engine
 
-Crate: `limina-core` only. Status: DRAFT v3, awaiting author review. Based on `requirements.md` v5. Signatures only, no bodies. No `tasks.md`, no code.
+Crate: `limina-core` only. Status: v5, frozen. Based on `requirements.md` v5. Signatures only, no bodies. No `tasks.md`, no code.
 
 ## 1. Scope and non-goals
 
