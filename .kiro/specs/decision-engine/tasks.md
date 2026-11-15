@@ -27,9 +27,9 @@ Rules for every task:
 
 ## Slice 2: Interval
 
-- [ ] **T06 `interval.rs` core.** `Interval` with `new`, `point`, `lo`, `hi`, `hull`, `add`, `sub`. Add `InvertedInterval` to `EngineError`. Unit tests: invariants, non-finite rejected, add and sub on known values.
+- [x] **T06 `interval.rs` core.** `Interval` with `new`, `point`, `lo`, `hi`, `hull`, `add`, `sub`. Add `InvertedInterval` to `EngineError`. Unit tests: invariants, non-finite rejected, add and sub on known values.
   Covers: R-02.6.
-- [ ] **T07 `interval.rs` mul and div.** `mul`, `div`. Add `DivisionByIntervalContainingZero`. Unit tests: sign cases of `mul`, `div` by an interval containing 0 rejected.
+- [x] **T07 `interval.rs` mul and div.** `mul`, `div`. Add `DivisionByIntervalContainingZero`. Unit tests: sign cases of `mul`, `div` by an interval containing 0 rejected.
   Covers: R-02.6.
 
 ## Slice 3: DecisionConfig and error types

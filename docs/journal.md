@@ -6,6 +6,8 @@ One entry per working session. Newest first.
 
 Tranche 1 : 27 tests, 3 écarts au design, tous consignés.
 
+Tranche 2 : 40 tests, 2 écarts au design consignés.
+
 ## YYYY-MM-DD
 
 ### Decision

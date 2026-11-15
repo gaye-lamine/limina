@@ -37,6 +37,14 @@ pub enum EngineError {
         /// Name of the offending field.
         field: &'static str,
     },
+
+    /// An interval was built with `lo > hi`.
+    #[error("inverted interval")]
+    InvertedInterval,
+
+    /// An interval was divided by an interval that contains zero.
+    #[error("division by an interval containing zero")]
+    DivisionByIntervalContainingZero,
 }
 
 #[cfg(test)]

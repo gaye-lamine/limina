@@ -5,9 +5,11 @@
 
 mod dimension;
 mod error;
+mod interval;
 mod quantity;
 mod units;
 
 pub use dimension::Dimension;
 pub use error::EngineError;
+pub use interval::Interval;
 pub use quantity::{AbsoluteTemperature, Measure, MeasureKind, Quantity, TemperatureDifference};
