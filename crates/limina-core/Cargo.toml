@@ -1,0 +1,14 @@
+[package]
+name = "limina-core"
+version = "0.1.0"
+edition = "2021"
+description = "Limina core: units, intervals, Limit trait and decision engine."
+license = "MIT"
+publish = false
+
+[dependencies]
+uom = "=0.38.0"
+thiserror = "=2.0.21"
+
+[dev-dependencies]
+proptest = "=1.12.0"
