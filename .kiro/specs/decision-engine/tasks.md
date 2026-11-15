@@ -16,13 +16,13 @@ Rules for every task:
 
 ## Slice 1: Dimension, Quantity, unit table
 
-- [ ] **T02 `dimension.rs` and initial `error.rs`.** `Dimension` (7 `i8` exponents, `DIMENSIONLESS`, `new`, `exponents`). `EngineError` with only the variants needed by slice 1: `IncompatibleDimension`, `UnknownUnit`, `NonFiniteValue`, `TemperatureKindRequired`, `TemperatureKindMismatch`, `NegativeAbsoluteTemperature`. Unit tests: equality, ordering, constructor.
+- [x] **T02 `dimension.rs` and initial `error.rs`.** `Dimension` (7 `i8` exponents, `DIMENSIONLESS`, `new`, `exponents`). `EngineError` with only the variants needed by slice 1: `IncompatibleDimension`, `UnknownUnit`, `NonFiniteValue`, `TemperatureKindRequired`, `TemperatureKindMismatch`, `NegativeAbsoluteTemperature`. Unit tests: equality, ordering, constructor.
   Covers: R-01.1, R-06.4.
-- [ ] **T03 `units.rs`.** `UnitEntry`, `lookup_unit`, the table of exactly 13 symbols (design 3.4). Exact symbol match; anything else gives `UnknownUnit`. Unit tests: one per row (dimension and factor), unknown symbols (`kw`, `W/m^2`, `°C`).
+- [x] **T03 `units.rs`.** `UnitEntry`, `lookup_unit`, the table of exactly 13 symbols (design 3.4). Exact symbol match; anything else gives `UnknownUnit`. Unit tests: one per row (dimension and factor), unknown symbols (`kw`, `W/m^2`, `°C`).
   Covers: R-01.1, design 3.4.
-- [ ] **T04 `Quantity` in `quantity.rs`.** `from_unit`, `from_si`, `to_unit`, `si_value`, `dimension`. `K` gives `TemperatureKindRequired`; non-finite gives `NonFiniteValue`; `to_unit` to another dimension gives `IncompatibleDimension`. Unit tests for each error and for `kW` to `W`, `kWh` to `J`.
+- [x] **T04 `Quantity` in `quantity.rs`.** `from_unit`, `from_si`, `to_unit`, `si_value`, `dimension`. `K` gives `TemperatureKindRequired`; non-finite gives `NonFiniteValue`; `to_unit` to another dimension gives `IncompatibleDimension`. Unit tests for each error and for `kW` to `W`, `kWh` to `J`.
   Covers: R-01.1, R-01.2.
-- [ ] **T05 Temperature and measure types in `quantity.rs`.** `AbsoluteTemperature`, `TemperatureDifference` and their allowed operations only, `Measure`, `MeasureKind`, `kind`, `si_value`, `uncertainty_kind`. Unit tests: negative kelvin rejected, `abs - abs = diff`, `abs + diff` checked, absolute against difference gives `TemperatureKindMismatch`.
+- [x] **T05 Temperature and measure types in `quantity.rs`.** `AbsoluteTemperature`, `TemperatureDifference` and their allowed operations only, `Measure`, `MeasureKind`, `kind`, `si_value`, `uncertainty_kind`. Unit tests: negative kelvin rejected, `abs - abs = diff`, `abs + diff` checked, absolute against difference gives `TemperatureKindMismatch`.
   Covers: R-01.2, R-01.4, R-01.5.
 
 ## Slice 2: Interval
