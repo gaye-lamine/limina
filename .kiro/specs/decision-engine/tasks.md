@@ -52,17 +52,17 @@ Rules for every task:
 
 ## Slice 5: verdict rules without missing parameters
 
-- [ ] **T14 `verdict.rs` types.** `MissingStatus`, `MissingParameter`, `Support`, `SatisfyingConfig`, `Verdict`, `Margin`, `EnclosureResult`, `Enclosures`, `Decision`; and `Claim`, `DecisionInput`. Types only, with doc comments. Unit test: construction and equality.
+- [x] **T14 `verdict.rs` types.** `MissingStatus`, `MissingParameter`, `Support`, `SatisfyingConfig`, `Verdict`, `Margin`, `EnclosureResult`, `Enclosures`, `Decision`; and `Claim`, `DecisionInput`. Types only, with doc comments. Unit test: construction and equality.
   Covers: R-07.1 to R-07.3 (types).
-- [ ] **T15 Input validation (step 1).** Private function in `engine.rs`: claim kind against `bounded_kind`, kind of `u`, finite `v` and `u`, `u >= 0`, computation of `lo` and `hi` with `u = 0` when absent. Unit tests for each error and for `lo`, `hi`.
+- [x] **T15 Input validation (step 1).** Private function in `engine.rs`: claim kind against `bounded_kind`, kind of `u`, finite `v` and `u`, `u >= 0`, computation of `lo` and `hi` with `u = 0` when absent. Unit tests for each error and for `lo`, `hi`.
   Covers: R-01.3, R-01.4, R-02.1, R-02.2, R-02.4 (claim part).
-- [ ] **T16 Rules (step 7).** Private `rules_max` and `rules_min` over one enclosure: guarded `Impossible` as an explicit quantifier over `S`, exact `Compatible`, otherwise `Conditional`; `debug_assert!` against the `B_max` / `B_min` form. Unit tests at the boundaries: `v = B + g(B)` not `Impossible`, its `next_up` is `Impossible` (`u = 0`); `Compatible` at `hi == B_min` and not one ulp above; mirrored for Min-bound; guard = 0 case.
+- [x] **T16 Rules (step 7).** Private `rules_max` and `rules_min` over one enclosure: guarded `Impossible` as an explicit quantifier over `S`, exact `Compatible`, otherwise `Conditional`; `debug_assert!` against the `B_max` / `B_min` form. Unit tests at the boundaries: `v = B + g(B)` not `Impossible`, its `next_up` is `Impossible` (`u = 0`); `Compatible` at `hi == B_min` and not one ulp above; mirrored for Min-bound; guard = 0 case.
   Covers: R-03.1, R-03.2, R-04.1, R-04.2, R-09, D-01, D-02, D-15, D-18.
-- [ ] **T17 C\* (step 9, no missing parameters).** Private function: guarded membership on each `c`, every member `Certain`. Unit tests: membership at the guard boundary for both directions; the configuration at the extreme is always kept.
+- [x] **T17 C\* (step 9, no missing parameters).** Private function: guarded membership on each `c`, every member `Certain`. Unit tests: membership at the guard boundary for both directions; the configuration at the extreme is always kept.
   Covers: R-03.3, R-04.3, D-15, E-04 (by example).
-- [ ] **T18 Margin (step 10).** Private function: hull of the four ratios when `B_min > 0`, `None` when `B_min == 0` with no division. Unit tests: positive claim equals `[lo / B_max, hi / B_min]`; negative claim gives `low <= high`; zero bound gives `None`.
+- [x] **T18 Margin (step 10).** Private function: hull of the four ratios when `B_min > 0`, `None` when `B_min == 0` with no division. Unit tests: positive claim equals `[lo / B_max, hi / B_min]`; negative claim gives `low <= high`; zero bound gives `None`.
   Covers: D-09, D-12.
-- [ ] **T19 `decide` end to end, no missing parameters.** Public `decide` wiring steps 1, 2, 3 (supplied parameters only, kind check, `UnknownParameter`), 5, 6 (both enclosures equal), 7, 9, 10. Until slice 7, a missing required parameter returns `InsufficientData` with all missing parameters tagged and `enclosures: None` (conservative, never `Impossible`). Unit tests: one scenario per verdict for each direction; `UnknownParameter`; `EmptyConfigurationSet` through `decide`.
+- [x] **T19 `decide` end to end, no missing parameters.** Public `decide` wiring steps 1, 2, 3 (supplied parameters only, kind check, `UnknownParameter`), 5, 6 (both enclosures equal), 7, 9, 10. Until slice 7, a missing required parameter returns `InsufficientData` with all missing parameters tagged and `enclosures: None` (conservative, never `Impossible`). Unit tests: one scenario per verdict for each direction; `UnknownParameter`; `EmptyConfigurationSet` through `decide`.
   Covers: R-03, R-04, R-06.1 to R-06.3, R-07.1, R-07.2.
 
 ## Slice 6: properties

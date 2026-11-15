@@ -6,6 +6,8 @@
 // Each test binary uses a different subset of these helpers.
 #![allow(dead_code)]
 
+pub mod scenario;
+
 use std::collections::BTreeMap;
 
 use limina_core::{

@@ -17,7 +17,7 @@ mod verdict;
 
 pub use config::{ConfigurationSet, ConstraintsMap};
 pub use dimension::Dimension;
-pub use engine::{bound_range, EnclosureKind};
+pub use engine::{bound_range, decide, EnclosureKind};
 pub use error::EngineError;
 pub use interval::Interval;
 pub use limit::{
@@ -27,4 +27,7 @@ pub use limit::{
 pub use quantity::{AbsoluteTemperature, Measure, MeasureKind, Quantity, TemperatureDifference};
 pub use settings::DecisionConfig;
 pub use tolerance::{approx_eq, guard, ABS_TOL, REL_TOL};
-pub use verdict::BoundRange;
+pub use verdict::{
+    BoundRange, Claim, Decision, DecisionInput, EnclosureResult, Enclosures, Margin,
+    MissingParameter, MissingStatus, SatisfyingConfig, Support, Verdict,
+};

@@ -210,8 +210,6 @@ impl MeasureKind {
 ///
 /// Errors: `TemperatureKindMismatch` for an absolute temperature against a
 /// temperature difference, `IncompatibleDimension` otherwise.
-// Used by the engine input validation (T15); until then only by tests.
-#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn check_same_kind(
     expected: MeasureKind,
     found: MeasureKind,
