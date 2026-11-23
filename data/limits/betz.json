@@ -1,0 +1,21 @@
+{
+  "id": "betz",
+  "title": "Betz limit",
+  "direction": "max",
+  "bounded_dimension": "dimensionless",
+  "parameters": [],
+  "assumptions": [
+    {
+      "id": "reference_area",
+      "options": [
+        { "id": "unshrouded_rotor", "formula": "16/27" },
+        { "id": "shrouded_total_capture_area", "formula": "16/27" },
+        { "id": "shrouded_rotor_area_only" }
+      ]
+    }
+  ],
+  "validity": [],
+  "references": ["TODO(reference): to be supplied by the author"],
+  "status": "draft",
+  "epistemic_status": "model_bound"
+}

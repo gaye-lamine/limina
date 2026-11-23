@@ -1,0 +1,15 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "submission-guard",
+      "trigger": "SessionStart",
+      "description": "Read-only check at session start. Reports PASS or FAIL per item: (a) .gitignore does not exclude .kiro, (b) LICENSE exists, (c) README.md has an installation section, (d) .kiro/steering, .kiro/specs and .kiro/hooks contain git-tracked files, (e) Cargo.lock exists. Never modifies files.",
+      "action": {
+        "type": "command",
+        "command": "powershell -NoProfile -Command \"$env:PATH=$env:USERPROFILE+'\\.cargo\\bin;'+$env:PATH; function R($n,$ok){ if($ok){'PASS '+$n}else{'FAIL '+$n} }; R '(a) .gitignore does not exclude .kiro' (-not ((Test-Path .gitignore) -and (Select-String -Path .gitignore -Pattern '^\\s*/?\\.kiro' -Quiet))); R '(b) LICENSE exists' (Test-Path LICENSE); R '(c) README.md has an installation section' ((Test-Path README.md) -and (Select-String -Path README.md -Pattern '^#+\\s*Install' -Quiet)); $d=$true; foreach($p in '.kiro/steering','.kiro/specs','.kiro/hooks'){ if(-not (git ls-files $p | Select-Object -First 1)){$d=$false} }; R '(d) .kiro/steering, .kiro/specs, .kiro/hooks tracked by git' $d; R '(e) Cargo.lock exists' (Test-Path Cargo.lock)\"",
+        "timeout": 60
+      }
+    }
+  ]
+}

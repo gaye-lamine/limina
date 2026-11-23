@@ -1,0 +1,1110 @@
+/* Black, white and greys only. System fonts. No icons, no remote assets. */
+:root {
+  --ink: #000;
+  --paper: #fff;
+  --grey-text: #595959; /* 7:1 on white */
+  --grey-rule: #8c8c8c;
+  --grey-light: #d9d9d9;
+  --grey-band: #ebebeb;
+  /* Page paper and the faint grid behind the apparatus. #595959 on --page is 6.4:1. */
+  --page: #f4f4f4;
+  --grid: #e2e2e2;
+  --sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --serif: Georgia, 'Times New Roman', serif;
+  --mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, 'Liberation Mono', monospace;
+  /* Vertical rhythm: every gap is a multiple of --space. */
+  --space: 0.5rem;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+app-root {
+  display: block;
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: calc(var(--space) * 4) 1.25rem calc(var(--space) * 8);
+}
+
+/* Type scale */
+h1 {
+  margin: 0;
+  font-size: 1.75rem;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+
+/* Section headings: the only uppercase, letter-spaced text besides verdict labels. */
+h2,
+.section-heading {
+  margin: 0 0 calc(var(--space) * 2);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+h2 {
+  padding-bottom: var(--space);
+  border-bottom: 2px solid var(--ink);
+}
+
+h3 {
+  margin: calc(var(--space) * 3) 0 var(--space);
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+h3.section-heading {
+  margin-top: calc(var(--space) * 3);
+}
+
+p {
+  margin: 0 0 calc(var(--space) * 2);
+}
+
+.site-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space) calc(var(--space) * 3);
+  margin-bottom: calc(var(--space) * 4);
+  padding-bottom: calc(var(--space) * 2);
+  border-bottom: 1px solid var(--grey-rule);
+}
+
+.site-header p {
+  max-width: 44rem;
+  margin: 0;
+  font-size: 0.9375rem;
+}
+
+.site-header p,
+.site-footer p,
+.muted {
+  color: var(--grey-text);
+}
+
+.site-footer {
+  margin-top: calc(var(--space) * 8);
+  padding-top: calc(var(--space) * 2);
+  border-top: 1px solid var(--grey-rule);
+  font-size: 0.875rem;
+}
+
+/* Layout: one column, two from 960px */
+main {
+  display: grid;
+  gap: calc(var(--space) * 7);
+}
+
+app-evaluate-form {
+  display: grid;
+  gap: calc(var(--space) * 5);
+  align-items: start;
+}
+
+.panel {
+  min-width: 0;
+}
+
+/* Instrument panel: a white card on the paper. */
+app-result-panel > .panel {
+  padding: calc(var(--space) * 3);
+  border: 1px solid var(--ink);
+  background: var(--paper);
+}
+
+@media (min-width: 960px) {
+  /* Wide bench on the left, instrument panel on the right. */
+  app-evaluate-form {
+    grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+    gap: calc(var(--space) * 5);
+  }
+
+  /* The verdict stays visible while the form is used. */
+  app-result-panel.result-sticky {
+    position: sticky;
+    top: calc(var(--space) * 3);
+    align-self: start;
+    max-height: calc(100vh - var(--space) * 6);
+    overflow-y: auto;
+  }
+
+  .how {
+    max-width: 44rem;
+  }
+}
+
+.mono,
+code {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.num {
+  text-align: right;
+}
+
+/* Forms: compact */
+.field {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: calc(var(--space) * 2);
+}
+
+.field-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: calc(var(--space) * 2);
+}
+
+label {
+  margin-bottom: calc(var(--space) * 0.5);
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+fieldset {
+  margin: calc(var(--space) * 3) 0 calc(var(--space) * 2);
+  padding: calc(var(--space) * 2) 0 0;
+  border: 0;
+  border-top: 1px solid var(--grey-rule);
+}
+
+legend {
+  padding: 0 var(--space) 0 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+input,
+select,
+button {
+  -webkit-appearance: none;
+  appearance: none;
+  border-radius: 0;
+  font: inherit;
+}
+
+input,
+select {
+  min-height: 2.5rem;
+  padding: calc(var(--space) * 0.5) calc(var(--space) * 1.5);
+  border: 1px solid var(--ink);
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 1rem;
+}
+
+/* A select is told apart from a text field by its heavier bottom rule. */
+select {
+  padding-right: calc(var(--space) * 4);
+  border-bottom-width: 3px;
+  cursor: pointer;
+}
+
+/* A unit is read-only text, not a control. */
+input.unit {
+  padding-left: 0;
+  border-color: transparent;
+  background: transparent;
+  color: var(--grey-text);
+  cursor: default;
+}
+
+button {
+  min-height: 2.5rem;
+  padding: calc(var(--space) * 0.5) calc(var(--space) * 3);
+  border: 1px solid var(--ink);
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.recovery button {
+  background: var(--paper);
+  color: var(--ink);
+  text-align: left;
+}
+
+button:hover:not(:disabled) {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+button:disabled {
+  border-color: var(--grey-text);
+  background: var(--grey-text);
+  color: var(--paper);
+  cursor: progress;
+}
+
+:focus-visible {
+  outline: 3px solid var(--ink);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 5px var(--paper);
+}
+
+.field-error {
+  margin: 0 0 calc(var(--space) * 2);
+  padding: var(--space) calc(var(--space) * 1.5);
+  border: 1px solid var(--ink);
+  font-weight: 600;
+}
+
+.skip {
+  position: absolute;
+  left: -999px;
+}
+
+.skip:focus {
+  left: 1rem;
+  top: 1rem;
+  z-index: 1;
+  padding: var(--space) calc(var(--space) * 2);
+  border: 1px solid var(--ink);
+  background: var(--paper);
+}
+
+/* Bench: case and limit selects, then the apparatus or the form */
+.bench-head {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: calc(var(--space) * 2);
+}
+
+.bench-head .field {
+  margin-bottom: 0;
+}
+
+.examples-note {
+  margin: var(--space) 0 calc(var(--space) * 3);
+  font-size: 0.8125rem;
+}
+
+.bench-settings {
+  display: grid;
+  gap: 0 calc(var(--space) * 3);
+}
+
+@media (min-width: 640px) {
+  .bench-settings {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: end;
+  }
+}
+
+/* Apparatus: a lab-notebook figure on a faint 24px grid */
+.apparatus {
+  margin: 0 0 calc(var(--space) * 2);
+}
+
+/* Figure frame on the faint 24px grid. The figure size and the control row
+   are set by the apparatus components (bench-figure.ts). */
+.apparatus-bench {
+  padding: var(--space) calc(var(--space) * 1.5);
+  border: 1px solid var(--ink);
+  background-color: #fafafa;
+  background-image:
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+.apparatus-note {
+  margin: var(--space) 0 0;
+  color: var(--grey-text);
+}
+
+.apparatus-claim {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.apparatus-claim label,
+.segmented legend {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 1rem;
+}
+
+/* Segmented control: native radio inputs, visually replaced by their labels. */
+.segmented {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.segmented legend {
+  margin-bottom: calc(var(--space) * 0.5);
+  padding: 0;
+}
+
+.segmented-options {
+  display: flex;
+}
+
+.segment-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  opacity: 0;
+}
+
+.segment-label {
+  margin: 0;
+  padding: calc(var(--space) * 0.5) calc(var(--space) * 1.5);
+  border: 1px solid var(--ink);
+  background: var(--paper);
+  font-family: var(--mono);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.segment-label + .segment-input + .segment-label {
+  border-left: 0;
+}
+
+.segment-input:checked + .segment-label {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.segment-input:focus-visible + .segment-label {
+  outline: 3px solid var(--ink);
+  outline-offset: 2px;
+}
+
+/* Twin figures when the mode is not stated. */
+.twins {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(min-content, 1fr));
+  gap: var(--space);
+}
+
+.twin {
+  margin: 0;
+  min-width: 0;
+}
+
+.twin-caption {
+  margin: 0 0 calc(var(--space) * 0.5);
+  font-family: var(--serif);
+  font-style: italic;
+}
+
+.twin-verdict {
+  display: inline-block;
+  margin-top: calc(var(--space) * 0.5);
+}
+
+.twins-sentence {
+  margin: var(--space) 0 0;
+  font-family: var(--serif);
+  font-size: 1.125rem;
+}
+
+/* Library: one card per limit. */
+.library-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+  gap: calc(var(--space) * 2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.library-card {
+  padding: calc(var(--space) * 2);
+  border: 1px solid var(--ink);
+  background: var(--paper);
+}
+
+.library-card h3 {
+  margin-top: 0;
+}
+
+.library-formula {
+  font-size: 1.0625rem;
+}
+
+.library-assumption {
+  margin: 0;
+}
+
+.library-options {
+  margin: 0 0 var(--space);
+  padding-left: calc(var(--space) * 2);
+}
+
+.library-reference {
+  margin: var(--space) 0 0;
+  font-size: 0.875rem;
+}
+
+/* Decimal fields: at least 6 characters, right-aligned tabular numerals. */
+input.decimal {
+  min-width: calc(6ch + var(--space) * 3 + 2px);
+  width: calc(8ch + var(--space) * 3 + 2px);
+  text-align: right;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Figure drawing: 1.5px black strokes, hatched fills */
+.reservoir,
+.engine,
+.flow {
+  stroke: var(--ink);
+  stroke-width: 1.5;
+}
+
+.engine,
+.label-plate {
+  fill: var(--paper);
+}
+
+.label-plate {
+  stroke: var(--ink);
+  stroke-width: 1;
+}
+
+.hatch-line {
+  stroke: var(--grey-rule);
+  stroke-width: 1;
+}
+
+.hatch-line-light {
+  stroke: #a6a6a6;
+  stroke-width: 1;
+}
+
+.flow-claimed {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 1.5;
+  stroke-dasharray: 5 4;
+}
+
+/* The moving dash shows the direction of a flow only; its speed is constant. */
+.flow-dash {
+  stroke: var(--ink);
+  stroke-width: 1;
+  stroke-dasharray: 3 7;
+  animation: flow-direction 1.2s linear infinite;
+}
+
+@keyframes flow-direction {
+  to {
+    stroke-dashoffset: -20;
+  }
+}
+
+.dimension,
+.leader {
+  stroke: var(--ink);
+  stroke-width: 1;
+  fill: none;
+}
+
+.extension {
+  stroke: var(--grey-rule);
+  stroke-width: 0.75;
+}
+
+.dim-head {
+  fill: var(--ink);
+}
+
+/* Text sizes in the figures are set by font-size attributes in the
+   templates, so that tests can check the rendered size. */
+.fig-label {
+  fill: var(--ink);
+  font-family: var(--mono);
+}
+
+.fig-symbol {
+  fill: var(--ink);
+  font-family: var(--serif);
+  font-style: italic;
+}
+
+.fig-value {
+  font-family: var(--mono);
+  font-style: normal;
+}
+
+.fig-label,
+.fig-symbol {
+  paint-order: stroke;
+  stroke: var(--paper);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
+.fig-caption {
+  margin-top: var(--space);
+  color: var(--grey-text);
+  font-family: var(--serif);
+  font-size: 0.875rem;
+  font-style: italic;
+}
+
+/* Thermometer: graduated tube, number field and slider */
+.thermometer {
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr);
+  gap: var(--space);
+  align-items: center;
+}
+
+/* Drawn at 1 viewBox unit = 1 px, so its labels keep their size. */
+.thermo-tube {
+  width: 84px;
+  height: 128px;
+}
+
+.tube,
+.bulb {
+  fill: var(--paper);
+  stroke: var(--ink);
+  stroke-width: 1.5;
+}
+
+.liquid {
+  fill: var(--ink);
+}
+
+.graduation {
+  stroke: var(--ink);
+  stroke-width: 1;
+}
+
+.graduation-label {
+  fill: var(--grey-text);
+  font-family: var(--mono);
+}
+
+.thermo-controls {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space) * 0.5);
+  min-width: 0;
+}
+
+
+
+.symbol-label {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 1.125rem;
+  font-style: italic;
+  font-weight: 400;
+}
+
+.symbol-label sub {
+  font-size: 0.75em;
+}
+
+.thermo-reading {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--space) * 0.5);
+}
+
+.thermo-reading input.unit {
+  width: 2rem;
+}
+
+/* Native range input, restyled: thin rule, square thumb, custom focus. */
+input.range {
+  width: 100%;
+  min-height: 1.75rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+input.range::-webkit-slider-runnable-track {
+  height: 1px;
+  background: var(--ink);
+}
+
+input.range::-moz-range-track {
+  height: 1px;
+  background: var(--ink);
+}
+
+input.range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 18px;
+  margin-top: -9px;
+  border: 1px solid var(--ink);
+  border-radius: 0;
+  background: var(--paper);
+}
+
+input.range::-moz-range-thumb {
+  width: 12px;
+  height: 18px;
+  border: 1px solid var(--ink);
+  border-radius: 0;
+  background: var(--paper);
+}
+
+/* Number fields: no browser spinner chrome. */
+input[type='number'] {
+  -moz-appearance: textfield;
+}
+
+input[type='number']::-webkit-inner-spin-button,
+input[type='number']::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* Gauge: semicircular dial */
+.gauge {
+  margin: 0 0 calc(var(--space) * 3);
+}
+
+/* The minimum width is set inline from the component, so bound labels render at 14px or more. */
+.gauge {
+  overflow-x: auto;
+}
+
+.gauge svg {
+  display: block;
+  width: 100%;
+  max-width: 30rem;
+  height: auto;
+  margin: 0 auto;
+}
+
+.gauge-dial {
+  fill: var(--paper);
+  stroke: var(--ink);
+  stroke-width: 1.5;
+}
+
+/* Beyond the largest bound: light grey ground, 1px grey diagonal lines, outlined. */
+.gauge-hatch {
+  stroke: var(--ink);
+  stroke-width: 1;
+}
+
+.gauge-hatch-ground {
+  fill: var(--grey-band);
+}
+
+.gauge-hatch-line {
+  stroke: var(--grey-rule);
+  stroke-width: 1;
+}
+
+.gauge-scale-tick {
+  stroke: var(--ink);
+  stroke-width: 1;
+}
+
+.gauge-bound-tick {
+  stroke: var(--ink);
+  stroke-width: 3;
+}
+
+.gauge-needle {
+  stroke: var(--ink);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.gauge-hub {
+  fill: var(--ink);
+}
+
+.gauge-scale-label {
+  fill: var(--grey-text);
+  font-family: var(--mono);
+}
+
+.gauge-bound-label,
+.gauge-claim-label {
+  fill: var(--ink);
+  font-family: var(--mono);
+  font-weight: 700;
+  paint-order: stroke;
+  stroke: var(--paper);
+  stroke-width: 3px;
+}
+
+.gauge-claim-label {
+  font-weight: 400;
+}
+
+.gauge-alt {
+  margin: calc(var(--space) * 0.5) 0 0;
+  color: var(--grey-text);
+  font-size: 0.8125rem;
+}
+
+/* Verdicts: never color, always a text label */
+.verdict {
+  display: block;
+  margin: 0 0 calc(var(--space) * 2);
+  padding: calc(var(--space) * 2) calc(var(--space) * 3);
+  font-size: 3rem;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.verdict--impossible {
+  border: 2px solid var(--ink);
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.verdict--conditional {
+  border: 2px dashed var(--ink);
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.verdict--compatible {
+  border: 1px solid var(--ink);
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.verdict--insufficient-data {
+  border: 2px dotted var(--grey-text);
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.wording {
+  margin: 0 0 calc(var(--space) * 3);
+  font-family: var(--serif);
+  font-size: 1.375rem;
+  line-height: 1.35;
+}
+
+/* Verdict sheet */
+.sheet {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--space) calc(var(--space) * 4);
+  align-items: baseline;
+  margin: 0 0 calc(var(--space) * 3);
+  padding: calc(var(--space) * 1.5) 0;
+  border-top: 1px solid var(--ink);
+  border-bottom: 1px solid var(--grey-rule);
+}
+
+.sheet dt {
+  color: var(--grey-text);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.sheet dd {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.no-bound {
+  color: var(--grey-text);
+}
+
+/* Legend (opening state) */
+.legend-item {
+  display: grid;
+  grid-template-columns: 11.5rem 1fr;
+  gap: calc(var(--space) * 2);
+  align-items: center;
+  padding: calc(var(--space) * 1.5) 0;
+}
+
+.legend-label {
+  display: block;
+  padding: var(--space) calc(var(--space) * 1.5);
+  font-size: 0.875rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.legend-meaning {
+  color: var(--grey-text);
+}
+
+@media (max-width: 520px) {
+  .legend-item {
+    grid-template-columns: 1fr;
+    gap: var(--space);
+  }
+
+  .verdict {
+    font-size: 2.25rem;
+  }
+}
+
+/* Bound-scale chart: the hero of the result */
+.chart {
+  margin: 0 0 calc(var(--space) * 3);
+}
+
+.chart svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 200px;
+  overflow: visible;
+}
+
+.chart-axis,
+.chart-tick {
+  stroke: var(--ink);
+  stroke-width: 1;
+}
+
+.chart-hatch-line {
+  stroke: var(--grey-rule);
+  stroke-width: 1.5;
+}
+
+.chart-hatch {
+  stroke: var(--grey-rule);
+  stroke-width: 1;
+}
+
+.chart-band {
+  fill: var(--grey-band);
+}
+
+.chart-bound {
+  stroke: var(--ink);
+  stroke-width: 5;
+}
+
+.chart-claim {
+  stroke: var(--ink);
+  stroke-width: 1.5;
+}
+
+/* A white halo keeps labels readable over the hatch and the lines. */
+.chart-label,
+.chart-tick-label,
+.chart-beyond {
+  paint-order: stroke;
+  stroke: var(--paper);
+  stroke-width: 4px;
+  stroke-linejoin: round;
+}
+
+.chart-label {
+  fill: var(--ink);
+  font-family: var(--mono);
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+.chart-label-bound {
+  font-weight: 700;
+}
+
+.chart-tick-label {
+  fill: var(--grey-text);
+  font-family: var(--mono);
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+
+.chart-beyond {
+  fill: var(--grey-text);
+  font-family: var(--sans);
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.chart-caption {
+  margin-top: var(--space);
+  color: var(--grey-text);
+  font-size: 0.8125rem;
+}
+
+/* Satisfying configurations (CONDITIONAL) */
+.configurations {
+  margin: 0 0 calc(var(--space) * 3);
+}
+
+.configurations .section-heading {
+  margin-top: 0;
+}
+
+.configurations p {
+  margin-bottom: var(--space);
+  font-size: 0.875rem;
+}
+
+.configuration .mono {
+  font-size: 1.0625rem;
+}
+
+/* Why this bound */
+.why {
+  margin: 0 0 calc(var(--space) * 3);
+  padding-top: calc(var(--space) * 2);
+  border-top: 1px solid var(--grey-rule);
+}
+
+.why .section-heading {
+  margin-top: 0;
+}
+
+.why-title {
+  margin: 0 0 calc(var(--space) * 0.5);
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+
+.why-formula {
+  margin: 0 0 var(--space);
+  font-size: 1.125rem;
+}
+
+.why-statement {
+  max-width: 40rem;
+}
+
+.why-assumptions > li {
+  padding: 0;
+  border: 0;
+}
+
+.why-reference {
+  margin: var(--space) 0 0;
+  font-size: 0.875rem;
+}
+
+/* Result details */
+.error-block {
+  padding: calc(var(--space) * 1.5) calc(var(--space) * 2);
+  border: 1px solid var(--ink);
+}
+
+.error-block h3 {
+  margin-top: 0;
+}
+
+.recovery {
+  display: grid;
+  gap: var(--space);
+  margin-top: calc(var(--space) * 2);
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: calc(var(--space) * 0.5) calc(var(--space) * 2);
+  margin: var(--space) 0;
+}
+
+.facts dt {
+  color: var(--grey-text);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.facts dd {
+  margin: 0;
+}
+
+.meta {
+  margin-top: calc(var(--space) * 3);
+  padding-top: calc(var(--space) * 1.5);
+  border-top: 1px solid var(--grey-rule);
+}
+
+.plain-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.plain-list > li {
+  padding: calc(var(--space) * 0.75) 0;
+  border-bottom: 1px solid var(--grey-light);
+}
+
+.tag {
+  display: inline-block;
+  margin: 0 var(--space);
+  padding: 0 var(--space);
+  border: 1px solid var(--ink);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9375rem;
+}
+
+th,
+td {
+  padding: calc(var(--space) * 0.75) var(--space);
+  border-bottom: 1px solid var(--grey-light);
+  text-align: left;
+}
+
+th {
+  font-weight: 500;
+}
+
+td.num,
+th.num {
+  text-align: right;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+
+  .flow-dash {
+    animation: none;
+  }
+}

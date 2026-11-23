@@ -1,0 +1,9 @@
+# Tasks: limit-carnot
+Status: v1, frozen. Based on `requirements.md` v1 and `design.md` v1. Crate: `limina-core`.
+Rules: after each task, `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings` and `cargo test --workspace` pass. Tests first, seen failing before the implementation. No `unwrap()` in library code. Public items documented. `engine.rs`, the decision-engine spec and the limit-betz spec are not modified.
+- [x] **T01 Error variant.** Add `EngineError::InvalidTemperatureOrder { limit_id }` in `error.rs`; extend the exhaustive-variants test and the wording test. Covers: R-03.
+- [x] **T02 The limit (1).** Create `limits/carnot.rs`: `Carnot` implementing `Limit` as in design 3, in `crates/limina-core/src/limits/carnot.rs`. Declare it in `limits/mod.rs`, export from `lib.rs`. Covers: R-01, R-02, R-03.
+- [x] **T03 Golden tests (2).** In `carnot.rs`: `Th = 600 K`, `Tc = 300 K` gives exactly 0.5; `Th = 500 K`, `Tc = 250 K` gives 0.5; both from `1.0 - tc / th` in f64. Covers: AC 1.
+- [x] **T04 Engine examples (3).** In `tests/limit_carnot.rs`, through `decide`: claim 0.30 with 600 K / 300 K gives COMPATIBLE or CONDITIONAL as the rules dictate; claim 0.60 with 600 K / 300 K gives IMPOSSIBLE; any claim with a missing temperature gives INSUFFICIENT_DATA listing the missing parameters; `Th <= Tc` gives the typed error. Covers: AC 2 to 5.
+- [x] **T05 Properties (4).** In `tests/limit_carnot.rs`: bound strictly below 1 for any valid `Tc > 0`; bound increasing in `Th` at fixed `Tc` and decreasing in `Tc` at fixed `Th`, against an independent oracle; `decide` never returns IMPOSSIBLE for a claim at or below the bound. Fixed seed, readable counterexamples. Covers: AC 6 to 8.
+- [x] **T06 Public documentation (5).** Rustdoc on `Carnot` with the formula, the assumption, the validity domain, the no-Celsius-conversion note and the marked TODO reference. Covers: R-05, AC 9.

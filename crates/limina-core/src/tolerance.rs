@@ -4,7 +4,8 @@
 pub const REL_TOL: f64 = 1e-9;
 
 /// Absolute tolerance in SI base units, for values at or near zero (D-06).
-/// Default value of `guard_abs`.
+/// Used by `approx_eq` only; since D-24 it is no longer the default
+/// `guard_abs`, which is 0.
 pub const ABS_TOL: f64 = 1e-12;
 
 /// `|a - b| <= ABS_TOL + REL_TOL * max(|a|, |b|)`.

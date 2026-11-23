@@ -1,0 +1,60 @@
+<section class="panel library" aria-labelledby="limits-title">
+  <h2 id="limits-title">{{ s.libraryTitle }}</h2>
+  @if (failure(); as f) {
+    <div class="error-block" role="alert">
+      <h3>{{ s.errorTitle }}</h3>
+      <dl class="facts">
+        <dt>{{ s.errorCode }}</dt>
+        <dd class="mono">{{ f.code }}</dd>
+        <dt>{{ s.errorMessage }}</dt>
+        <dd>{{ f.message }}</dd>
+      </dl>
+    </div>
+  } @else if (limits().length === 0) {
+    <p class="muted">{{ s.limitsLoading }}</p>
+  } @else {
+    <ul class="library-grid">
+      @for (l of limits(); track l.id) {
+        <li class="limit library-card">
+          <h3>{{ l.title }}</h3>
+          <p class="library-formula mono">{{ l.formula }}</p>
+          <p class="library-statement">{{ l.statement }}</p>
+          <dl class="facts">
+            <dt>{{ s.limitsAssumptions }}</dt>
+            <dd>
+              @if (l.assumptions.length === 0) {
+                {{ s.limitsNone }}
+              } @else {
+                @for (a of l.assumptions; track a.id) {
+                  <p class="library-assumption">{{ label(l.assumption_labels, a.id) }}</p>
+                  <ul class="library-options">
+                    @for (o of a.options; track o) {
+                      <li>{{ label(l.option_labels, o) }}</li>
+                    }
+                  </ul>
+                }
+              }
+            </dd>
+            <dt>{{ s.limitsParameters }}</dt>
+            <dd>
+              @if (l.parameters.length === 0) {
+                {{ s.limitsNone }}
+              } @else {
+                <ul class="library-options">
+                  @for (p of l.parameters; track p.id) {
+                    <li class="library-parameter">
+                      <span class="mono">{{ p.id }}</span>, {{ label(l.parameter_labels, p.id) }},
+                      <span class="mono">{{ p.units.join(', ') }}</span>,
+                      {{ p.required ? s.parameterRequired : s.parameterOptional }}
+                    </li>
+                  }
+                </ul>
+              }
+            </dd>
+          </dl>
+          <p class="library-reference muted">{{ s.whyReference }}</p>
+        </li>
+      }
+    </ul>
+  }
+</section>

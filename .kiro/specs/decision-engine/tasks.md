@@ -11,7 +11,7 @@ Rules for every task:
 
 ## Slice 0: dependencies
 
-- [ ] **T01 Remove `uom`.** Remove `uom` from `crates/limina-core/Cargo.toml`; let `Cargo.lock` update. No code change.
+- [x] **T01 Remove `uom`.** Remove `uom` from `crates/limina-core/Cargo.toml`; let `Cargo.lock` update. No code change.
   Covers: D-14.
 
 ## Slice 1: Dimension, Quantity, unit table
@@ -82,18 +82,21 @@ Rules for every task:
 
 ## Slice 7: missing parameters, enclosures, Certain / Depends
 
-- [ ] **T26 Parameter resolution and NoDomain (steps 3 and 4).** Missing parameters tagged `HasDomain` (hull of the plausible domain, never enumerated) or `NoDomain`; any `NoDomain` gives `InsufficientData` with all missing parameters and `enclosures: None`, without calling `Limit::bound`. Replaces the temporary behaviour of T19. Unit tests: one `NoDomain` plus one `HasDomain` parameter; a plausible interval `[0, 1e300]` handled in constant time.
+- [x] **T26 Parameter resolution and NoDomain (steps 3 and 4).** Missing parameters tagged `HasDomain` (hull of the plausible domain, never enumerated) or `NoDomain`; any `NoDomain` gives `InsufficientData` with all missing parameters and `enclosures: None`, without calling `Limit::bound`. Replaces the temporary behaviour of T19. Unit tests: one `NoDomain` plus one `HasDomain` parameter; a plausible interval `[0, 1e300]` handled in constant time.
   Covers: R-05.5, R-05.9, R-07.3, R-07.4, R-08.7, D-04, D-16, D-22.
-- [ ] **T27 Two enclosures (steps 5 and 6).** Permissive and restrictive selection per direction, `Enclosures` with bounds and margin per enclosure. Unit tests: Max-bound and Min-bound selection on a `TestLimit` with one parameter.
+- [x] **T27 Two enclosures (steps 5 and 6).** Permissive and restrictive selection per direction, `Enclosures` with bounds and margin per enclosure. Unit tests: Max-bound and Min-bound selection on a `TestLimit` with one parameter.
   Covers: R-05.1, R-05.2, R-07.1, D-11.
-- [ ] **T28 Combine (step 8).** Same verdict under both enclosures returned as is; different verdicts give `InsufficientData` with all missing parameters. Unit tests: agree, disagree, and `Impossible` only under both.
+- [x] **T28 Combine (step 8).** Same verdict under both enclosures returned as is; different verdicts give `InsufficientData` with all missing parameters. Unit tests: agree, disagree, and `Impossible` only under both.
   Covers: R-05.3, R-05.4, R-05.6, D-03.
-- [ ] **T29 Certain / Depends (step 9 with missing parameters).** Membership on the permissive end, `Certain` on the restrictive end with the guarded comparison, otherwise `Depends(all missing parameters)`. Unit tests: two or three scenarios; one with the restrictive end exactly at the guard boundary, both directions.
+- [x] **T29 Certain / Depends (step 9 with missing parameters).** Membership on the permissive end, `Certain` on the restrictive end with the guarded comparison, otherwise `Depends(all missing parameters)`. Unit tests: two or three scenarios; one with the restrictive end exactly at the guard boundary, both directions.
   Covers: R-05.7, R-05.8, D-10, D-13, D-19.
-- [ ] **T30 Properties with missing parameters.** Extend the generators with parameters and plausible domains; run P-02 (permissive variant), P-03 (b), E-02 and E-04 with missing parameters. Move any shrunk failure found so far into `tests/regressions.rs`.
+- [x] **T30 Properties with missing parameters.** Extend the generators with parameters and plausible domains; run P-02 (permissive variant), P-03 (b), E-02 and E-04 with missing parameters. Move any shrunk failure found so far into `tests/regressions.rs`.
   Covers: P-02, P-03 (b), E-02, E-04, R-05, R-09.
 
 ## Follow-up
 
-- [ ] **T31** test that the public doc strings and EngineError messages avoid the words fraud, lie, scam, hoax, covering R-07.5 as design.md 9.4 requires; match whole words only.
+- [x] **T31** test that the public doc strings and EngineError messages avoid the words fraud, lie, scam, hoax, covering R-07.5 as design.md 9.4 requires; match whole words only.
   Covers: R-07.5.
+
+- Amended by api-limit-metadata, unit lookup: `units_for_dimension` added to `units.rs` (additive, no existing code changed).
+- Amended by limit-author, D-24: default `guard_abs` = 0 and optional `Limit::guard_abs` floor (see requirements.md D-24, design.md section 11).

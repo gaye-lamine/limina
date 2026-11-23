@@ -1,0 +1,18 @@
+{
+  "id": "carnot",
+  "title": "Carnot limit",
+  "direction": "max",
+  "bounded_dimension": "dimensionless",
+  "parameters": [
+    { "name": "Th", "kind": "absolute_temperature", "units": ["K"], "required": true, "test_range": [400, 1000] },
+    { "name": "Tc", "kind": "absolute_temperature", "units": ["K"], "required": true, "test_range": [100, 350] }
+  ],
+  "assumptions": [
+    { "id": "cycle_model", "options": [{ "id": "ideal_reversible_two_reservoirs" }] }
+  ],
+  "formula": "1 - Tc/Th",
+  "validity": ["Tc > 0", "Th > Tc"],
+  "references": ["TODO(reference): to be supplied by the author"],
+  "status": "draft",
+  "epistemic_status": "theorem"
+}

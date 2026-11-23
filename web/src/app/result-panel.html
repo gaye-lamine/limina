@@ -1,0 +1,180 @@
+﻿<section class="panel" aria-labelledby="result-title">
+  <h2 id="result-title">{{ s.resultTitle }}</h2>
+  <div aria-live="polite" aria-atomic="true">
+    @if (failure(); as f) {
+      <div class="error-block" role="alert">
+        <h3>{{ s.errorTitle }}</h3>
+        <dl class="facts">
+          <dt>{{ s.errorCode }}</dt>
+          <dd class="mono">{{ f.code }}</dd>
+          <dt>{{ s.errorMessage }}</dt>
+          <dd>{{ f.message }}</dd>
+        </dl>
+        @if (needsReferenceArea()) {
+          <p>{{ s.errorNotApplicable }}</p>
+        }
+        @if (offersRecovery()) {
+          <div class="recovery" role="group" [attr.aria-label]="s.recoverTitle">
+            <button type="button" (click)="recover.emit(recoveryUnshrouded)">{{ s.recoverUnshrouded }}</button>
+            <button type="button" (click)="recover.emit(recoveryShrouded)">{{ s.recoverShrouded }}</button>
+          </div>
+        }
+      </div>
+    } @else if (result(); as r) {
+      <p [class]="'verdict ' + verdictClass()">{{ verdictLabel() }}</p>
+      <p class="wording">{{ r.wording }}</p>
+      @if (gaugeBounds(); as gb) {
+        <app-gauge [claim]="claim()?.value ?? 0" [bounds]="gb" [unit]="unit()" [figure]="figureOffset() + 1" />
+      }
+      @if (sheet(); as sh) {
+        <dl class="sheet">
+          <dt>{{ s.sheetBound }}</dt>
+          <dd class="mono">{{ sh.bound }}</dd>
+          <dt>{{ s.sheetClaim }}</dt>
+          <dd class="mono">{{ sh.claim }}</dd>
+          <dt>{{ s.sheetRatio }}</dt>
+          <dd class="mono">{{ sh.ratio }}</dd>
+        </dl>
+        @if (summary(); as sum) {
+          @if (showChart()) {
+            <app-bound-chart
+              [claim]="claim()?.value ?? 0"
+              [boundMin]="sum.low"
+              [boundMax]="sum.high"
+              [boundName]="boundName()"
+              [unit]="unit()"
+              [margin]="sum.margin"
+              [figure]="figureOffset() + 2"
+            />
+          }
+        } @else {
+          <p class="no-bound">
+            {{ s.noBound }}
+            @if (missingIds()) {
+              {{ s.noBoundMissing }} <span class="mono">{{ missingIds() }}</span>
+            }
+          </p>
+        }
+      }
+
+      @if (r.configurations.length > 0) {
+        <section class="configurations" aria-labelledby="configurations-title">
+          <h3 id="configurations-title" class="section-heading">{{ s.resultConfigurations }}</h3>
+          <p class="muted">{{ s.resultConfigurationsNote }}</p>
+          <ul class="plain-list">
+            @for (c of r.configurations; track $index) {
+              <li class="configuration">
+                <span class="mono">{{ assumptionText(c) }}</span>
+                <span class="tag">{{ s.resultSupport[c.support] }}</span>
+                @if (c.depends_on.length > 0) {
+                  <span>{{ s.resultDependsOn }} <span class="mono">{{ c.depends_on.join(', ') }}</span></span>
+                }
+              </li>
+            }
+          </ul>
+        </section>
+      }
+
+      @if (why(); as w) {
+        <section class="why" aria-labelledby="why-title">
+          <h3 id="why-title" class="section-heading">{{ s.whyTitle }}</h3>
+          <p class="why-title">{{ w.limit.title }}</p>
+          <p class="why-formula mono">{{ w.limit.formula }}</p>
+          <p class="why-statement">{{ w.limit.statement }}</p>
+          <dl class="facts">
+            <dt>{{ s.whyAssumptions }}</dt>
+            <dd>
+              @if (w.assumptions.length === 0) {
+                {{ s.whyNoAssumption }}
+              } @else {
+                <ul class="plain-list why-assumptions">
+                  @for (a of w.assumptions; track a.id) {
+                    <li><span class="mono">{{ a.id }} = {{ a.value }}</span></li>
+                  }
+                </ul>
+              }
+            </dd>
+          </dl>
+          <p class="why-reference muted">{{ s.whyReference }}</p>
+        </section>
+      }
+      @if (r.bounds; as b) {
+        <div class="bounds">
+          <h3>{{ s.resultBounds }}</h3>
+          <table>
+            <thead>
+              <tr>
+                <th scope="col"></th>
+                <th scope="col">{{ s.resultBoundsMin }}</th>
+                <th scope="col">{{ s.resultBoundsMax }}</th>
+                <th scope="col">{{ s.resultMargin }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">{{ s.resultPermissive }}</th>
+                <td class="mono num">{{ b.permissive.b_min }}</td>
+                <td class="mono num">{{ b.permissive.b_max }}</td>
+                <td class="mono num">
+                  @if (b.permissive.margin; as m) {
+                    {{ m.low }} {{ s.marginTo }} {{ m.high }}
+                  } @else {
+                    {{ s.resultNoMargin }}
+                  }
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">{{ s.resultRestrictive }}</th>
+                <td class="mono num">{{ b.restrictive.b_min }}</td>
+                <td class="mono num">{{ b.restrictive.b_max }}</td>
+                <td class="mono num">
+                  @if (b.restrictive.margin; as m) {
+                    {{ m.low }} {{ s.marginTo }} {{ m.high }}
+                  } @else {
+                    {{ s.resultNoMargin }}
+                  }
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      }
+
+      @if (r.missing_parameters.length > 0) {
+        <div>
+          <h3>{{ s.resultMissing }}</h3>
+          <ul class="plain-list">
+            @for (m of r.missing_parameters; track m.id) {
+              <li class="missing-parameter">
+                <span class="mono">{{ m.id }}</span>
+                <span class="tag">{{ s.resultMissingStatus[m.status] }}</span>
+              </li>
+            }
+          </ul>
+        </div>
+      }
+
+      <dl class="facts meta">
+        <dt>{{ s.resultLimit }}</dt>
+        <dd class="mono">{{ r.limit_id }}</dd>
+        <dt>{{ s.resultEngineVersion }}</dt>
+        <dd class="mono">{{ r.engine_version }}</dd>
+      </dl>
+    } @else {
+      <p class="muted">{{ s.resultEmpty }}</p>
+      <div class="legend">
+        <h3>{{ s.legendTitle }}</h3>
+        <ul class="plain-list">
+          @for (v of legend; track v) {
+            <li class="legend-item">
+              <span [class]="'legend-label ' + classOf(v)">{{ s.verdictLabel[v] }}</span>
+              <span class="legend-meaning">{{ s.legendMeaning[v] }}</span>
+            </li>
+          }
+        </ul>
+      </div>
+    }
+  </div>
+</section>
+
+

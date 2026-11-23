@@ -1,0 +1,148 @@
+<figure class="apparatus">
+  <div class="apparatus-bench">
+    <div class="apparatus-scroll">
+      <svg
+        class="apparatus-figure"
+        [attr.viewBox]="viewBox"
+        [style.min-width.px]="minWidth"
+        [style.min-height.px]="minHeight"
+        role="img"
+        aria-labelledby="apparatus-title apparatus-desc"
+        focusable="false"
+      >
+        <title id="apparatus-title">{{ s.apparatusTitle }}</title>
+        <desc id="apparatus-desc">{{ alt() }}</desc>
+        <defs>
+          <pattern id="hatch-hot" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+            <line x1="0" y1="0" x2="0" y2="6" class="hatch-line" />
+          </pattern>
+          <pattern id="hatch-cold" width="9" height="9" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)">
+            <line x1="0" y1="0" x2="0" y2="9" class="hatch-line" />
+          </pattern>
+          <pattern id="hatch-flow" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+            <line x1="0" y1="0" x2="0" y2="5" class="hatch-line-light" />
+          </pattern>
+          <marker id="dim-head" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M 0 0 L 8 4 L 0 8 z" class="dim-head" />
+          </marker>
+        </defs>
+
+        <!-- Hot reservoir: one label, inside the block -->
+        <rect class="reservoir" x="50" y="16" width="280" height="68" fill="url(#hatch-hot)" />
+        <rect class="label-plate" x="80" y="24" width="220" height="52" />
+        <text class="fig-label" text-anchor="middle" [attr.x]="cx" y="45" [attr.font-size]="font.label">{{ s.apparatusHot }}</text>
+        <text class="fig-symbol" text-anchor="middle" [attr.x]="cx" y="68" [attr.font-size]="font.symbol">
+          <tspan>T</tspan><tspan class="sub" dy="5" [attr.font-size]="font.sub">h</tspan><tspan class="fig-value" dy="-5" [attr.font-size]="font.value"> {{ th() ? '= ' + th() + ' ' + thUnit() : '' }}</tspan>
+        </text>
+
+        <!-- Cold reservoir: one label, inside the block -->
+        <rect class="reservoir" x="50" y="420" width="280" height="68" fill="url(#hatch-cold)" />
+        <rect class="label-plate" x="80" y="428" width="220" height="52" />
+        <text class="fig-label" text-anchor="middle" [attr.x]="cx" y="449" [attr.font-size]="font.label">{{ s.apparatusCold }}</text>
+        <text class="fig-symbol" text-anchor="middle" [attr.x]="cx" y="472" [attr.font-size]="font.symbol">
+          <tspan>T</tspan><tspan class="sub" dy="5" [attr.font-size]="font.sub">c</tspan><tspan class="fig-value" dy="-5" [attr.font-size]="font.value"> {{ tc() ? '= ' + tc() + ' ' + tcUnit() : '' }}</tspan>
+        </text>
+
+        @if (shapes(); as sh) {
+          <!-- Heat in -->
+          <polygon class="flow" [attr.points]="sh.qh" fill="url(#hatch-flow)" />
+          <line class="flow-dash" [attr.x1]="cx" [attr.y1]="hotBottom + 4" [attr.x2]="cx" [attr.y2]="engineY - engineR - 16" />
+          <text class="fig-symbol" [attr.x]="sh.qhLabelX" y="138" [attr.font-size]="font.symbol">
+            <tspan>Q</tspan><tspan class="sub" dy="5" [attr.font-size]="font.sub">h</tspan><tspan class="fig-value" dy="-5" [attr.font-size]="font.value"> = 1</tspan>
+          </text>
+
+          <!-- Work: allowed (hatched) and claimed (dashed outline), on the same axis -->
+          <polygon class="flow" [attr.points]="sh.work" fill="url(#hatch-flow)" />
+          <line class="flow-dash" [attr.x1]="workStart + 4" [attr.y1]="engineY" [attr.x2]="workEnd - 16" [attr.y2]="engineY" />
+          @if (sh.claimWork) {
+            <polygon class="flow-claimed work-claimed" [attr.points]="sh.claimWork" />
+          }
+          <text class="fig-symbol" [attr.x]="workStart + 10" [attr.y]="sh.workLabelTop" [attr.font-size]="font.symbol">
+            <tspan>W</tspan><tspan class="fig-value" [attr.font-size]="font.value"> &#8804; {{ text()?.work }}</tspan><tspan class="fig-label" dx="8" [attr.font-size]="font.label">{{ s.apparatusAllowed }}</tspan>
+          </text>
+          @if (text()?.claimWork; as cw) {
+            <text class="fig-symbol" [attr.x]="workStart + 10" [attr.y]="sh.workLabelBottom" [attr.font-size]="font.symbol">
+              <tspan>W</tspan><tspan class="fig-value" [attr.font-size]="font.value"> = {{ cw }}</tspan><tspan class="fig-label" dx="8" [attr.font-size]="font.label">{{ s.apparatusClaimed }}</tspan>
+            </text>
+          }
+          @if (sh.showDimension) {
+            <line class="dimension" x1="426" [attr.y1]="sh.dimTop" x2="426" [attr.y2]="sh.dimBottom" marker-start="url(#dim-head)" marker-end="url(#dim-head)" />
+            <line class="extension" x1="394" [attr.y1]="sh.dimTop" x2="432" [attr.y2]="sh.dimTop" />
+            <line class="extension" x1="394" [attr.y1]="sh.dimBottom" x2="432" [attr.y2]="sh.dimBottom" />
+          }
+
+          <!-- Heat out: the minimum allowed (hatched, left) and the claimed (dashed outline, right) -->
+          <polygon class="flow reject-minimum" [attr.points]="sh.reject" fill="url(#hatch-flow)" />
+          <line class="flow-dash" [attr.x1]="minX" [attr.y1]="rejectStart + 20" [attr.x2]="minX" [attr.y2]="coldTop - 16" />
+          <text class="fig-symbol" text-anchor="end" [attr.x]="sh.minLabelX" y="320" [attr.font-size]="font.symbol">
+            <tspan>Q</tspan><tspan class="sub" dy="5" [attr.font-size]="font.sub">c</tspan><tspan class="fig-value" dy="-5" [attr.font-size]="font.value"> &#8805; {{ text()?.reject }}</tspan>
+          </text>
+          <text class="fig-label" text-anchor="end" [attr.x]="sh.minLabelX" y="340" [attr.font-size]="font.label">{{ s.apparatusMinimum }}</text>
+
+          @if (sh.claimReject) {
+            <polygon class="flow-claimed reject-claimed" [attr.points]="sh.claimReject" />
+          }
+          @if (text()?.claimReject; as cr) {
+            <text class="fig-symbol reject-claimed-label" [attr.x]="sh.claimLabelX" y="320" [attr.font-size]="font.symbol">
+              <tspan>Q</tspan><tspan class="sub" dy="5" [attr.font-size]="font.sub">c</tspan><tspan class="fig-value" dy="-5" [attr.font-size]="font.value"> = {{ cr }}</tspan>
+            </text>
+            <text class="fig-label" [attr.x]="sh.claimLabelX" y="340" [attr.font-size]="font.label">{{ s.apparatusClaimed }}</text>
+          }
+
+          @if (flows()?.exceedsBound) {
+            <g class="callout">
+              <line class="leader" [attr.x1]="sh.claimEdgeX + 3" [attr.y1]="calloutY - 5" [attr.x2]="calloutX - 6" [attr.y2]="calloutY - 5" />
+              <text class="fig-label callout-text" [attr.x]="calloutX" [attr.y]="calloutY" [attr.font-size]="font.label">
+                @for (line of s.apparatusCalloutLines; track $index) {
+                  <tspan [attr.x]="calloutX" [attr.dy]="$index === 0 ? 0 : lineStep">{{ line }}</tspan>
+                }
+              </text>
+            </g>
+          }
+        }
+
+        <!-- Engine, drawn over the start of the arrows -->
+        <circle class="engine" [attr.cx]="cx" [attr.cy]="engineY" [attr.r]="engineR" />
+        <text class="fig-label" text-anchor="middle" [attr.x]="cx" [attr.y]="engineY + 5" [attr.font-size]="font.label">{{ s.apparatusEngine }}</text>
+      </svg>
+    </div>
+    @if (!shapes()) {
+      <p class="apparatus-note">{{ s.apparatusNeedTemperatures }}</p>
+    }
+
+    <div class="apparatus-controls">
+      <div class="apparatus-th">
+        <app-thermometer
+          paramId="Th"
+          subscript="h"
+          [value]="th()"
+          [unit]="thUnit()"
+          (valueChange)="thChange.emit($event)"
+        />
+      </div>
+      <div class="apparatus-tc">
+        <app-thermometer
+          paramId="Tc"
+          subscript="c"
+          [value]="tc()"
+          [unit]="tcUnit()"
+          (valueChange)="tcChange.emit($event)"
+        />
+      </div>
+      <div class="apparatus-claim">
+        <label for="claim-value">{{ s.claimedEfficiency }}</label>
+        <input
+          id="claim-value"
+          class="mono decimal"
+          type="text"
+          inputmode="decimal"
+          autocomplete="off"
+          spellcheck="false"
+          [value]="claim()"
+          (input)="claimChange.emit($any($event.target).value)"
+        />
+      </div>
+    </div>
+  </div>
+  <figcaption class="fig-caption">{{ s.apparatusFigure }}</figcaption>
+</figure>

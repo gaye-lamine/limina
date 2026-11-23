@@ -180,6 +180,14 @@ pub trait Limit {
         config: &Configuration,
         params: &ParameterEnclosure,
     ) -> Result<Interval, EngineError>;
+
+    /// Optional absolute floor of the guard, in SI base units of the bounded
+    /// quantity (D-24). The engine uses `max(config guard_abs, this)`. The
+    /// default is 0: no floor, the guard is relative only. Must be finite and
+    /// `>= 0`, else `decide` returns `InvalidGuard`.
+    fn guard_abs(&self) -> f64 {
+        0.0
+    }
 }
 
 #[cfg(test)]

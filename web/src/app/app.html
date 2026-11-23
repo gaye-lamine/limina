@@ -1,0 +1,19 @@
+<a class="skip" href="#main">{{ s.skipLink }}</a>
+<header class="site-header">
+  <h1>{{ s.appName }}</h1>
+  <p>{{ s.appTagline }}</p>
+</header>
+<main id="main">
+  <app-evaluate-form [limits]="limits()" />
+  <section class="panel how" aria-labelledby="how-title">
+    <h2 id="how-title">{{ s.howTitle }}</h2>
+    <p>{{ s.howDeterministic }}</p>
+    <p>{{ s.howLanguageModel }}</p>
+    <p class="muted">{{ s.howPriorArt }}</p>
+  </section>
+  <app-limits-list [limits]="limits()" [failure]="limitsFailure()" />
+</main>
+<footer class="site-footer">
+  <p>{{ s.footerNote }}</p>
+</footer>
+

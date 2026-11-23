@@ -30,9 +30,11 @@ fn single_bound_scenario(b: f64, v: f64, guard: GuardMode) -> Scenario {
 /// Mutation experiment of slice 5 (docs/journal.md): with the guard removed
 /// from `rules_max`, P-03 (a) shrank to this case. The correct engine must
 /// answer CONDITIONAL: `v` is within the absolute guard of the bound 0.
+/// Since D-24 the default guard has no absolute term, so the case keeps the
+/// explicit floor `abs = 1e-12` it was found with.
 #[test]
 fn regression_mutation_p03a_value_within_absolute_guard_of_zero_bound() {
-    let s = single_bound_scenario(0.0, 1e-12, GuardMode::Default);
+    let s = single_bound_scenario(0.0, 1e-12, GuardMode::AbsFloor);
     let d = s.decide().expect("valid scenario");
     assert_eq!(
         common::scenario::observed(&d.verdict),
@@ -44,7 +46,7 @@ fn regression_mutation_p03a_value_within_absolute_guard_of_zero_bound() {
 /// Same mutation experiment, case shrunk by P-02.
 #[test]
 fn regression_mutation_p02_value_inside_absolute_guard_of_zero_bound() {
-    let s = single_bound_scenario(0.0, 5.498937935469428e-13, GuardMode::Default);
+    let s = single_bound_scenario(0.0, 5.498937935469428e-13, GuardMode::AbsFloor);
     let d = s.decide().expect("valid scenario");
     assert_ne!(d.verdict, Verdict::Impossible, "{s:?}");
 }

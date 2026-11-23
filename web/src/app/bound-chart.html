@@ -1,0 +1,34 @@
+<figure class="chart">
+  <svg viewBox="0 0 640 184" role="img" aria-labelledby="chart-title chart-desc" focusable="false">
+    <title id="chart-title">{{ s.chartTitle }}</title>
+    <desc id="chart-desc">{{ alt() }}</desc>
+    <defs>
+      <pattern id="bound-hatch" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+        <line x1="0" y1="0" x2="0" y2="8" class="chart-hatch-line" />
+      </pattern>
+    </defs>
+    @if (g().isRange) {
+      <rect class="chart-band" [attr.x]="g().boundMinX" y="36" [attr.width]="g().boundX - g().boundMinX" height="82" />
+    }
+    <rect class="chart-hatch" fill="url(#bound-hatch)" [attr.x]="g().hatch.x" y="36" [attr.width]="g().hatch.width" height="82" />
+    <text class="chart-beyond" text-anchor="end" [attr.x]="g().axisEndX - 8" y="62">
+      <tspan [attr.x]="g().axisEndX - 8" dy="0">{{ s.chartBeyond[0] }}</tspan>
+      <tspan [attr.x]="g().axisEndX - 8" dy="18">{{ s.chartBeyond[1] }}</tspan>
+    </text>
+    <line class="chart-axis" [attr.x1]="g().axisStartX" y1="118" [attr.x2]="g().axisEndX" y2="118" />
+    @for (t of ticks(); track t.value) {
+      <line class="chart-tick" [attr.x1]="t.x" y1="118" [attr.x2]="t.x" y2="125" />
+      <text class="chart-tick-label" text-anchor="middle" [attr.x]="t.x" y="143">{{ t.label }}</text>
+    }
+    <line class="chart-bound" [attr.x1]="g().boundX" y1="28" [attr.x2]="g().boundX" y2="128" />
+    <line class="chart-claim" [attr.x1]="g().claimX" y1="28" [attr.x2]="g().claimX" y2="125" />
+    <text class="chart-label chart-label-claim" [attr.text-anchor]="claimAnchor()" [attr.x]="g().claimX" y="20">
+      {{ claimLabel() }}
+    </text>
+    <text class="chart-label chart-label-bound" [attr.text-anchor]="boundAnchor()" [attr.x]="g().boundX" y="172">
+      {{ boundLabel() }}
+    </text>
+  </svg>
+  <figcaption class="fig-caption">{{ figureLabel() }}</figcaption>
+  <p class="chart-caption">{{ alt() }}</p>
+</figure>

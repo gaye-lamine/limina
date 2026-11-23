@@ -1,0 +1,23 @@
+{
+  "id": "cop",
+  "title": "Carnot COP limit",
+  "direction": "max",
+  "bounded_dimension": "dimensionless",
+  "parameters": [
+    { "name": "Th", "kind": "absolute_temperature", "units": ["K"], "required": true, "test_range": [300, 400] },
+    { "name": "Tc", "kind": "absolute_temperature", "units": ["K"], "required": true, "test_range": [250, 290] }
+  ],
+  "assumptions": [
+    {
+      "id": "mode",
+      "options": [
+        { "id": "heating", "formula": "Th/(Th - Tc)" },
+        { "id": "cooling", "formula": "Tc/(Th - Tc)" }
+      ]
+    }
+  ],
+  "validity": ["Tc > 0", "Th > Tc"],
+  "references": ["TODO(reference): to be supplied by the author"],
+  "status": "draft",
+  "epistemic_status": "theorem"
+}

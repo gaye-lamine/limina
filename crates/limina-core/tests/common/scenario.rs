@@ -38,11 +38,13 @@ pub fn config() -> Config {
     }
 }
 
-/// Guard modes of design 9.2: zero, default, large, extreme (all `rel < 1`).
+/// Guard modes of design 9.2: zero, default, large, extreme (all `rel < 1`),
+/// plus the absolute floor of the pre-D-24 default (`abs = 1e-12`).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum GuardMode {
     Zero,
     Default,
+    AbsFloor,
     Large(f64),
     Extreme(f64),
 }
@@ -51,7 +53,8 @@ impl GuardMode {
     pub fn rel_abs(self) -> (f64, f64) {
         match self {
             GuardMode::Zero => (0.0, 0.0),
-            GuardMode::Default => (1e-9, 1e-12),
+            GuardMode::Default => (1e-9, 0.0),
+            GuardMode::AbsFloor => (1e-9, 1e-12),
             GuardMode::Large(rel) | GuardMode::Extreme(rel) => (rel, 1e-12),
         }
     }
@@ -263,6 +266,7 @@ pub fn guard_mode() -> impl Strategy<Value = GuardMode> {
     prop_oneof![
         Just(GuardMode::Zero),
         Just(GuardMode::Default),
+        Just(GuardMode::AbsFloor),
         (1e-3..=0.5f64).prop_map(GuardMode::Large),
         (0.9..=0.999f64).prop_map(GuardMode::Extreme),
     ]

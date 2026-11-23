@@ -9,6 +9,7 @@ mod engine;
 mod error;
 mod interval;
 mod limit;
+mod limits;
 mod quantity;
 mod settings;
 mod tolerance;
@@ -24,9 +25,11 @@ pub use limit::{
     Assumption, AssumptionId, AssumptionOption, Configuration, Direction, DomainRange, Limit,
     OptionId, ParameterEnclosure, ParameterId, ParameterSpec, PlausibleDomain,
 };
+pub use limits::{Betz, Carnot, Cop};
 pub use quantity::{AbsoluteTemperature, Measure, MeasureKind, Quantity, TemperatureDifference};
 pub use settings::DecisionConfig;
 pub use tolerance::{approx_eq, guard, ABS_TOL, REL_TOL};
+pub use units::units_for_dimension;
 pub use verdict::{
     BoundRange, Claim, Decision, DecisionInput, EnclosureResult, Enclosures, Margin,
     MissingParameter, MissingStatus, SatisfyingConfig, Support, Verdict,

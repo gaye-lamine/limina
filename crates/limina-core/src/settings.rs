@@ -1,10 +1,10 @@
-//! Engine settings (R-02.3, D-15, D-17, D-18, D-20, D-21).
+//! Engine settings (R-02.3, D-15, D-17, D-18, D-20, D-21, D-24).
 
 use crate::error::EngineError;
-use crate::tolerance::{ABS_TOL, REL_TOL};
+use crate::tolerance::REL_TOL;
 
-/// Settings of the decision engine. The guard is global: there is no
-/// per-limit guard (D-20).
+/// Settings of the decision engine. The guard is global (D-20), plus an
+/// optional per-limit absolute floor, `Limit::guard_abs` (D-24).
 ///
 /// Fields are private and validated on construction, so a `DecisionConfig`
 /// value is always valid:
@@ -23,6 +23,10 @@ pub struct DecisionConfig {
 impl DecisionConfig {
     /// Default coverage factor (R-02.3).
     pub const DEFAULT_K: f64 = 2.0;
+
+    /// Default absolute term of the guard: 0, so the default guard is
+    /// relative only (D-24).
+    pub const DEFAULT_GUARD_ABS: f64 = 0.0;
 
     /// Default cap on `|S|` (D-17).
     pub const DEFAULT_MAX_CONFIGURATIONS: usize = 100_000;
@@ -82,13 +86,13 @@ impl DecisionConfig {
 }
 
 impl Default for DecisionConfig {
-    /// `k = 2`, `guard_rel = REL_TOL`, `guard_abs = ABS_TOL`,
+    /// `k = 2`, `guard_rel = REL_TOL`, `guard_abs = 0` (D-24),
     /// `max_configurations = 100000`.
     fn default() -> DecisionConfig {
         DecisionConfig {
             k: DecisionConfig::DEFAULT_K,
             guard_rel: REL_TOL,
-            guard_abs: ABS_TOL,
+            guard_abs: DecisionConfig::DEFAULT_GUARD_ABS,
             max_configurations: DecisionConfig::DEFAULT_MAX_CONFIGURATIONS,
         }
     }
@@ -109,7 +113,7 @@ mod tests {
         let c = DecisionConfig::default();
         assert_eq!(c.k(), 2.0);
         assert_eq!(c.guard_rel(), REL_TOL);
-        assert_eq!(c.guard_abs(), ABS_TOL);
+        assert_eq!(c.guard_abs(), 0.0);
         assert_eq!(c.max_configurations(), 100_000);
     }
 

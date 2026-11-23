@@ -1,0 +1,51 @@
+<div class="thermometer">
+  <svg class="thermo-tube" viewBox="0 0 84 128" width="84" height="128" aria-hidden="true" focusable="false">
+    <rect class="tube" x="17" y="3" width="12" height="108" rx="6" />
+    <circle class="bulb" cx="23" cy="115" r="10" />
+    <rect class="liquid" x="20" [attr.y]="levelY()" width="6" [attr.height]="tubeBottom + 8 - levelY()" />
+    <circle class="liquid" cx="23" cy="115" r="6.5" />
+    @for (g of graduations(); track g.y) {
+      <line class="graduation" x1="32" [attr.y1]="g.y" [attr.x2]="g.label ? 40 : 37" [attr.y2]="g.y" />
+      @if (g.label) {
+        <text class="graduation-label" x="44" [attr.y]="g.y + 4.5" [attr.font-size]="graduationFont">{{ g.label }}</text>
+      }
+    }
+  </svg>
+  <div class="thermo-controls">
+    <label class="symbol-label" [for]="'param-' + paramId() + '-value'">
+      <i>{{ symbol() }}</i><sub>{{ subscript() }}</sub>
+    </label>
+    <div class="thermo-reading">
+      <input
+        [id]="'param-' + paramId() + '-value'"
+        class="mono decimal"
+        type="text"
+        inputmode="decimal"
+        autocomplete="off"
+        spellcheck="false"
+        [value]="value()"
+        (input)="valueChange.emit($any($event.target).value)"
+      />
+      <input
+        [id]="'param-' + paramId() + '-unit'"
+        class="mono unit"
+        type="text"
+        readonly
+        tabindex="-1"
+        [attr.aria-label]="paramId() + ' ' + s.formParameterUnit"
+        [value]="unit()"
+      />
+    </div>
+    <input
+      [id]="'param-' + paramId() + '-range'"
+      class="range"
+      type="range"
+      min="0"
+      [max]="max()"
+      step="1"
+      [attr.aria-label]="sliderLabel()"
+      [value]="sliderValue()"
+      (input)="valueChange.emit($any($event.target).value)"
+    />
+  </div>
+</div>

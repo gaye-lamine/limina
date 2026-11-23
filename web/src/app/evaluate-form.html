@@ -1,0 +1,189 @@
+﻿<section class="panel bench" aria-labelledby="evaluate-title">
+  <h2 id="evaluate-title">{{ s.evaluateTitle }}</h2>
+
+  <div class="bench-head">
+    <div class="field case-field">
+      <label for="case">{{ s.caseLabel }}</label>
+      <select
+        id="case"
+        class="mono"
+        [disabled]="limits().length === 0"
+        (change)="openCase($any($event.target).value)"
+      >
+        <option value="" [selected]="openCaseIndex() === ''">{{ s.casePlaceholder }}</option>
+        @for (ex of examples; track ex.label; let i = $index) {
+          <option [value]="'' + i" [selected]="openCaseIndex() === '' + i">{{ ex.label }}</option>
+        }
+      </select>
+    </div>
+    @if (limit(); as l) {
+      <div class="field">
+        <label for="limit">{{ s.formLimit }}</label>
+        <select id="limit" class="mono" [value]="l.id" (change)="changeLimit($any($event.target).value)">
+          @for (opt of limits(); track opt.id) {
+            <option [value]="opt.id" [selected]="opt.id === l.id">{{ opt.id }}</option>
+          }
+        </select>
+      </div>
+    }
+  </div>
+  <p class="examples-note muted">{{ s.examplesNote }}</p>
+
+  @if (limit(); as l) {
+    <form (submit)="submit($event)" novalidate>
+      @if (apparatus() === 'carnot') {
+        <app-carnot-apparatus
+          [th]="paramValue('Th')"
+          [tc]="paramValue('Tc')"
+          [claim]="claimValue()"
+          [thUnit]="unitOf(l, 'Th')"
+          [tcUnit]="unitOf(l, 'Tc')"
+          (thChange)="changeParam('Th', $event)"
+          (tcChange)="changeParam('Tc', $event)"
+          (claimChange)="changeClaim($event)"
+        />
+      } @else if (apparatus() === 'cop') {
+        <app-cop-apparatus
+          [th]="paramValue('Th')"
+          [tc]="paramValue('Tc')"
+          [claim]="claimValue()"
+          [thUnit]="unitOf(l, 'Th')"
+          [tcUnit]="unitOf(l, 'Tc')"
+          [mode]="copMode()"
+          [twinVerdicts]="twinVerdicts()"
+          [evaluated]="twinsRequested()"
+          (thChange)="changeParam('Th', $event)"
+          (tcChange)="changeParam('Tc', $event)"
+          (claimChange)="changeClaim($event)"
+          (modeChange)="changeMode($event)"
+        />
+      } @else {
+        <div class="field-row">
+          <div class="field">
+            <label for="claim-value">{{ s.formClaimValue }}</label>
+            <input
+              id="claim-value"
+              class="mono"
+              type="text"
+              inputmode="decimal"
+              autocomplete="off"
+              [value]="claimValue()"
+              (input)="changeClaim($any($event.target).value)"
+            />
+          </div>
+          @if (showClaimUnit()) {
+            <div class="field">
+              <label for="claim-unit">{{ s.formClaimUnit }}</label>
+              <input id="claim-unit" class="mono unit" type="text" readonly tabindex="-1" [value]="claimUnit()" />
+            </div>
+          }
+        </div>
+
+        @if (l.parameters.length > 0) {
+          <fieldset>
+            <legend>{{ s.formParametersTitle }}</legend>
+            <p class="muted">{{ s.formParameterHint }}</p>
+            @for (p of l.parameters; track p.id) {
+              <div class="field-row">
+                <div class="field">
+                  <label [for]="'param-' + p.id + '-value'">
+                    {{ p.id }} ({{ s.formParameterValue }}, {{ p.required ? s.parameterRequired : s.parameterOptional }})
+                  </label>
+                  <input
+                    [id]="'param-' + p.id + '-value'"
+                    class="mono"
+                    type="text"
+                    inputmode="decimal"
+                    autocomplete="off"
+                    [value]="paramValue(p.id)"
+                    (input)="changeParam(p.id, $any($event.target).value)"
+                  />
+                </div>
+                <div class="field">
+                  <label [for]="'param-' + p.id + '-unit'">{{ p.id }} ({{ s.formParameterUnit }})</label>
+                  @if (p.units.length > 1) {
+                    <select
+                      [id]="'param-' + p.id + '-unit'"
+                      class="mono"
+                      (change)="setParamUnit(p.id, $any($event.target).value)"
+                    >
+                      @for (u of p.units; track u) {
+                        <option [value]="u" [selected]="paramUnit(p) === u">{{ u }}</option>
+                      }
+                    </select>
+                  } @else {
+                    <input
+                      [id]="'param-' + p.id + '-unit'"
+                      class="mono unit"
+                      type="text"
+                      readonly
+                      tabindex="-1"
+                      [value]="paramUnit(p)"
+                    />
+                  }
+                </div>
+              </div>
+            }
+          </fieldset>
+        }
+      }
+
+      <div class="bench-settings">
+        @if (settingsAssumptions(l).length > 0) {
+          <fieldset>
+            <legend>{{ s.formAssumptionsTitle }}</legend>
+            @for (a of settingsAssumptions(l); track a.id) {
+              <div class="field">
+                <label [for]="'assumption-' + a.id">{{ a.id }}</label>
+                <select
+                  [id]="'assumption-' + a.id"
+                  class="mono"
+                  (change)="changeChoice(a.id, $any($event.target).value)"
+                >
+                  <option value="" [selected]="choice(a.id) === ''">{{ s.formNotSpecified }}</option>
+                  @for (o of a.options; track o) {
+                    <option [value]="o" [selected]="choice(a.id) === o">{{ o }}</option>
+                  }
+                </select>
+              </div>
+            }
+          </fieldset>
+        }
+
+        <div class="field">
+          <label for="claim-uncertainty">{{ s.formUncertainty }}</label>
+          <input
+            id="claim-uncertainty"
+            class="mono"
+            type="text"
+            inputmode="decimal"
+            autocomplete="off"
+            [value]="uncertainty()"
+            (input)="uncertainty.set($any($event.target).value)"
+          />
+        </div>
+      </div>
+
+      @if (fieldError(); as e) {
+        <p class="field-error" role="alert">{{ e }}</p>
+      }
+      <button type="submit" [disabled]="busy()">
+        {{ busy() ? s.formSubmitting : s.formSubmit }}
+      </button>
+    </form>
+  } @else {
+    <p class="muted">{{ s.limitsLoading }}</p>
+  }
+</section>
+
+<app-result-panel
+  [result]="result()"
+  [failure]="failure()"
+  [claim]="evaluatedClaim()"
+  [limitInfo]="evaluatedLimit()"
+  [constraints]="evaluatedConstraints()"
+  [limitId]="limit()?.id ?? null"
+  [showChart]="!hasApparatus()"
+  [figureOffset]="hasApparatus() ? 1 : 0"
+  (recover)="recover($event)"
+/>

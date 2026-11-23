@@ -1,0 +1,83 @@
+<svg
+  class="apparatus-figure cop-figure"
+  [class.compact]="compact()"
+  [attr.viewBox]="viewBox"
+  [style.min-width.px]="minWidth()"
+  [style.min-height.px]="minHeight()"
+  role="img"
+  [attr.aria-labelledby]="idPrefix() + '-title ' + idPrefix() + '-desc'"
+  focusable="false"
+>
+  <title [attr.id]="idPrefix() + '-title'">{{ s.copTitle }}</title>
+  <desc [attr.id]="idPrefix() + '-desc'">{{ alt() }}</desc>
+  <defs>
+    <pattern [attr.id]="idPrefix() + '-hatch-hot'" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <line x1="0" y1="0" x2="0" y2="6" class="hatch-line" />
+    </pattern>
+    <pattern [attr.id]="idPrefix() + '-hatch-cold'" width="9" height="9" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)">
+      <line x1="0" y1="0" x2="0" y2="9" class="hatch-line" />
+    </pattern>
+    <pattern [attr.id]="idPrefix() + '-hatch-flow'" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <line x1="0" y1="0" x2="0" y2="5" class="hatch-line-light" />
+    </pattern>
+  </defs>
+
+  <!-- Hot reservoir -->
+  <rect class="reservoir" x="70" y="16" width="320" height="68" [attr.fill]="'url(#' + idPrefix() + '-hatch-hot)'" />
+  <rect class="label-plate" x="110" y="24" width="240" height="52" />
+  <text class="fig-label" text-anchor="middle" [attr.x]="cx" y="46" [attr.font-size]="font().label">{{ s.apparatusHot }}</text>
+  <text class="fig-symbol" text-anchor="middle" [attr.x]="cx" y="70" [attr.font-size]="font().symbol">
+    <tspan>T</tspan><tspan class="sub" dy="5" [attr.font-size]="font().sub">h</tspan><tspan class="fig-value" dy="-5" [attr.font-size]="font().value"> {{ th() ? '= ' + th() + ' ' + thUnit() : '' }}</tspan>
+  </text>
+
+  <!-- Cold reservoir -->
+  <rect class="reservoir" x="70" y="416" width="320" height="68" [attr.fill]="'url(#' + idPrefix() + '-hatch-cold)'" />
+  <rect class="label-plate" x="110" y="424" width="240" height="52" />
+  <text class="fig-label" text-anchor="middle" [attr.x]="cx" y="446" [attr.font-size]="font().label">{{ s.apparatusCold }}</text>
+  <text class="fig-symbol" text-anchor="middle" [attr.x]="cx" y="470" [attr.font-size]="font().symbol">
+    <tspan>T</tspan><tspan class="sub" dy="5" [attr.font-size]="font().sub">c</tspan><tspan class="fig-value" dy="-5" [attr.font-size]="font().value"> {{ tc() ? '= ' + tc() + ' ' + tcUnit() : '' }}</tspan>
+  </text>
+
+  @if (shapes(); as sh) {
+    <!-- Work in, from the side -->
+    <polygon class="flow cop-work" [attr.points]="sh.w" [attr.fill]="'url(#' + idPrefix() + '-hatch-flow)'" />
+    <text class="fig-symbol" [attr.x]="workStart + 8" [attr.y]="sh.workLabelY" [attr.font-size]="font().symbol">
+      <tspan>W</tspan><tspan class="fig-value" [attr.font-size]="font().value"> = 1</tspan>
+    </text>
+
+    <!-- Qh up to the hot reservoir, Qc up from the cold reservoir -->
+    <polygon class="flow" [class.cop-useful]="heating()" [class.cop-other]="!heating()" [attr.points]="sh.qh" [attr.fill]="'url(#' + idPrefix() + '-hatch-flow)'" />
+    <line class="flow-dash" [attr.x1]="cx" [attr.y1]="machineY - machineR - 4" [attr.x2]="cx" [attr.y2]="hotBottom + 18" />
+    <polygon class="flow" [class.cop-useful]="!heating()" [class.cop-other]="heating()" [attr.points]="sh.qc" [attr.fill]="'url(#' + idPrefix() + '-hatch-flow)'" />
+    <line class="flow-dash" [attr.x1]="cx" [attr.y1]="coldTop - 4" [attr.x2]="cx" [attr.y2]="machineY + machineR + 18" />
+    @if (sh.claimed) {
+      <polygon class="flow-claimed cop-claimed" [attr.points]="sh.claimed" />
+    }
+
+    <!-- Labels of the useful heat: allowed, then claimed -->
+    <text class="fig-symbol cop-useful-label" [attr.x]="sh.labelX" [attr.y]="sh.usefulY[0]" [attr.font-size]="font().symbol">
+      <tspan>Q</tspan><tspan class="sub" dy="5" [attr.font-size]="font().sub">{{ usefulSub() }}</tspan><tspan class="fig-value" dy="-5" [attr.font-size]="font().value"> &#8804; {{ text()?.useful }}</tspan>
+      @if (!compact()) {
+        <tspan class="fig-label" dx="8" [attr.font-size]="font().label">{{ s.apparatusAllowed }}</tspan>
+      }
+    </text>
+    @if (text()?.claimed; as claimed) {
+      @if (compact()) {
+        <text class="fig-label cop-claimed-label" [attr.x]="sh.labelX" [attr.y]="sh.usefulY[1] + 6" [attr.font-size]="font().label">{{ s.apparatusClaimed }} {{ claimed }}</text>
+      } @else {
+        <text class="fig-symbol cop-claimed-label" [attr.x]="sh.labelX" [attr.y]="sh.usefulY[1]" [attr.font-size]="font().symbol">
+          <tspan>Q</tspan><tspan class="sub" dy="5" [attr.font-size]="font().sub">{{ usefulSub() }}</tspan><tspan class="fig-value" dy="-5" [attr.font-size]="font().value"> = {{ claimed }}</tspan><tspan class="fig-label" dx="8" [attr.font-size]="font().label">{{ s.apparatusClaimed }}</tspan>
+        </text>
+      }
+    }
+
+    <!-- Label of the other heat -->
+    <text class="fig-symbol cop-other-label" [attr.x]="sh.labelX" [attr.y]="sh.otherY" [attr.font-size]="font().symbol">
+      <tspan>Q</tspan><tspan class="sub" dy="5" [attr.font-size]="font().sub">{{ otherSub() }}</tspan><tspan class="fig-value" dy="-5" [attr.font-size]="font().value"> = {{ text()?.other }}</tspan>
+    </text>
+  }
+
+  <!-- Machine, drawn over the ends of the arrows -->
+  <circle class="engine" [attr.cx]="cx" [attr.cy]="machineY" [attr.r]="machineR" />
+  <text class="fig-label" text-anchor="middle" [attr.x]="cx" [attr.y]="machineY + 5" [attr.font-size]="font().label">{{ s.copMachine }}</text>
+</svg>

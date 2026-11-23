@@ -56,6 +56,20 @@ pub(crate) fn lookup_unit(symbol: &str) -> Result<UnitEntry, EngineError> {
         .ok_or_else(|| EngineError::UnknownUnit(symbol.to_string()))
 }
 
+/// Unit symbols of the table whose dimension is `dimension`, in table order.
+///
+/// The list is empty when no table unit has that dimension. Every returned
+/// symbol is accepted by `Quantity::from_unit`, except that `K` is only
+/// usable through the temperature types where the limit expects one.
+/// Reference: unit table, decision-engine design 3.4.
+pub fn units_for_dimension(dimension: Dimension) -> Vec<&'static str> {
+    UNIT_TABLE
+        .iter()
+        .filter(|e| e.dimension == dimension)
+        .map(|e| e.symbol)
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::{lookup_unit, UNIT_TABLE};

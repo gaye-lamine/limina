@@ -99,6 +99,28 @@ pub enum EngineError {
         /// The cap that was exceeded.
         max: usize,
     },
+
+    /// A configuration of `S` is outside the validity domain of the limit, so
+    /// the limit computes no bound. Never a verdict.
+    #[error(
+        "limit {limit_id} not applicable: {assumption} = {option} is outside its validity domain"
+    )]
+    NotApplicable {
+        /// Id of the limit that refuses the configuration.
+        limit_id: String,
+        /// Id of the assumption that puts the configuration out of domain.
+        assumption: String,
+        /// Id of the option that is out of domain.
+        option: String,
+    },
+
+    /// The temperatures of a two-reservoir limit do not satisfy `Th > Tc > 0`.
+    /// Never a verdict.
+    #[error("limit {limit_id} requires Th > Tc > 0")]
+    InvalidTemperatureOrder {
+        /// Id of the limit that refuses the temperatures.
+        limit_id: String,
+    },
 }
 
 #[cfg(test)]
@@ -137,6 +159,14 @@ mod tests {
             EngineError::UnknownParameter("p".to_string()),
             EngineError::EmptyConfigurationSet,
             EngineError::ConfigurationSetTooLarge { max: 100_000 },
+            EngineError::NotApplicable {
+                limit_id: "test-limit".to_string(),
+                assumption: "a".to_string(),
+                option: "o".to_string(),
+            },
+            EngineError::InvalidTemperatureOrder {
+                limit_id: "test-limit".to_string(),
+            },
         ]
     }
 
@@ -160,6 +190,8 @@ mod tests {
             EngineError::UnknownParameter(_) => 15,
             EngineError::EmptyConfigurationSet => 16,
             EngineError::ConfigurationSetTooLarge { .. } => 17,
+            EngineError::NotApplicable { .. } => 18,
+            EngineError::InvalidTemperatureOrder { .. } => 19,
         }
     }
 
@@ -183,7 +215,7 @@ mod tests {
     fn all_variants_lists_every_variant_once() {
         let mut seen: Vec<usize> = all_variants().iter().map(variant_index).collect();
         seen.sort_unstable();
-        assert_eq!(seen, (0..18).collect::<Vec<_>>());
+        assert_eq!(seen, (0..20).collect::<Vec<_>>());
     }
 
     #[test]

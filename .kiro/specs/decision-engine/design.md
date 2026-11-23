@@ -586,3 +586,5 @@ These supplement the properties and never replace them.
 ## 10. Open questions
 
 None. The former OQ-01 to OQ-05 are decisions D-18 to D-22 in `requirements.md`.
+## 11. Amendment D-24 (spec limit-author)
+`decide` step 7 uses `guard_abs = max(cfg.guard_abs(), limit.guard_abs())`. `Limit::guard_abs` is an optional trait method with default 0, validated there (`InvalidGuard` if negative or not finite). `DecisionConfig::default()` has `guard_abs = DecisionConfig::DEFAULT_GUARD_ABS = 0`. This supersedes the D-20 row of the traceability table ("`Limit` has no guard method") and the note in section 4 that there is no per-limit guard. Tests: the guard modes of 9.2 gain `AbsFloor` (`rel = 1e-9`, `abs = 1e-12`, the former default); the two slice-5 regression cases keep that explicit floor; `tests/guard_scale.rs` checks a Landauer-sized bound, a zero bound with a declared floor, and a scale property over bounds in `[1e-30, 1e30]` with the fixed seed. Properties P-01 to P-10 and E-01 to E-04 are unchanged.

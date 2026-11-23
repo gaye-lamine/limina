@@ -1,0 +1,43 @@
+<figure class="gauge">
+  <svg
+    [attr.viewBox]="viewBox"
+    [style.min-width.px]="minWidth"
+    role="img"
+    aria-labelledby="gauge-title gauge-desc"
+    focusable="false"
+  >
+    <title id="gauge-title">{{ s.gaugeTitle }}</title>
+    <desc id="gauge-desc">{{ alt() }}</desc>
+    <defs>
+      <pattern id="gauge-hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+        <rect class="gauge-hatch-ground" x="0" y="0" width="7" height="7" />
+        <line x1="0" y1="0" x2="0" y2="7" class="gauge-hatch-line" />
+      </pattern>
+    </defs>
+    <path class="gauge-dial" [attr.d]="dialPath" />
+    @if (hatchPath(); as h) {
+      <path class="gauge-hatch" [attr.d]="h" fill="url(#gauge-hatch)" />
+    }
+    @for (t of scale(); track t.value) {
+      <line class="gauge-scale-tick" [attr.x1]="t.a.x" [attr.y1]="t.a.y" [attr.x2]="t.b.x" [attr.y2]="t.b.y" />
+      <text class="gauge-scale-label" text-anchor="middle" [attr.x]="t.l.x" [attr.y]="t.l.y + 4" [attr.font-size]="font.scale">{{ t.label }}</text>
+    }
+    @for (t of boundMarks(); track t.value) {
+      <line class="gauge-bound-tick" [attr.x1]="t.a.x" [attr.y1]="t.a.y" [attr.x2]="t.b.x" [attr.y2]="t.b.y" />
+      <text
+        class="gauge-bound-label"
+        [attr.text-anchor]="t.place.anchor"
+        [attr.x]="t.place.x"
+        [attr.y]="t.place.y"
+        [attr.font-size]="font.bound"
+      >{{ t.text }}</text>
+    }
+    <line class="gauge-needle" [attr.x1]="cx" [attr.y1]="cy" [attr.x2]="needle().x" [attr.y2]="needle().y" />
+    <circle class="gauge-hub" [attr.cx]="cx" [attr.cy]="cy" r="5" />
+    <text class="gauge-claim-label" text-anchor="middle" [attr.x]="cx" [attr.y]="claimLabelY" [attr.font-size]="font.claim">
+      {{ s.gaugeClaim }} {{ claimText() }}
+    </text>
+  </svg>
+  <figcaption class="fig-caption">{{ caption() }}</figcaption>
+  <p class="gauge-alt">{{ alt() }}</p>
+</figure>

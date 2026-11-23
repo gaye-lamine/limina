@@ -1,0 +1,98 @@
+<figure class="apparatus cop-apparatus">
+  <div class="apparatus-bench">
+    <fieldset class="segmented">
+      <legend>{{ s.copModeLegend }}</legend>
+      <div class="segmented-options">
+        @for (m of modes; track m) {
+          <input
+            class="segment-input"
+            type="radio"
+            name="cop-mode"
+            [id]="modeId(m)"
+            [value]="m"
+            [checked]="mode() === m"
+            (change)="modeChange.emit(m)"
+          />
+          <label class="segment-label" [for]="modeId(m)">{{ s.copModes[m] }}</label>
+        }
+      </div>
+    </fieldset>
+
+    @if (stated()) {
+      <div class="apparatus-scroll">
+        <app-cop-figure
+          [th]="th()"
+          [tc]="tc()"
+          [claim]="claim()"
+          [thUnit]="thUnit()"
+          [tcUnit]="tcUnit()"
+          [mode]="statedMode()"
+          idPrefix="cop-main"
+        />
+      </div>
+    } @else {
+      <div class="apparatus-scroll">
+        <div class="twins">
+          @for (m of twinModes; track m) {
+            <figure class="twin" [attr.data-mode]="m">
+              <figcaption class="twin-caption">{{ s.copIf[m] }}</figcaption>
+              <app-cop-figure
+                [th]="th()"
+                [tc]="tc()"
+                [claim]="claim()"
+                [thUnit]="thUnit()"
+                [tcUnit]="tcUnit()"
+                [mode]="m"
+                [compact]="true"
+                [idPrefix]="'cop-' + m"
+              />
+              @if (verdictOf(m); as v) {
+                <p [class]="'twin-verdict legend-label ' + verdictClass(v)">{{ s.verdictLabel[v] }}</p>
+              } @else if (evaluated()) {
+                <p class="twin-verdict muted">{{ s.copTwinPending }}</p>
+              }
+            </figure>
+          }
+        </div>
+      </div>
+      @if (sentence(); as line) {
+        <p class="twins-sentence" aria-live="polite">{{ line }}</p>
+      }
+    }
+
+    <div class="apparatus-controls">
+      <div class="apparatus-th">
+        <app-thermometer
+          paramId="Th"
+          subscript="h"
+          [value]="th()"
+          [unit]="thUnit()"
+          (valueChange)="thChange.emit($event)"
+        />
+      </div>
+      <div class="apparatus-tc">
+        <app-thermometer
+          paramId="Tc"
+          subscript="c"
+          [value]="tc()"
+          [unit]="tcUnit()"
+          (valueChange)="tcChange.emit($event)"
+        />
+      </div>
+      <div class="apparatus-claim">
+        <label for="claim-value">{{ s.claimedCop }}</label>
+        <input
+          id="claim-value"
+          class="mono decimal"
+          type="text"
+          inputmode="decimal"
+          autocomplete="off"
+          spellcheck="false"
+          [value]="claim()"
+          (input)="claimChange.emit($any($event.target).value)"
+        />
+      </div>
+    </div>
+  </div>
+  <figcaption class="fig-caption">{{ s.copFigure }}</figcaption>
+</figure>

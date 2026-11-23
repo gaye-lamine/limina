@@ -1,0 +1,16 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "core-tests-on-save",
+      "trigger": "PostFileSave",
+      "description": "When a Rust file under crates/limina-core/src or crates/limina-core/tests is saved, runs cargo fmt --all --check, cargo clippy --workspace --all-targets -- -D warnings and cargo test --workspace from the repository root, with %USERPROFILE%\\.cargo\\bin added to PATH inside the command. Reports PASS or FAIL in two lines. Never modifies files.",
+      "matcher": "crates[\\\\/]limina-core[\\\\/](src|tests)[\\\\/].*\\.rs$",
+      "action": {
+        "type": "command",
+        "command": "cmd /d /v:on /c \"set PATH=%USERPROFILE%\\.cargo\\bin;%PATH%& set F=ok& set C=ok& set T=ok& (cargo fmt --all --check >nul 2>&1 || set F=FAIL)& (cargo clippy --workspace --all-targets -- -D warnings >nul 2>&1 || set C=FAIL)& (cargo test --workspace >nul 2>&1 || set T=FAIL)& (if !F!!C!!T!==okokok (echo core-tests-on-save: PASS) else (echo core-tests-on-save: FAIL))& echo fmt=!F! clippy=!C! test=!T!\"",
+        "timeout": 600
+      }
+    }
+  ]
+}

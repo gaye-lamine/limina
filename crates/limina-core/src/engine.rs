@@ -5,7 +5,9 @@ use std::collections::BTreeMap;
 use crate::config::ConfigurationSet;
 use crate::error::EngineError;
 use crate::interval::Interval;
-use crate::limit::{Configuration, Direction, Limit, ParameterEnclosure, ParameterId};
+use crate::limit::{
+    Configuration, Direction, DomainRange, Limit, ParameterEnclosure, ParameterId, PlausibleDomain,
+};
 use crate::quantity::{check_same_kind, Measure, MeasureKind};
 use crate::tolerance::guard;
 use crate::verdict::{
@@ -27,10 +29,13 @@ pub enum EnclosureKind {
 
 /// Computes the verdict of `input.claim` against `limit` (design 6.4).
 ///
-/// This version handles claims without missing parameters. Until missing
-/// parameters are handled (tasks T26 to T29), a missing required parameter
-/// gives `InsufficientData` with all missing parameters and no enclosures,
-/// which is never `Impossible`.
+/// A missing parameter without a plausible domain gives `InsufficientData`
+/// directly, with no enclosures. Otherwise the rules run under the permissive
+/// and the restrictive enclosure; equal outcomes are returned as is and
+/// different outcomes give `InsufficientData` (D-03), so `Impossible` needs
+/// both enclosures to say `Impossible`. Members of `C*` are `Certain` when
+/// the restrictive end also admits the claim, else `Depends` on all missing
+/// parameters (D-19).
 pub fn decide(limit: &dyn Limit, input: &DecisionInput) -> Result<Decision, EngineError> {
     let cfg = input.config;
     // Step 1.
@@ -46,8 +51,9 @@ pub fn decide(limit: &dyn Limit, input: &DecisionInput) -> Result<Decision, Engi
         claim_hi: hi,
         enclosures,
     };
-    if !missing.is_empty() {
-        // Temporary until T26 to T29: never IMPOSSIBLE.
+    // Step 4 (D-16, D-22): any `NoDomain` parameter ends the evaluation, with
+    // all missing parameters listed, no enclosure and no call to `Limit::bound`.
+    if missing.iter().any(|m| m.status == MissingStatus::NoDomain) {
         return Ok(decision(Verdict::InsufficientData { missing }, None));
     }
     // Step 5.
@@ -60,10 +66,12 @@ pub fn decide(limit: &dyn Limit, input: &DecisionInput) -> Result<Decision, Engi
     let permissive = selected(direction, EnclosureKind::Permissive, &bounds);
     let restrictive = selected(direction, EnclosureKind::Restrictive, &bounds);
     // Step 7.
-    let (rel, abs) = (cfg.guard_rel(), cfg.guard_abs());
+    let (rel, abs) = (cfg.guard_rel(), effective_guard_abs(cfg, limit)?);
     let outcome_perm = rules(direction, lo, hi, &values_of(&permissive), rel, abs);
     let outcome_restr = rules(direction, lo, hi, &values_of(&restrictive), rel, abs);
-    // Step 8 (D-03). With point bounds both outcomes are equal.
+    // Step 8 (D-03, R-05.3, R-05.4, R-05.6): equal outcomes are returned as is,
+    // different outcomes give `InsufficientData` with all missing parameters.
+    // `Impossible` therefore needs `Impossible` under both enclosures.
     let verdict = if outcome_perm != outcome_restr {
         Verdict::InsufficientData { missing }
     } else {
@@ -72,7 +80,14 @@ pub fn decide(limit: &dyn Limit, input: &DecisionInput) -> Result<Decision, Engi
             Outcome::Compatible => Verdict::Compatible,
             // Step 9.
             Outcome::Conditional => Verdict::Conditional {
-                satisfying: satisfying_configs(direction, lo, hi, &permissive, rel, abs),
+                satisfying: tagged_configs(
+                    direction,
+                    (lo, hi),
+                    &permissive,
+                    &restrictive,
+                    &missing,
+                    (rel, abs),
+                ),
             },
         }
     };
@@ -84,8 +99,31 @@ pub fn decide(limit: &dyn Limit, input: &DecisionInput) -> Result<Decision, Engi
     Ok(decision(verdict, Some(enclosures)))
 }
 
-/// Step 3: supplied parameters as point intervals, and the missing required
-/// parameters tagged `NoDomain` or `HasDomain`, in declaration order.
+/// Hull `[min, max]` of a plausible domain, from its endpoints only (R-08.7).
+/// `None` when the domain has no usable value (an empty finite set).
+fn plausible_hull(domain: &PlausibleDomain) -> Result<Option<Interval>, EngineError> {
+    match &domain.range {
+        DomainRange::Interval(interval) => Ok(Some(*interval)),
+        DomainRange::Finite(values) => {
+            if values.iter().any(|x| !x.is_finite()) {
+                return Err(EngineError::NonFiniteValue {
+                    field: "plausible domain",
+                });
+            }
+            let lo = values.iter().copied().reduce(f64::min);
+            let hi = values.iter().copied().reduce(f64::max);
+            match (lo, hi) {
+                (Some(lo), Some(hi)) => Interval::new(lo, hi).map(Some),
+                _ => Ok(None),
+            }
+        }
+    }
+}
+
+/// Step 3: supplied parameters as point intervals, the missing required
+/// parameters with a usable plausible domain as the hull of that domain, and
+/// the list of all missing parameters tagged `NoDomain` or `HasDomain`, in
+/// declaration order.
 fn resolve_parameters(
     limit: &dyn Limit,
     known: &BTreeMap<ParameterId, Measure>,
@@ -100,18 +138,27 @@ fn resolve_parameters(
         check_same_kind(spec.kind, measure.kind())?;
         values.insert(id.clone(), Interval::point(measure.si_value())?);
     }
-    let missing = specs
+    let mut missing = Vec::new();
+    for spec in specs
         .iter()
         .filter(|s| s.required && !known.contains_key(&s.id))
-        .map(|s| MissingParameter {
-            id: s.id.clone(),
-            status: if s.plausible.is_some() {
+    {
+        let hull = match &spec.plausible {
+            Some(domain) => plausible_hull(domain)?,
+            None => None,
+        };
+        let status = match hull {
+            Some(hull) => {
+                values.insert(spec.id.clone(), hull);
                 MissingStatus::HasDomain
-            } else {
-                MissingStatus::NoDomain
-            },
-        })
-        .collect();
+            }
+            None => MissingStatus::NoDomain,
+        };
+        missing.push(MissingParameter {
+            id: spec.id.clone(),
+            status,
+        });
+    }
     Ok((ParameterEnclosure::new(values), missing))
 }
 
@@ -142,6 +189,21 @@ fn enclosure_result(lo: f64, hi: f64, values: &[(Configuration, f64)]) -> Enclos
         bounds,
         margin: margin(lo, hi, bounds),
     }
+}
+
+/// Absolute term of the guard for `limit` (D-24): the larger of the
+/// settings' `guard_abs` and the limit's optional floor `Limit::guard_abs`.
+///
+/// Errors: `InvalidGuard` if the limit's floor is not finite or `< 0`.
+fn effective_guard_abs(
+    cfg: crate::settings::DecisionConfig,
+    limit: &dyn Limit,
+) -> Result<f64, EngineError> {
+    let floor = limit.guard_abs();
+    if !floor.is_finite() || floor < 0.0 {
+        return Err(EngineError::InvalidGuard);
+    }
+    Ok(cfg.guard_abs().max(floor))
 }
 
 /// Dispatches to the rules of the limit's direction.
@@ -324,6 +386,44 @@ fn satisfying_configs(
         .collect()
 }
 
+/// `C*` with `Certain` / `Depends` tags (design 6.4 step 9, R-05.7, R-05.8,
+/// D-10, D-13, D-19).
+///
+/// Membership uses the permissive end (as `satisfying_configs`). A member is
+/// `Certain` when the same guarded comparison holds on the restrictive end,
+/// otherwise `Depends` on all missing parameters. Without missing parameters
+/// both ends are equal, so every member is `Certain`.
+///
+/// Max-bound: `L + g(L) >= lo`. Min-bound: `V - g(V) <= hi`.
+fn tagged_configs(
+    direction: Direction,
+    (lo, hi): (f64, f64),
+    permissive: &[(Configuration, f64)],
+    restrictive: &[(Configuration, f64)],
+    missing: &[MissingParameter],
+    (guard_rel, guard_abs): (f64, f64),
+) -> Vec<SatisfyingConfig> {
+    let depends: Vec<ParameterId> = missing.iter().map(|m| m.id.clone()).collect();
+    let members = satisfying_configs(direction, lo, hi, permissive, guard_rel, guard_abs);
+    let restrictive_members =
+        satisfying_configs(direction, lo, hi, restrictive, guard_rel, guard_abs);
+    members
+        .into_iter()
+        .map(|member| {
+            let certain = restrictive_members
+                .iter()
+                .any(|r| r.config == member.config);
+            SatisfyingConfig {
+                config: member.config,
+                support: if certain {
+                    Support::Certain
+                } else {
+                    Support::Depends(depends.clone())
+                },
+            }
+        })
+        .collect()
+}
 /// Margin (D-12): hull of `lo/B_max`, `lo/B_min`, `hi/B_max`, `hi/B_min`
 /// when `B_min > 0`; `None` otherwise, without any division. `None` also
 /// when any ratio is not finite (D-23). The verdict never depends on it.
@@ -540,7 +640,10 @@ mod rules_tests {
     use super::{rules_max, rules_min, Outcome};
 
     const DEFAULT_REL: f64 = 1e-9;
-    const DEFAULT_ABS: f64 = 1e-12;
+    /// Default absolute guard since D-24.
+    const DEFAULT_ABS: f64 = 0.0;
+    /// Absolute floor of the pre-D-24 default, kept as an explicit mode.
+    const FLOOR_ABS: f64 = 1e-12;
 
     /// Independent guard: `max(rel * |x|, abs)`.
     fn g(x: f64, rel: f64, abs: f64) -> f64 {
@@ -548,11 +651,12 @@ mod rules_tests {
     }
 
     /// Guard modes: zero, default, large, extreme (all `rel < 1`).
-    const MODES: [(f64, f64); 4] = [
+    const MODES: [(f64, f64); 5] = [
         (0.0, 0.0),
         (DEFAULT_REL, DEFAULT_ABS),
-        (0.5, DEFAULT_ABS),
-        (0.999, DEFAULT_ABS),
+        (DEFAULT_REL, FLOOR_ABS),
+        (0.5, FLOOR_ABS),
+        (0.999, FLOOR_ABS),
     ];
 
     #[test]
@@ -966,6 +1070,118 @@ mod decide_tests {
             Err(EngineError::IncompatibleDimension { .. })
         ));
     }
+
+    // T28 (D-03, R-05.3, R-05.4, R-05.6): combine the two enclosures.
+
+    fn domain(lo: f64, hi: f64) -> PlausibleDomain {
+        PlausibleDomain {
+            range: crate::limit::DomainRange::Interval(Interval::new(lo, hi).expect("valid")),
+            source: "test".to_string(),
+        }
+    }
+
+    fn p_missing() -> Verdict {
+        Verdict::InsufficientData {
+            missing: vec![MissingParameter {
+                id: ParameterId::new("p"),
+                status: MissingStatus::HasDomain,
+            }],
+        }
+    }
+
+    /// `B(a) = 5 p`, `B(b) = 8 p`, `p` missing in `[lo, hi]`.
+    fn two_modes(direction: Direction, lo: f64, hi: f64) -> FakeLimit {
+        FakeLimit::new(direction, &[("a", 5.0), ("b", 8.0)])
+            .with_parameter("p", Some(domain(lo, hi)))
+    }
+
+    fn verdict_of(limit: &FakeLimit, v: f64) -> Verdict {
+        decide(limit, &input(v, None)).expect("valid").verdict
+    }
+
+    #[test]
+    fn max_bound_same_verdict_under_both_enclosures_is_returned_as_is() {
+        // p in [1, 2]: permissive {10, 16}, restrictive {5, 8}.
+        let limit = two_modes(Direction::Max, 1.0, 2.0);
+        assert_eq!(verdict_of(&limit, 17.0), Verdict::Impossible);
+        assert_eq!(verdict_of(&limit, 4.0), Verdict::Compatible);
+        // p in [1, 1.1]: permissive {5.5, 8.8}, restrictive {5, 8}: both
+        // CONDITIONAL for a claim of 6.
+        let narrow = two_modes(Direction::Max, 1.0, 1.1);
+        assert!(matches!(
+            verdict_of(&narrow, 6.0),
+            Verdict::Conditional { .. }
+        ));
+    }
+
+    #[test]
+    fn max_bound_different_verdicts_give_insufficient_data_with_all_missing() {
+        let limit = two_modes(Direction::Max, 1.0, 2.0);
+        // Permissive COMPATIBLE (9 <= 10), restrictive IMPOSSIBLE (9 > 8).
+        assert_eq!(verdict_of(&limit, 9.0), p_missing());
+        // Permissive CONDITIONAL (10 < 12 <= 16), restrictive IMPOSSIBLE.
+        assert_eq!(verdict_of(&limit, 12.0), p_missing());
+        // Permissive COMPATIBLE (6 <= 10), restrictive CONDITIONAL (5 < 6 <= 8).
+        assert_eq!(verdict_of(&limit, 6.0), p_missing());
+    }
+
+    #[test]
+    fn max_bound_impossible_under_the_restrictive_enclosure_only_is_not_impossible() {
+        let limit = two_modes(Direction::Max, 1.0, 2.0);
+        let d = decide(&limit, &input(9.0, None)).expect("valid");
+        let e = d.enclosures.expect("both enclosures were computed");
+        // The restrictive enclosure alone would say IMPOSSIBLE (9 > 8).
+        assert!(9.0 > e.restrictive.bounds.b_max);
+        assert_eq!(d.verdict, p_missing());
+    }
+
+    #[test]
+    fn min_bound_same_verdict_under_both_enclosures_is_returned_as_is() {
+        // p in [1, 2]: permissive (lower ends) {5, 8}, restrictive {10, 16}.
+        let limit = two_modes(Direction::Min, 1.0, 2.0);
+        assert_eq!(verdict_of(&limit, 4.0), Verdict::Impossible);
+        assert_eq!(verdict_of(&limit, 17.0), Verdict::Compatible);
+        // p in [1, 1.1]: permissive {5, 8}, restrictive {5.5, 8.8}: both
+        // CONDITIONAL for a claim of 6.
+        let narrow = two_modes(Direction::Min, 1.0, 1.1);
+        assert!(matches!(
+            verdict_of(&narrow, 6.0),
+            Verdict::Conditional { .. }
+        ));
+    }
+
+    #[test]
+    fn min_bound_different_verdicts_give_insufficient_data_with_all_missing() {
+        let limit = two_modes(Direction::Min, 1.0, 2.0);
+        // Permissive COMPATIBLE (9 >= 8), restrictive IMPOSSIBLE (9 < 10).
+        assert_eq!(verdict_of(&limit, 9.0), p_missing());
+        // Permissive CONDITIONAL (5 <= 7 < 8), restrictive IMPOSSIBLE (7 < 10).
+        assert_eq!(verdict_of(&limit, 7.0), p_missing());
+    }
+
+    #[test]
+    fn disagreement_lists_every_missing_parameter() {
+        let limit = FakeLimit::new(Direction::Max, &[("a", 5.0)])
+            .with_parameter("p", Some(domain(1.0, 2.0)))
+            .with_parameter("q", Some(domain(1.0, 3.0)));
+        // B in [5, 30]: permissive 30, restrictive 5. Claim 20: COMPATIBLE
+        // under the permissive end (20 <= 30), IMPOSSIBLE under the other.
+        let d = decide(&limit, &input(20.0, None)).expect("valid");
+        let ids_and_status: Vec<(&str, MissingStatus)> = match &d.verdict {
+            Verdict::InsufficientData { missing } => {
+                missing.iter().map(|m| (m.id.as_str(), m.status)).collect()
+            }
+            other => panic!("expected InsufficientData, got {other:?}"),
+        };
+        assert_eq!(
+            ids_and_status,
+            vec![
+                ("p", MissingStatus::HasDomain),
+                ("q", MissingStatus::HasDomain)
+            ]
+        );
+        assert!(d.enclosures.is_some());
+    }
 }
 
 /// T18: margin as the hull of four ratios (D-09, D-12).
@@ -1269,5 +1485,631 @@ mod claim_tests {
                 field: "claim interval"
             })
         );
+    }
+}
+
+/// T27: the two enclosures with one missing parameter (steps 5 and 6).
+///
+/// Expected values are written out by hand from the intervals of the fake
+/// limit, not computed with the engine's `select`.
+#[cfg(test)]
+mod enclosure_tests {
+    use std::collections::BTreeMap;
+
+    use super::decide;
+    use crate::config::ConstraintsMap;
+    use crate::dimension::Dimension;
+    use crate::error::EngineError;
+    use crate::interval::Interval;
+    use crate::limit::{
+        Assumption, AssumptionId, AssumptionOption, Configuration, Direction, DomainRange, Limit,
+        OptionId, ParameterEnclosure, ParameterId, ParameterSpec, PlausibleDomain,
+    };
+    use crate::quantity::{Measure, MeasureKind, Quantity};
+    use crate::settings::DecisionConfig;
+    use crate::verdict::{BoundRange, Claim, Decision, DecisionInput, Margin};
+
+    const DIMLESS: MeasureKind = MeasureKind::Plain(Dimension::DIMENSIONLESS);
+
+    /// `B(mode) = base(mode) * p`, with `p` missing and plausible in `[2, 4]`.
+    /// Bound intervals: a = [10, 20], b = [16, 32].
+    struct OneParamLimit {
+        direction: Direction,
+        assumptions: Vec<Assumption>,
+        parameters: Vec<ParameterSpec>,
+    }
+
+    impl OneParamLimit {
+        fn new(direction: Direction) -> OneParamLimit {
+            OneParamLimit {
+                direction,
+                assumptions: vec![Assumption {
+                    id: AssumptionId::new("mode"),
+                    domain: ["a", "b"]
+                        .iter()
+                        .map(|o| AssumptionOption {
+                            id: OptionId::new(*o),
+                            value: None,
+                        })
+                        .collect(),
+                }],
+                parameters: vec![ParameterSpec {
+                    id: ParameterId::new("p"),
+                    kind: DIMLESS,
+                    required: true,
+                    plausible: Some(PlausibleDomain {
+                        range: DomainRange::Interval(Interval::new(2.0, 4.0).expect("valid")),
+                        source: "test".to_string(),
+                    }),
+                }],
+            }
+        }
+    }
+
+    impl Limit for OneParamLimit {
+        fn id(&self) -> &str {
+            "one-param"
+        }
+        fn direction(&self) -> Direction {
+            self.direction
+        }
+        fn bounded_kind(&self) -> MeasureKind {
+            DIMLESS
+        }
+        fn assumptions(&self) -> &[Assumption] {
+            &self.assumptions
+        }
+        fn parameters(&self) -> &[ParameterSpec] {
+            &self.parameters
+        }
+        fn bound(
+            &self,
+            config: &Configuration,
+            params: &ParameterEnclosure,
+        ) -> Result<Interval, EngineError> {
+            let base = match config
+                .option(&AssumptionId::new("mode"))
+                .map(|o| o.as_str().to_string())
+                .as_deref()
+            {
+                Some("a") => 5.0,
+                Some("b") => 8.0,
+                _ => return Err(EngineError::UnknownAssumption("mode".to_string())),
+            };
+            let p = params
+                .get(&ParameterId::new("p"))
+                .ok_or_else(|| EngineError::UnknownParameter("p".to_string()))?;
+            Interval::point(base)?.mul(p)
+        }
+    }
+
+    fn run(direction: Direction, v: f64) -> Decision {
+        let input = DecisionInput {
+            claim: Claim {
+                value: Measure::Plain(Quantity::from_si(v, Dimension::DIMENSIONLESS).expect("ok")),
+                uncertainty: None,
+            },
+            config: DecisionConfig::default(),
+            constraints: ConstraintsMap::new(),
+            known_parameters: BTreeMap::new(),
+        };
+        decide(&OneParamLimit::new(direction), &input).expect("valid")
+    }
+
+    fn range(b_min: f64, b_max: f64) -> BoundRange {
+        BoundRange { b_min, b_max }
+    }
+
+    #[test]
+    fn max_bound_permissive_is_upper_ends_restrictive_is_lower_ends() {
+        let e = run(Direction::Max, 15.0)
+            .enclosures
+            .expect("HasDomain only");
+        // Permissive: a -> 20, b -> 32. Restrictive: a -> 10, b -> 16.
+        assert_eq!(e.permissive.bounds, range(20.0, 32.0));
+        assert_eq!(e.restrictive.bounds, range(10.0, 16.0));
+    }
+
+    #[test]
+    fn min_bound_permissive_is_lower_ends_restrictive_is_upper_ends() {
+        let e = run(Direction::Min, 15.0)
+            .enclosures
+            .expect("HasDomain only");
+        // Permissive: a -> 10, b -> 16. Restrictive: a -> 20, b -> 32.
+        assert_eq!(e.permissive.bounds, range(10.0, 16.0));
+        assert_eq!(e.restrictive.bounds, range(20.0, 32.0));
+    }
+
+    #[test]
+    fn each_enclosure_carries_its_own_margin() {
+        let e = run(Direction::Max, 15.0)
+            .enclosures
+            .expect("HasDomain only");
+        // Claim is the point 15. Permissive: [15/32, 15/20]. Restrictive: [15/16, 15/10].
+        assert_eq!(
+            e.permissive.margin,
+            Some(Margin {
+                low: 15.0 / 32.0,
+                high: 15.0 / 20.0
+            })
+        );
+        assert_eq!(
+            e.restrictive.margin,
+            Some(Margin {
+                low: 15.0 / 16.0,
+                high: 15.0 / 10.0
+            })
+        );
+    }
+
+    #[test]
+    fn enclosures_are_distinct_when_a_parameter_is_missing() {
+        let e = run(Direction::Min, 15.0)
+            .enclosures
+            .expect("HasDomain only");
+        assert_ne!(e.permissive, e.restrictive);
+    }
+}
+
+/// T26: parameter resolution and the `NoDomain` short-circuit (steps 3, 4).
+#[cfg(test)]
+mod resolution_tests {
+    use std::cell::Cell;
+    use std::collections::BTreeMap;
+
+    use super::{decide, resolve_parameters};
+    use crate::config::ConstraintsMap;
+    use crate::dimension::Dimension;
+    use crate::error::EngineError;
+    use crate::interval::Interval;
+    use crate::limit::{
+        Assumption, AssumptionId, AssumptionOption, Configuration, Direction, DomainRange, Limit,
+        OptionId, ParameterEnclosure, ParameterId, ParameterSpec, PlausibleDomain,
+    };
+    use crate::quantity::{Measure, MeasureKind, Quantity};
+    use crate::settings::DecisionConfig;
+    use crate::verdict::{Claim, DecisionInput, MissingParameter, MissingStatus, Verdict};
+
+    const DIMLESS: MeasureKind = MeasureKind::Plain(Dimension::DIMENSIONLESS);
+
+    /// Fake limit for these tests: counts the calls to `bound`.
+    struct CountingLimit {
+        parameters: Vec<ParameterSpec>,
+        assumptions: Vec<Assumption>,
+        calls: Cell<usize>,
+    }
+
+    impl Limit for CountingLimit {
+        fn id(&self) -> &str {
+            "counting"
+        }
+        fn direction(&self) -> Direction {
+            Direction::Max
+        }
+        fn bounded_kind(&self) -> MeasureKind {
+            DIMLESS
+        }
+        fn assumptions(&self) -> &[Assumption] {
+            &self.assumptions
+        }
+        fn parameters(&self) -> &[ParameterSpec] {
+            &self.parameters
+        }
+        fn bound(
+            &self,
+            _config: &Configuration,
+            _params: &ParameterEnclosure,
+        ) -> Result<Interval, EngineError> {
+            self.calls.set(self.calls.get() + 1);
+            Interval::point(5.0)
+        }
+    }
+
+    fn domain(range: DomainRange) -> Option<PlausibleDomain> {
+        Some(PlausibleDomain {
+            range,
+            source: "test".to_string(),
+        })
+    }
+
+    fn interval(lo: f64, hi: f64) -> DomainRange {
+        DomainRange::Interval(Interval::new(lo, hi).expect("valid"))
+    }
+
+    fn spec(id: &str, required: bool, plausible: Option<PlausibleDomain>) -> ParameterSpec {
+        ParameterSpec {
+            id: ParameterId::new(id),
+            kind: DIMLESS,
+            required,
+            plausible,
+        }
+    }
+
+    fn limit(parameters: Vec<ParameterSpec>) -> CountingLimit {
+        CountingLimit {
+            parameters,
+            assumptions: vec![Assumption {
+                id: AssumptionId::new("mode"),
+                domain: vec![AssumptionOption {
+                    id: OptionId::new("a"),
+                    value: None,
+                }],
+            }],
+            calls: Cell::new(0),
+        }
+    }
+
+    fn input(v: f64) -> DecisionInput {
+        DecisionInput {
+            claim: Claim {
+                value: Measure::Plain(Quantity::from_si(v, Dimension::DIMENSIONLESS).expect("ok")),
+                uncertainty: None,
+            },
+            config: DecisionConfig::default(),
+            constraints: ConstraintsMap::new(),
+            known_parameters: BTreeMap::new(),
+        }
+    }
+
+    fn missing(id: &str, status: MissingStatus) -> MissingParameter {
+        MissingParameter {
+            id: ParameterId::new(id),
+            status,
+        }
+    }
+
+    #[test]
+    fn one_no_domain_and_one_has_domain_list_both_without_enclosures() {
+        // Declared order q, p: the list keeps declaration order.
+        let l = limit(vec![
+            spec("q", true, domain(interval(1.0, 2.0))),
+            spec("p", true, None),
+        ]);
+        let d = decide(&l, &input(1e9)).expect("valid");
+        assert_eq!(
+            d.verdict,
+            Verdict::InsufficientData {
+                missing: vec![
+                    missing("q", MissingStatus::HasDomain),
+                    missing("p", MissingStatus::NoDomain),
+                ]
+            }
+        );
+        assert_eq!(d.enclosures, None);
+        assert_eq!(l.calls.get(), 0, "Limit::bound must not be called");
+    }
+
+    #[test]
+    fn two_no_domain_parameters_are_all_listed() {
+        let l = limit(vec![spec("a", true, None), spec("b", true, None)]);
+        let d = decide(&l, &input(0.0)).expect("valid");
+        assert_eq!(
+            d.verdict,
+            Verdict::InsufficientData {
+                missing: vec![
+                    missing("a", MissingStatus::NoDomain),
+                    missing("b", MissingStatus::NoDomain),
+                ]
+            }
+        );
+        assert_eq!(d.enclosures, None);
+        assert_eq!(l.calls.get(), 0);
+    }
+
+    #[test]
+    fn supplied_and_optional_parameters_are_not_missing() {
+        let l = limit(vec![
+            spec("known", true, None),
+            spec("opt", false, None),
+            spec("gap", true, domain(interval(1.0, 2.0))),
+        ]);
+        let mut known = BTreeMap::new();
+        let m = Measure::Plain(Quantity::from_si(3.0, Dimension::DIMENSIONLESS).expect("ok"));
+        known.insert(ParameterId::new("known"), m);
+        let (enc, list) = resolve_parameters(&l, &known).expect("valid");
+        assert_eq!(list, vec![missing("gap", MissingStatus::HasDomain)]);
+        let p = enc.get(&ParameterId::new("known")).expect("supplied");
+        assert_eq!((p.lo(), p.hi()), (3.0, 3.0));
+        assert_eq!(enc.get(&ParameterId::new("opt")), None);
+    }
+
+    #[test]
+    fn interval_domain_becomes_its_hull_in_constant_time() {
+        let l = limit(vec![spec("p", true, domain(interval(0.0, 1e300)))]);
+        let (enc, list) = resolve_parameters(&l, &BTreeMap::new()).expect("valid");
+        assert_eq!(list, vec![missing("p", MissingStatus::HasDomain)]);
+        let p = enc.get(&ParameterId::new("p")).expect("hull");
+        assert_eq!((p.lo(), p.hi()), (0.0, 1e300));
+    }
+
+    #[test]
+    fn finite_domain_becomes_min_max_hull() {
+        let range = DomainRange::Finite(vec![3.0, -1.0, 2.0, 7.5]);
+        let l = limit(vec![spec("p", true, domain(range))]);
+        let (enc, _) = resolve_parameters(&l, &BTreeMap::new()).expect("valid");
+        let p = enc.get(&ParameterId::new("p")).expect("hull");
+        assert_eq!((p.lo(), p.hi()), (-1.0, 7.5));
+    }
+
+    #[test]
+    fn empty_finite_domain_counts_as_no_domain() {
+        let l = limit(vec![spec("p", true, domain(DomainRange::Finite(vec![])))]);
+        let (enc, list) = resolve_parameters(&l, &BTreeMap::new()).expect("valid");
+        assert_eq!(list, vec![missing("p", MissingStatus::NoDomain)]);
+        assert_eq!(enc.get(&ParameterId::new("p")), None);
+        let d = decide(&l, &input(1.0)).expect("valid");
+        assert_eq!(d.enclosures, None);
+        assert_eq!(l.calls.get(), 0);
+    }
+
+    #[test]
+    fn no_domain_parameter_has_no_value_in_the_enclosure() {
+        let l = limit(vec![spec("p", true, None)]);
+        let (enc, _) = resolve_parameters(&l, &BTreeMap::new()).expect("valid");
+        assert_eq!(enc.get(&ParameterId::new("p")), None);
+    }
+}
+
+/// T29: `Certain` / `Depends` tags with missing parameters (R-05.7, R-05.8,
+/// D-10, D-13, D-19). The limit and the oracle are local to this module.
+#[cfg(test)]
+mod support_tests {
+    use std::collections::BTreeMap;
+
+    use super::decide;
+    use crate::config::ConstraintsMap;
+    use crate::dimension::Dimension;
+    use crate::error::EngineError;
+    use crate::interval::Interval;
+    use crate::limit::{
+        Assumption, AssumptionId, AssumptionOption, Configuration, Direction, DomainRange, Limit,
+        OptionId, ParameterEnclosure, ParameterId, ParameterSpec, PlausibleDomain,
+    };
+    use crate::quantity::{Measure, MeasureKind, Quantity};
+    use crate::settings::DecisionConfig;
+    use crate::verdict::{Claim, DecisionInput, Support, Verdict};
+
+    const DIMLESS: MeasureKind = MeasureKind::Plain(Dimension::DIMENSIONLESS);
+
+    /// `B(mode) = base(mode) * product of the missing parameters`. No physics.
+    struct Lim {
+        direction: Direction,
+        assumptions: Vec<Assumption>,
+        parameters: Vec<ParameterSpec>,
+        base: BTreeMap<String, f64>,
+    }
+
+    fn lim(direction: Direction, base: &[(&str, f64)], params: &[(&str, f64, f64)]) -> Lim {
+        Lim {
+            direction,
+            assumptions: vec![Assumption {
+                id: AssumptionId::new("mode"),
+                domain: base
+                    .iter()
+                    .map(|(o, _)| AssumptionOption {
+                        id: OptionId::new(*o),
+                        value: None,
+                    })
+                    .collect(),
+            }],
+            parameters: params
+                .iter()
+                .map(|(id, lo, hi)| ParameterSpec {
+                    id: ParameterId::new(*id),
+                    kind: DIMLESS,
+                    required: true,
+                    plausible: Some(PlausibleDomain {
+                        range: DomainRange::Interval(Interval::new(*lo, *hi).expect("valid")),
+                        source: "test".to_string(),
+                    }),
+                })
+                .collect(),
+            base: base.iter().map(|(o, b)| (o.to_string(), *b)).collect(),
+        }
+    }
+
+    impl Limit for Lim {
+        fn id(&self) -> &str {
+            "support-fake"
+        }
+        fn direction(&self) -> Direction {
+            self.direction
+        }
+        fn bounded_kind(&self) -> MeasureKind {
+            DIMLESS
+        }
+        fn assumptions(&self) -> &[Assumption] {
+            &self.assumptions
+        }
+        fn parameters(&self) -> &[ParameterSpec] {
+            &self.parameters
+        }
+        fn bound(
+            &self,
+            config: &Configuration,
+            params: &ParameterEnclosure,
+        ) -> Result<Interval, EngineError> {
+            let option = config
+                .option(&AssumptionId::new("mode"))
+                .ok_or_else(|| EngineError::UnknownAssumption("mode".to_string()))?;
+            let base = self
+                .base
+                .get(option.as_str())
+                .copied()
+                .ok_or_else(|| EngineError::UnknownAssumption("mode".to_string()))?;
+            let mut b = Interval::point(base)?;
+            for spec in &self.parameters {
+                if let Some(p) = params.get(&spec.id) {
+                    b = b.mul(p)?;
+                }
+            }
+            Ok(b)
+        }
+    }
+
+    fn claim(v: f64) -> DecisionInput {
+        DecisionInput {
+            claim: Claim {
+                value: Measure::Plain(
+                    Quantity::from_si(v, Dimension::DIMENSIONLESS).expect("valid"),
+                ),
+                uncertainty: None,
+            },
+            config: DecisionConfig::default(),
+            constraints: ConstraintsMap::new(),
+            known_parameters: BTreeMap::new(),
+        }
+    }
+
+    /// C* as `(option, support)` pairs, in configuration order.
+    fn tags(limit: &Lim, v: f64) -> Vec<(String, Support)> {
+        match decide(limit, &claim(v)).expect("valid").verdict {
+            Verdict::Conditional { satisfying } => satisfying
+                .into_iter()
+                .map(|s| {
+                    let option = s
+                        .config
+                        .option(&AssumptionId::new("mode"))
+                        .map(|o| o.as_str().to_string())
+                        .unwrap_or_default();
+                    (option, s.support)
+                })
+                .collect(),
+            other => panic!("expected Conditional, got {other:?}"),
+        }
+    }
+
+    fn depends(names: &[&str]) -> Support {
+        Support::Depends(names.iter().map(|n| ParameterId::new(*n)).collect())
+    }
+
+    /// Independent guard `max(1e-9 * |x|, 0)` (the default settings, D-24).
+    fn g(x: f64) -> f64 {
+        f64::max(1e-9 * x.abs(), 0.0)
+    }
+
+    fn tag_of(tags: &[(String, Support)], option: &str) -> Option<Support> {
+        tags.iter()
+            .find(|(o, _)| o == option)
+            .map(|(_, s)| s.clone())
+    }
+
+    #[test]
+    fn max_bound_certain_and_depends() {
+        // p in [0.8, 1.2]. Permissive (upper) ends: a 4.8, b 12, c 8.4.
+        // Restrictive (lower) ends: a 3.2, b 8, c 5.6. Claim 6: both
+        // enclosures CONDITIONAL.
+        let limit = lim(
+            Direction::Max,
+            &[("a", 4.0), ("b", 10.0), ("c", 7.0)],
+            &[("p", 0.8, 1.2)],
+        );
+        assert_eq!(
+            tags(&limit, 6.0),
+            vec![
+                ("b".to_string(), Support::Certain),
+                ("c".to_string(), depends(&["p"])),
+            ]
+        );
+    }
+
+    #[test]
+    fn min_bound_certain_and_depends() {
+        // p in [0.8, 1.2]. Permissive (lower) ends: a 3.2, b 8, c 5.6.
+        // Restrictive (upper) ends: a 4.8, b 12, c 8.4. Claim 6.
+        let limit = lim(
+            Direction::Min,
+            &[("a", 4.0), ("b", 10.0), ("c", 7.0)],
+            &[("p", 0.8, 1.2)],
+        );
+        assert_eq!(
+            tags(&limit, 6.0),
+            vec![
+                ("a".to_string(), Support::Certain),
+                ("c".to_string(), depends(&["p"])),
+            ]
+        );
+    }
+
+    #[test]
+    fn depends_lists_all_missing_parameters_in_declaration_order() {
+        // q is a point domain: B(c) does not really depend on it (D-13), and
+        // it is still listed.
+        let limit = lim(
+            Direction::Max,
+            &[("a", 4.0), ("b", 10.0), ("c", 7.0)],
+            &[("p", 0.8, 1.2), ("q", 1.0, 1.0)],
+        );
+        assert_eq!(tag_of(&tags(&limit, 6.0), "c"), Some(depends(&["p", "q"])));
+    }
+
+    #[test]
+    fn conditional_with_missing_parameters_is_never_empty() {
+        let limit = lim(
+            Direction::Max,
+            &[("a", 4.0), ("b", 10.0), ("c", 7.0)],
+            &[("p", 0.8, 1.2)],
+        );
+        for v in [4.9, 6.0, 8.0, 11.0] {
+            if let Verdict::Conditional { satisfying } =
+                decide(&limit, &claim(v)).expect("valid").verdict
+            {
+                assert!(!satisfying.is_empty(), "claim {v}");
+            }
+        }
+    }
+
+    /// Max-bound at the guard boundary of the restrictive end. p in [1, 2],
+    /// so the restrictive end of mode m is exactly 100 and the claim sits at
+    /// `L + g(L)`. Modes z (50) and w (150) keep both enclosures CONDITIONAL.
+    fn max_edge_limit() -> Lim {
+        lim(
+            Direction::Max,
+            &[("m", 100.0), ("w", 150.0), ("z", 50.0)],
+            &[("p", 1.0, 2.0)],
+        )
+    }
+
+    #[test]
+    fn max_bound_restrictive_end_exactly_at_the_guard_is_certain() {
+        let edge = 100.0 + g(100.0);
+        let t = tags(&max_edge_limit(), edge);
+        assert_eq!(tag_of(&t, "m"), Some(Support::Certain));
+        assert_eq!(tag_of(&t, "w"), Some(Support::Certain));
+    }
+
+    #[test]
+    fn max_bound_one_ulp_above_the_restrictive_guard_is_depends() {
+        let edge = (100.0 + g(100.0)).next_up();
+        let t = tags(&max_edge_limit(), edge);
+        assert_eq!(tag_of(&t, "m"), Some(depends(&["p"])));
+        assert_eq!(tag_of(&t, "w"), Some(Support::Certain));
+    }
+
+    /// Min-bound at the guard boundary. p in [1, 2], so the restrictive
+    /// (upper) end of mode m is exactly 200 and the claim sits at
+    /// `V - g(V)`. Modes y (50) and z (400) keep both enclosures CONDITIONAL.
+    fn min_edge_limit() -> Lim {
+        lim(
+            Direction::Min,
+            &[("m", 100.0), ("y", 50.0), ("z", 400.0)],
+            &[("p", 1.0, 2.0)],
+        )
+    }
+
+    #[test]
+    fn min_bound_restrictive_end_exactly_at_the_guard_is_certain() {
+        let edge = 200.0 - g(200.0);
+        let t = tags(&min_edge_limit(), edge);
+        assert_eq!(tag_of(&t, "m"), Some(Support::Certain));
+        assert_eq!(tag_of(&t, "y"), Some(Support::Certain));
+    }
+
+    #[test]
+    fn min_bound_one_ulp_below_the_restrictive_guard_is_depends() {
+        let edge = (200.0 - g(200.0)).next_down();
+        let t = tags(&min_edge_limit(), edge);
+        assert_eq!(tag_of(&t, "m"), Some(depends(&["p"])));
+        assert_eq!(tag_of(&t, "y"), Some(Support::Certain));
     }
 }
