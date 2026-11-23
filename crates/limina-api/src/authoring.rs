@@ -190,11 +190,17 @@ pub async fn solve(
 ) -> Result<Json<SolveResponse>, ApiError> {
     let request: SolveRequestDto =
         serde_json::from_slice(&body).map_err(|e| ApiError::InvalidJson(e.to_string()))?;
-    let (limit, draft) = find_dsl_limit(&state, &request.limit_id)
+    Ok(Json(solve_with(&state, &request)?))
+}
+
+/// The inverse question itself, shared by `POST /v1/solve` and the
+/// `limina check` command.
+pub fn solve_with(state: &AppState, request: &SolveRequestDto) -> Result<SolveResponse, ApiError> {
+    let (limit, draft) = find_dsl_limit(state, &request.limit_id)
         .ok_or_else(|| ApiError::UnknownLimit(request.limit_id.clone()))?;
-    let question = solve_request(&limit, &request)?;
+    let question = solve_request(&limit, request)?;
     let solution = solve_for(&limit, &question).map_err(solve_error)?;
-    Ok(Json(solve_response(&request, solution, draft)))
+    Ok(solve_response(request, solution, draft))
 }
 
 /// The DSL limit with this id, built-in first; true when it is authored.

@@ -136,6 +136,16 @@ Invoke-RestMethod -Method Post -Uri http://127.0.0.1:3000/v1/evaluate -ContentTy
 ```
 The engine guard is relative only by default (`1e-9 * |bound|`, decision D-24), so verdicts work at any scale; a limit may declare its own absolute floor.
 
+## Physics lint
+`limina check` reads a text or markdown file, extracts its performance claims and checks each one with the same code as `POST /v1/analyze`, then prints it at its line and column, like a compiler. It needs the key in the environment or in `.env` in the current directory.
+```
+cargo run -q -p limina-cli -- check demo/spec-heat-pump.md
+cargo run -q -p limina-cli -- check demo/spec-heat-pump.md --format json
+```
+Each claim prints `file:line:col: severity: VERDICT limit`, then the claim and the bound, the engine wording, a line `to settle this, state: ...` when an assumption or a temperature is missing (mode, reference area), and, where the inverse solver answers, a line such as "Not inconsistent with limit carnot only if Th is at least 750 K". Exit code 0: no inconsistency; 1: at least one IMPOSSIBLE; 2: the analysis could not run (no key, network failure, extraction failed), which wins over 1. CONDITIONAL and needs-input claims are warnings. The file is read paragraph by paragraph (paragraphs without a digit are skipped), and an unusable model answer is asked again up to 3 times; a paragraph that still fails is reported at its line and the check goes on. `demo/spec-heat-pump.md` is an illustrative note with four claims. The live test: `cargo test -p limina-cli --test live -- --ignored --nocapture`.
+
+The Kiro hook `.kiro/hooks/physics-lint.json` (PostFileSave, markdown files under `docs/` or `demo/`) asks the agent to run `limina check` on the saved file, show the report, and for each finding propose either to state the missing assumption or to ask the author; it never changes a number to make a claim pass. The steering file `.kiro/steering/physics-claims.md` applies to the same files.
+
 ## Run the web app
 
 Needs Node 20.19 or later (the app uses Angular 21; Angular 22 needs a newer Node). Start the API in one terminal:

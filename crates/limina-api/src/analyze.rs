@@ -35,17 +35,24 @@ pub async fn analyze(
 ) -> Result<Json<AnalyzeResponse>, ApiError> {
     let request: AnalyzeRequest =
         serde_json::from_slice(&body).map_err(|e| ApiError::InvalidJson(e.to_string()))?;
-    if request.text.chars().count() > MAX_TEXT_CHARS {
+    Ok(Json(analyze_text(&state, &request.text).await?))
+}
+
+/// The analysis itself, shared by `POST /v1/analyze` and the `limina check`
+/// command: length and blank checks, extraction, deterministic checks, then
+/// each claim evaluated by the engine.
+pub async fn analyze_text(state: &AppState, text: &str) -> Result<AnalyzeResponse, ApiError> {
+    if text.chars().count() > MAX_TEXT_CHARS {
         return Err(ApiError::TextTooLong {
             max: MAX_TEXT_CHARS,
         });
     }
-    if request.text.trim().is_empty() {
+    if text.trim().is_empty() {
         return Err(ApiError::EmptyText);
     }
     let extractor = state.extractor().ok_or(ApiError::ExtractionUnavailable)?;
-    let extraction = extractor.extract(&request.text).await?;
-    Ok(Json(AnalyzeResponse {
+    let extraction = extractor.extract(text).await?;
+    Ok(AnalyzeResponse {
         claims: extraction.claims.iter().map(analyze_claim).collect(),
         missing: extraction.missing,
         extraction: ExtractionInfoDto {
@@ -53,7 +60,7 @@ pub async fn analyze(
             cached: extraction.cached,
             ms: extraction.elapsed_ms,
         },
-    }))
+    })
 }
 
 fn evidence(span: &Option<Span>) -> Option<EvidenceDto> {

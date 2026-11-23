@@ -1,0 +1,15 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "physics-lint",
+      "trigger": "PostFileSave",
+      "description": "When a markdown file under docs/ or demo/ is saved, the agent runs limina check on it, shows the report in the session, and proposes for each finding to state the missing assumption or to ask the author; it never changes a number to make a claim pass.",
+      "matcher": "(^|[\\\\/])(docs|demo)[\\\\/].*\\.md$",
+      "action": {
+        "type": "agent",
+        "prompt": "physics-lint: a markdown file under docs/ or demo/ was just saved. From the repository root, run `cargo run -q -p limina-cli -- check <saved file>` on that file (the key is read from the environment or .env; never print it). Show the report in the session exactly as printed, with its exit code: 0 no inconsistency, 1 at least one IMPOSSIBLE, 2 the analysis could not run (say so plainly; do not invent a result). Then, for each IMPOSSIBLE, CONDITIONAL, INSUFFICIENT_DATA or NEEDS_INPUT block, propose one of two fixes only: state the missing assumption or operating condition named in its 'to settle this, state:' line (mode, reference area, temperatures), or ask the author to confirm the figure and its conditions. Never change a number just to make a claim pass, never apply a fix without the author's approval, and keep the report wording 'inconsistent with limit X under assumptions Y'."
+      }
+    }
+  ]
+}
