@@ -74,6 +74,7 @@ pub fn system_prompt(catalog: &Catalog) -> String {
     s.push_str("- value is the whole number, power of ten included: \"1 × 10⁻¹⁰ m\" is value 1e-10, never 1.\n");
     s.push_str("- quantity names the physical quantity in words (for example \"position uncertainty\"), never a unit or a formula.\n");
     s.push_str("- A value the claim depends on (a temperature, a mass, an uncertainty of another quantity) is a parameter of that claim, never a claim of its own.\n");
+    s.push_str("- An amount per amount of another quantity is ONE claim with the compound unit: \"stores 5 kWh of energy in a mass of 1 kg\" is one claim, quantity \"specific energy\", value 5, unit \"kWh/kg\".\n");
     s.push_str("- Use only the parameter names and units listed above. Never convert a unit.\n");
     s.push_str("- Put an assumption in constraints only if the text states it explicitly; otherwise leave it out.\n");
     s.push_str("- Never invent a value. If a value the limit needs is not in the text, put its name in missing.\n");

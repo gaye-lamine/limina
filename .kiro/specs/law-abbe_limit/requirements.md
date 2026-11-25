@@ -22,5 +22,5 @@ Status: v1, frozen. Base: `limit-dsl` and `decision-engine` (unchanged). Definit
 - **R-01** The law is embedded by `Registry::builtin` and served by `GET /v1/limits` with classification, references, validity domain and limitations.
 - **R-02** A missing parameter gives INSUFFICIENT_DATA, never IMPOSSIBLE.
 - **R-03** A claim at or inside the bound is never IMPOSSIBLE (property, fixed seed 42, 256 cases, 1024 with CI set).
-- **R-04** A claim beyond the bound is IMPOSSIBLE with the wording "inconsistent with limit abbe_limit under assumptions none".
+- **R-04** (amended v1.1) Assumption `imaging_method`: `conventional_far_field` (bound lambda / (2 NA)) or `super_resolution` (STED, localisation, structured illumination, near-field: this law gives no bound, 0). A claim below the bound with the method stated as `conventional_far_field` is IMPOSSIBLE, worded "inconsistent with limit abbe_limit under assumptions imaging method = conventional far-field imaging". With the method not stated it is CONDITIONAL, "possible only if imaging method = super-resolution techniques". Reference added: Hell and Wichmann, Optics Letters 19(11), 780-782 (1994), doi:10.1364/OL.19.000780.
 - **R-05** Expected values in the tests are computed from the textbook formula with the constants written out (CODATA 2022), not by the DSL.

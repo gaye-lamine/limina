@@ -55,10 +55,14 @@ pub fn unusable(kind: ReplyKind, reply: &ChatReply) -> Option<&'static str> {
         return None;
     }
     let unfenced = strip_fences(content);
-    let Some(object) = first_json_object(&unfenced) else {
+    let balanced = first_json_object(&unfenced)
+        .filter(|o| serde_json::from_str::<serde_json::Value>(o).is_ok())
+        .map(str::to_string)
+        .or_else(|| crate::parse::repair_brackets(&unfenced));
+    let Some(object) = balanced else {
         return Some("no JSON object in the answer");
     };
-    match serde_json::from_str::<serde_json::Value>(object) {
+    match serde_json::from_str::<serde_json::Value>(&object) {
         Ok(v) if v.is_object() => match kind {
             ReplyKind::Checked(check) => check(reply),
             _ => None,

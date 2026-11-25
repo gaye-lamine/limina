@@ -41,7 +41,12 @@ pub fn build(
                 format!(
                     "inconsistent with limit {} under assumptions {}",
                     limit.id(),
-                    describe_assumptions(&set)
+                    match describe_assumptions(&set) {
+                        // A law without assumptions says so, as the draft
+                        // and equality sentences do.
+                        s if s.is_empty() => "none".to_string(),
+                        s => s,
+                    }
                 ),
             )
         }

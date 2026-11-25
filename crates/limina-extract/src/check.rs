@@ -113,7 +113,223 @@ pub fn check(output: &ModelOutput, text: &str, catalog: &Catalog) -> Vec<Checked
         .iter()
         .map(|c| check_claim(c, text, catalog))
         .collect();
-    attach_parameter_claims(claims, catalog)
+    let mut claims = attach_parameter_claims(claims, catalog);
+    for c in &mut claims {
+        fill_parameters_from_sentence(c, text, catalog);
+    }
+    merge_quotient_claims(claims, text)
+}
+
+/// The sentence of `text` around a character span: from just after the
+/// previous sentence end (". ", "! ", "? " or a line break) to the next one.
+fn sentence_around(text: &str, span: &Span) -> String {
+    let chars: Vec<char> = text.chars().collect();
+    let ends = |i: usize| {
+        matches!(chars.get(i), Some('.' | '!' | '?'))
+            && chars.get(i + 1).is_none_or(|c| c.is_whitespace())
+    };
+    let mut a = span.start.min(chars.len());
+    while a > 0 && chars[a - 1] != '\n' && !ends(a - 1) {
+        a -= 1;
+    }
+    let mut b = span.end.min(chars.len());
+    while b < chars.len() && chars[b] != '\n' && !ends(b) {
+        b += 1;
+    }
+    chars[a..(b + 1).min(chars.len())].iter().collect()
+}
+
+/// Every number of `sentence` immediately followed by a unit symbol the
+/// core parses, with the quotation "number unit" as written.
+fn numbers_with_units(sentence: &str) -> Vec<(f64, String, String)> {
+    let chars: Vec<char> = sentence.chars().collect();
+    let mut out = Vec::new();
+    for (value, start, end) in scan_numbers(sentence) {
+        // The words right after the number: one, else two ("kg m/s").
+        let rest: String = chars[end.min(chars.len())..].iter().collect();
+        if !rest.starts_with(' ') && !rest.starts_with('\u{a0}') {
+            continue;
+        }
+        let words: Vec<&str> = rest.split_whitespace().take(2).collect();
+        let trim = |s: &str| s.trim_end_matches(['.', ',', ';', ':', ')']).to_string();
+        for take in [1usize, 2] {
+            let Some(unit_words) = words.get(..take) else {
+                continue;
+            };
+            let unit = trim(&unit_words.join(" "));
+            if !unit.is_empty() && limina_core::parse_unit(&unit).is_ok() {
+                let number: String = chars[start..end].iter().collect();
+                out.push((value, unit.clone(), format!("{number} {unit}")));
+                break;
+            }
+        }
+    }
+    out
+}
+
+/// Note added to a claim whose parameter was read from its own sentence.
+pub const READ_FROM_SENTENCE: &str = "read from the same sentence by its unit";
+
+/// A declared parameter the model left out, when its sentence states exactly
+/// one number in a unit of that parameter (other than the claim's own
+/// number): the number and its quotation are taken from the text. Nothing
+/// is computed or converted; an ambiguous sentence is left as it is.
+fn fill_parameters_from_sentence(claim: &mut CheckedClaim, text: &str, catalog: &Catalog) {
+    let (Some(id), Some(span)) = (claim.limit_id.clone(), claim.evidence.clone()) else {
+        return;
+    };
+    let Some(limit) = catalog.limit(&id) else {
+        return;
+    };
+    let sentence = sentence_around(text, &span);
+    let found = numbers_with_units(&sentence);
+    for p in &limit.parameters {
+        if claim
+            .parameters
+            .get(&p.name)
+            .is_some_and(|x| x.value.is_some())
+        {
+            continue;
+        }
+        let matches: Vec<&(f64, String, String)> = found
+            .iter()
+            .filter(|(_, u, _)| p.units.iter().any(|pu| same_unit(pu, u)))
+            .collect();
+        let [(value, unit, quote)] = matches.as_slice() else {
+            continue;
+        };
+        let Some(evidence) = locate(text, quote) else {
+            continue;
+        };
+        claim.parameters.insert(
+            p.name.clone(),
+            CheckedParameter {
+                value: Some(*value),
+                raw_value: *value,
+                unit: unit.clone(),
+                evidence: Some(evidence),
+                flags: Vec::new(),
+            },
+        );
+        claim.notes.push(format!(
+            "{} = {} {} {READ_FROM_SENTENCE}",
+            p.name,
+            short_number(*value),
+            unit
+        ));
+    }
+    if !claim
+        .parameters
+        .values()
+        .any(|p| p.flags.iter().any(|f| f == UNIT_NOT_UNDERSTOOD))
+    {
+        claim
+            .flags
+            .retain(|f| f != UNIT_NOT_UNDERSTOOD || claim.value.is_none());
+    }
+}
+
+/// Note prefix of a claim made of two readings of one sentence: an amount
+/// per unit of another amount ("5 kWh of energy in a mass of 1 kg").
+pub const MERGED_QUOTIENT: &str = "two readings of one sentence merged into";
+
+const ENERGY: [i8; 7] = [2, 1, -2, 0, 0, 0, 0];
+const MASS: [i8; 7] = [0, 1, 0, 0, 0, 0, 0];
+const VOLUME: [i8; 7] = [3, 0, 0, 0, 0, 0, 0];
+
+fn dimension_of(unit: &str) -> Option<[i8; 7]> {
+    limina_core::parse_unit(unit)
+        .ok()
+        .map(|u| u.dimension.exponents())
+}
+
+/// Two claims without a known limit, both traceable to the same sentence,
+/// one an energy and the other a mass (or a volume), are one claim: the
+/// specific energy (or energy density) E / m in the unit "E-unit/m-unit".
+/// The note shows both readings. Nothing happens in any other case.
+fn merge_quotient_claims(mut claims: Vec<CheckedClaim>, text: &str) -> Vec<CheckedClaim> {
+    let unknown = |c: &CheckedClaim| c.flags.iter().any(|f| f == LIMIT_NOT_RECOGNIZED);
+    let mut drop = vec![false; claims.len()];
+    for i in 0..claims.len() {
+        if drop[i] || !unknown(&claims[i]) || dimension_of(&claims[i].raw_unit) != Some(ENERGY) {
+            continue;
+        }
+        let Some(si) = claims[i].evidence.clone() else {
+            continue;
+        };
+        let sentence = sentence_around(text, &si);
+        let partner = (0..claims.len()).find(|&j| {
+            j != i
+                && !drop[j]
+                && unknown(&claims[j])
+                && matches!(dimension_of(&claims[j].raw_unit), Some(MASS) | Some(VOLUME))
+                && claims[j].raw_value != 0.0
+                && claims[j]
+                    .evidence
+                    .as_ref()
+                    .is_some_and(|e| sentence_around(text, e) == sentence)
+        });
+        let Some(j) = partner else {
+            continue;
+        };
+        let (e, m) = (claims[i].clone(), claims[j].clone());
+        let per_mass = dimension_of(&m.raw_unit) == Some(MASS);
+        let unit = format!("{}/{}", e.raw_unit, m.raw_unit);
+        let value = e.raw_value / m.raw_value;
+        let c = &mut claims[i];
+        c.quantity = if per_mass {
+            "specific energy"
+        } else {
+            "energy density"
+        }
+        .to_string();
+        c.raw_value = value;
+        c.raw_unit = unit.clone();
+        c.unit = unit.clone();
+        c.notes.push(format!(
+            "{MERGED_QUOTIENT} {}: {} {} in {} {} is {} {unit}",
+            c.quantity,
+            short_number(e.raw_value),
+            e.raw_unit,
+            short_number(m.raw_value),
+            m.raw_unit,
+            short_number(value)
+        ));
+        drop[j] = true;
+    }
+    let mut k = 0;
+    claims.retain(|_| {
+        k += 1;
+        !drop[k - 1]
+    });
+    claims
+}
+
+/// A number for people: at most 10 significant digits, without trailing
+/// zeros; scientific notation below 1e-3 and from 1e6. The last-bit noise of
+/// a decimal reading ("1.0000000000000001e-24") is not shown. Display only:
+/// values sent to the engine are never rounded.
+pub fn short_number(v: f64) -> String {
+    if !v.is_finite() {
+        return format!("{v}");
+    }
+    if v != 0.0 && (v.abs() < 1e-3 || v.abs() >= 1e6) {
+        let s = format!("{v:.9e}");
+        let (mantissa, exp) = s.split_once('e').unwrap_or((&s, "0"));
+        let mantissa = if mantissa.contains('.') {
+            mantissa.trim_end_matches('0').trim_end_matches('.')
+        } else {
+            mantissa
+        };
+        return format!("{mantissa}e{exp}");
+    }
+    let digits = (9 - v.abs().log10().floor().max(0.0) as i32).max(0) as usize;
+    let s = format!("{v:.digits$}");
+    if s.contains('.') {
+        s.trim_end_matches('0').trim_end_matches('.').to_string()
+    } else {
+        s
+    }
 }
 
 /// Whether two unit symbols are the same unit: written alike, or parsed by
@@ -324,7 +540,30 @@ fn normalize_claim_unit(
         let note = format!("{} % becomes {}", plain(value), fraction_text(fraction));
         return Some((fraction, limit.claim_unit.clone(), Some(note)));
     }
-    None
+    // Another SI unit of the same dimension (nm for m, kWh for J): exact SI
+    // factors, never an offset (Celsius is not an SI unit and never parses),
+    // with a visible note. Anything else is not understood.
+    if dimensionless {
+        return None;
+    }
+    let (from, to) = (
+        limina_core::parse_unit(unit).ok()?,
+        limina_core::parse_unit(&limit.claim_unit).ok()?,
+    );
+    if from.dimension != to.dimension {
+        return None;
+    }
+    let converted = value * from.factor_to_si / to.factor_to_si;
+    if !converted.is_finite() {
+        return None;
+    }
+    let note = format!(
+        "{} {unit} becomes {} {}",
+        short_number(value),
+        short_number(converted),
+        limit.claim_unit
+    );
+    Some((converted, limit.claim_unit.clone(), Some(note)))
 }
 
 /// A number as written: no trailing ".0".
@@ -390,6 +629,11 @@ fn same(a: f64, b: f64) -> bool {
 
 /// Every number written in the text, with its sign when one precedes it.
 fn numbers(text: &str) -> Vec<f64> {
+    scan_numbers(text).into_iter().map(|(v, _, _)| v).collect()
+}
+
+/// Every number of the text with its character span `[start, end)`.
+fn scan_numbers(text: &str) -> Vec<(f64, usize, usize)> {
     let chars: Vec<char> = text.chars().collect();
     let mut out = Vec::new();
     let mut i = 0;
@@ -438,12 +682,17 @@ fn numbers(text: &str) -> Vec<f64> {
             let mantissa = token.replace(',', ".").parse::<f64>().ok();
             let bare = !times && token == "10";
             if let (Some(m), Some(exp)) = (mantissa, ten_exponent(&chars, i, times)) {
-                let value = if bare {
-                    10f64.powi(exp)
+                // Parsed from its decimal form, so "1 × 10⁻²⁴" is exactly 1e-24.
+                let mantissa_text = if bare {
+                    "1".to_string()
                 } else {
-                    m * 10f64.powi(exp)
+                    token.replace(',', ".")
                 };
-                out.push(sign * value);
+                let value = format!("{mantissa_text}e{exp}")
+                    .parse::<f64>()
+                    .unwrap_or(m * 10f64.powi(exp));
+                let _ = m;
+                out.push((sign * value, begin - usize::from(negative), end));
                 i = end;
                 continue;
             }
@@ -457,7 +706,7 @@ fn numbers(text: &str) -> Vec<f64> {
         }
         for c in candidates {
             if let Ok(n) = c.parse::<f64>() {
-                out.push(sign * n);
+                out.push((sign * n, begin - usize::from(negative), i));
             }
         }
     }
@@ -664,7 +913,139 @@ mod tests {
             &heisenberg_catalog(),
         );
         assert_eq!(out.len(), 2, "a misread value is never attached");
-        assert!(out[0].parameters.is_empty());
+        // The host still gets dp, read from the text itself, never the misread 1.
+        let dp = out[0].parameters["dp"]
+            .value
+            .expect("read from the sentence");
+        assert!((dp / 1e-24 - 1.0).abs() < 1e-12, "{dp}");
+    }
+
+    #[test]
+    fn a_claim_in_another_si_unit_of_the_same_dimension_is_converted_with_a_note() {
+        let text = "The Lumen microscope resolves details of 100 nm.";
+        let catalog = Catalog {
+            limits: vec![CatalogLimit {
+                id: "abbe_limit".into(),
+                title: "Abbe diffraction limit".into(),
+                formula: "wavelength/(2*aperture)".into(),
+                claim_unit: "m".into(),
+                parameters: vec![],
+                assumptions: vec![],
+            }],
+        };
+        let json = r#"{"claims":[{"limit_id":"abbe_limit","quantity":"resolved size","value":100,"unit":"nm","evidence":"details of 100 nm","constraints":{},"parameters":{}}],"missing":[]}"#;
+        let c = &check(&parse_model_output(json).expect("json"), text, &catalog)[0];
+        assert!(
+            c.value.is_some_and(|v| (v - 1e-7).abs() < 1e-20),
+            "{:?}",
+            c.value
+        );
+        assert_eq!(c.unit, "m");
+        assert!(c.evaluable());
+        assert!(
+            c.notes.iter().any(|n| n.contains("100 nm becomes")),
+            "{:?}",
+            c.notes
+        );
+        for wrong in ["s", "°C", "furlong"] {
+            let j = json.replace(r#""unit":"nm""#, &format!(r#""unit":"{wrong}""#));
+            let c = &check(&parse_model_output(&j).expect("json"), text, &catalog)[0];
+            assert!(
+                c.value.is_none() && c.flags.iter().any(|f| f == UNIT_NOT_UNDERSTOOD),
+                "{wrong}"
+            );
+        }
+    }
+
+    const QSCOPE: &str = "The Q-Scope locates an electron within 1e-12 m while its momentum is known to within 1e-24 kg*m/s.";
+
+    #[test]
+    fn a_parameter_the_model_left_out_is_read_from_the_same_sentence_by_its_unit() {
+        // Seen live: the claim quotes the whole sentence and gives no dp.
+        let json = r#"{"claims":[{"limit_id":"heisenberg","quantity":"position uncertainty","value":1e-12,"unit":"m","evidence":"The Q-Scope locates an electron within 1e-12 m while its momentum is known to within 1e-24 kg*m/s.","constraints":{},"parameters":[]}],"missing":[]}"#;
+        let out = check(
+            &parse_model_output(json).expect("json"),
+            QSCOPE,
+            &heisenberg_catalog(),
+        );
+        assert_eq!(out.len(), 1);
+        let dp = &out[0].parameters["dp"];
+        assert_eq!(dp.value, Some(1e-24));
+        assert_eq!(
+            dp.evidence.as_ref().map(|e| e.text.as_str()),
+            Some("1e-24 kg*m/s")
+        );
+        assert!(out[0].evaluable());
+        assert!(out[0].notes.iter().any(|n| n.contains(READ_FROM_SENTENCE)));
+        // Seen live: two claims of the same limit; the second becomes dp.
+        let two = r#"{"claims":[
+            {"limit_id":"heisenberg","quantity":"position uncertainty","value":1e-12,"unit":"m","evidence":"locates an electron within 1e-12 m","constraints":{},"parameters":{}},
+            {"limit_id":"heisenberg","quantity":"momentum uncertainty","value":1e-24,"unit":"kg*m/s","evidence":"momentum is known to within 1e-24 kg*m/s","constraints":{},"parameters":{}}
+        ],"missing":[]}"#;
+        let out = check(
+            &parse_model_output(two).expect("json"),
+            QSCOPE,
+            &heisenberg_catalog(),
+        );
+        assert_eq!(out.len(), 1, "{out:?}");
+        assert!(out[0].parameters["dp"]
+            .value
+            .is_some_and(|v| (v / 1e-24 - 1.0).abs() < 1e-12));
+    }
+
+    #[test]
+    fn a_sentence_with_two_numbers_in_the_parameter_unit_is_left_as_it_is() {
+        let text = "Within 1e-12 m, momenta of 1e-24 kg*m/s and 2e-24 kg*m/s.";
+        let json = r#"{"claims":[{"limit_id":"heisenberg","quantity":"x","value":1e-12,"unit":"m","evidence":"Within 1e-12 m","constraints":{},"parameters":{}}],"missing":[]}"#;
+        let out = check(
+            &parse_model_output(json).expect("json"),
+            text,
+            &heisenberg_catalog(),
+        );
+        assert!(out[0].parameters.is_empty(), "ambiguous: nothing is chosen");
+    }
+
+    #[test]
+    fn energy_in_a_mass_from_one_sentence_is_one_specific_energy_claim() {
+        let text =
+            "The Volta cell stores 5 kWh of energy in a mass of 1 kg. It weighs 2 kg in its case.";
+        let json = r#"{"claims":[
+            {"limit_id":null,"quantity":"energy stored","value":5,"unit":"kWh","evidence":"The Volta cell stores 5 kWh of energy in a mass of 1 kg.","constraints":{},"parameters":{}},
+            {"limit_id":null,"quantity":"mass","value":1,"unit":"kg","evidence":"The Volta cell stores 5 kWh of energy in a mass of 1 kg.","constraints":{},"parameters":{}},
+            {"limit_id":null,"quantity":"mass","value":2,"unit":"kg","evidence":"It weighs 2 kg in its case.","constraints":{},"parameters":{}}
+        ],"missing":[]}"#;
+        let out = check(&parse_model_output(json).expect("json"), text, &catalog());
+        assert_eq!(
+            out.len(),
+            2,
+            "the mass of another sentence is not merged: {out:?}"
+        );
+        let c = &out[0];
+        assert_eq!(c.quantity, "specific energy");
+        assert_eq!(c.raw_value, 5.0);
+        assert_eq!(c.raw_unit, "kWh/kg");
+        assert_eq!(
+            limina_core::parse_unit(&c.raw_unit).map(|u| u.dimension.exponents()),
+            Ok([2, 0, -2, 0, 0, 0, 0])
+        );
+        assert!(
+            c.notes.iter().any(|n| n.contains(MERGED_QUOTIENT)),
+            "{:?}",
+            c.notes
+        );
+        assert_eq!(out[1].raw_value, 2.0);
+    }
+
+    #[test]
+    fn short_numbers_hide_last_bit_noise_only() {
+        assert_eq!(short_number(1.0000000000000001e-24), "1e-24");
+        assert_eq!(short_number(1.0000000000000001e-7), "1e-7");
+        assert_eq!(short_number(5.272859088230782e-11), "5.272859088e-11");
+        assert_eq!(short_number(300.0), "300");
+        assert_eq!(short_number(14.5), "14.5");
+        assert_eq!(short_number(0.0), "0");
+        assert_eq!(short_number(3.6e8), "3.6e8");
+        assert_eq!(short_number(-0.25), "-0.25");
     }
 
     #[test]

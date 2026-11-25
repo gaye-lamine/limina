@@ -8,6 +8,7 @@ const ASSUMPTIONS: &[(&str, &str)] = &[
     ("reference_area", "reference area"),
     ("cycle_model", "cycle model"),
     ("mode", "mode"),
+    ("imaging_method", "imaging method"),
 ];
 
 /// Option id to its display label.
@@ -22,6 +23,8 @@ const OPTIONS: &[(&str, &str)] = &[
         "ideal_reversible_two_reservoirs",
         "ideal reversible cycle between two reservoirs",
     ),
+    ("conventional_far_field", "conventional far-field imaging"),
+    ("super_resolution", "super-resolution techniques"),
     ("heating", "heating"),
     ("cooling", "cooling"),
 ];

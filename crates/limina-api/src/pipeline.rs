@@ -50,12 +50,10 @@ fn step(name: &str, status: &'static str, detail: impl Into<String>) -> TraceSte
     }
 }
 
+/// A number for the trace: at most 10 significant digits, so the last-bit
+/// noise of a decimal reading ("1.0000000000000001e-24") is not shown.
 fn number(v: f64) -> String {
-    if v != 0.0 && (v.abs() >= 1e6 || v.abs() < 1e-3) {
-        format!("{v:e}")
-    } else {
-        format!("{v}")
-    }
+    limina_extract::check::short_number(v)
 }
 
 fn verdict_step(claim: &AnalyzedClaimDto) -> TraceStepDto {
@@ -360,10 +358,16 @@ async fn law_pipeline(state: &AppState, text: &str, claim: &mut AnalyzedClaimDto
         ));
         return;
     };
+    // A claim merged from two readings of one sentence (energy in a mass)
+    // is traceable through both readings, recorded in its note.
+    let merged = claim
+        .notes
+        .iter()
+        .any(|n| n.starts_with(limina_extract::check::MERGED_QUOTIENT));
     let traced = claim
         .evidence
         .as_ref()
-        .is_some_and(|e| number_in(&e.text, claim.raw_value));
+        .is_some_and(|e| merged || number_in(&e.text, claim.raw_value));
     let Some(evidence) = claim.evidence.clone().filter(|_| traced) else {
         claim.trace.push(step(
             "law",

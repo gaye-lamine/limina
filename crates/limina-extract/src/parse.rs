@@ -91,8 +91,71 @@ where
 pub struct ModelOutput {
     /// The claims found.
     pub claims: Vec<ModelClaim>,
-    /// Values a limit needs that the text does not give.
+    /// Values a limit needs that the text does not give. Absent means none.
+    #[serde(default)]
     pub missing: Vec<String>,
+}
+
+/// Repairs the bracket structure of a model answer, from its first `{`:
+/// a closer that does not match the innermost open bracket first closes the
+/// brackets left open inside it, and the brackets still open at the end are
+/// closed. Text after the root object is dropped. Nothing inside a string is
+/// touched and no character other than `}` and `]` is ever added, so no
+/// value can change; the strict schema still applies after the repair.
+/// None when there is no `{` or a string is left open.
+pub fn repair_brackets(content: &str) -> Option<String> {
+    let start = content.find('{')?;
+    let mut out = String::with_capacity(content.len() + 8);
+    let mut stack: Vec<char> = Vec::new();
+    let (mut in_string, mut escaped) = (false, false);
+    for c in content[start..].chars() {
+        if in_string {
+            out.push(c);
+            if escaped {
+                escaped = false;
+            } else if c == '\\' {
+                escaped = true;
+            } else if c == '"' {
+                in_string = false;
+            }
+            continue;
+        }
+        match c {
+            '"' => {
+                in_string = true;
+                out.push(c);
+            }
+            '{' | '[' => {
+                stack.push(c);
+                out.push(c);
+            }
+            '}' | ']' => {
+                let opener = if c == '}' { '{' } else { '[' };
+                if !stack.contains(&opener) {
+                    // A stray closer: dropped.
+                    continue;
+                }
+                while let Some(top) = stack.pop() {
+                    if top == opener {
+                        break;
+                    }
+                    out.push(if top == '{' { '}' } else { ']' });
+                }
+                out.push(c);
+            }
+            _ => out.push(c),
+        }
+        if stack.is_empty() {
+            return Some(out);
+        }
+    }
+    if in_string {
+        return None;
+    }
+    while let Some(top) = stack.pop() {
+        out.push(if top == '{' { '}' } else { ']' });
+    }
+    Some(out)
 }
 
 /// Reads `message.content` only. Empty content, `finish_reason` "length",
@@ -113,11 +176,26 @@ pub fn read_reply(reply: &ChatReply) -> Result<ModelOutput, ExtractError> {
 /// Strips markdown code fences, then parses the first JSON object.
 pub fn parse_model_output(content: &str) -> Result<ModelOutput, ExtractError> {
     let unfenced = strip_fences(content);
-    let object = first_json_object(&unfenced).ok_or(ExtractError::ExtractionFailed(
+    if let Some(object) = first_json_object(&unfenced) {
+        if let Ok(out) = serde_json::from_str(object) {
+            return Ok(out);
+        }
+    }
+    // Models often drop or misplace a closing bracket: repair the brackets
+    // only, then apply the same strict schema.
+    let repaired = repair_brackets(&unfenced).ok_or(ExtractError::ExtractionFailed(
         "the answer holds no JSON object",
     ))?;
-    serde_json::from_str(object)
-        .map_err(|_| ExtractError::ExtractionFailed("the answer does not match the schema"))
+    let out: ModelOutput = serde_json::from_str(&repaired)
+        .map_err(|_| ExtractError::ExtractionFailed("the answer does not match the schema"))?;
+    // A repaired answer without any claim is most likely cut short: it is
+    // refused, so the model is asked again instead of reporting "no claim".
+    if out.claims.is_empty() {
+        return Err(ExtractError::ExtractionFailed(
+            "the answer does not match the schema",
+        ));
+    }
+    Ok(out)
 }
 
 /// Removes ``` fence lines (with or without a language tag).
@@ -165,6 +243,35 @@ mod tests {
     use super::*;
 
     const VALID: &str = r#"{"claims":[{"limit_id":"carnot","quantity":"efficiency","value":60,"unit":"%","evidence":"60% efficiency","constraints":{},"parameters":{"Th":{"value":600,"unit":"K","evidence":"600 K"}}}],"missing":[]}"#;
+
+    #[test]
+    fn a_dropped_or_misplaced_closing_bracket_is_repaired_without_changing_a_value() {
+        // Seen live: the claim object is not closed before "]".
+        let live = r#"{"claims":[{"limit_id":"heisenberg","quantity":"position uncertainty","value":1e-12,"unit":"m","evidence":"within 1e-12 m","constraints":{},"parameters":{"dp":{"value":1e-24,"unit":"kg*m/s","evidence":"within 1e-24 kg*m/s"}}]},"missing":[]}"#;
+        let out = parse_model_output(live).expect("repaired");
+        assert_eq!(out.claims.len(), 1);
+        assert_eq!(out.claims[0].value, 1e-12);
+        assert!(out.claims[0].parameters.contains_key("dp"));
+        // Seen live: cut after the claims, no "missing".
+        let cut = r#"{"claims":[{"limit_id":"heisenberg","quantity":"x","value":1e-12,"unit":"m","evidence":"e","constraints":{},"parameters":{}}]"#;
+        assert_eq!(
+            parse_model_output(cut).expect("closed").missing,
+            Vec::<String>::new()
+        );
+        // Brackets inside strings are never touched; an open string is refused.
+        assert_eq!(repair_brackets(r#"{"a":"x]}{"#), None);
+        assert_eq!(
+            repair_brackets(r#"{"a":"x]}"}"#).as_deref(),
+            Some(r#"{"a":"x]}"}"#)
+        );
+        assert_eq!(
+            repair_brackets(r#"text {"a":[1,2} tail"#).as_deref(),
+            Some(r#"{"a":[1,2]}"#)
+        );
+        assert_eq!(repair_brackets("no json"), None);
+        // The schema still applies after a repair.
+        assert!(parse_model_output(r#"{"claims":[{"value":1}"#).is_err());
+    }
 
     #[test]
     fn parameters_written_as_a_list_of_named_readings_are_accepted() {
@@ -252,7 +359,8 @@ mod tests {
         for c in [
             "no json here",
             "{ not json",
-            r#"{"claims":[]}"#,
+            // "missing" may be absent (it means none); "claims" may not.
+            r#"{"missing":[]}"#,
             r#"{"claims":[],"missing":[],"extra":1}"#,
             r#"{"claims":[{"limit_id":"carnot","quantity":"q","value":"60","unit":"%","evidence":"e","constraints":{},"parameters":{}}],"missing":[]}"#,
         ] {

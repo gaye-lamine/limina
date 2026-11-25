@@ -165,6 +165,7 @@ async fn abbe_limit_against_wavelength_is_computed_by_the_engine() {
         "/v1/curve",
         Some(json!({
             "limit_id": "abbe_limit",
+            "constraints": {"imaging_method": ["conventional_far_field"]},
             "free_parameter": "wavelength",
             "parameters": {"aperture": {"value": 1.4, "unit": "dimensionless"}},
             "range": [4.0e-7, 7.0e-7],

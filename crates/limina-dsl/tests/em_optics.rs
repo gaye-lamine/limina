@@ -187,16 +187,49 @@ fn abbe_limit_golden_and_negative() {
         bound_verdict("abbe_limit", 250.0, "nm", &p),
         Verdict::Compatible
     );
-    assert_eq!(
-        bound_verdict("abbe_limit", bound * 0.9, "m", &p),
-        Verdict::Impossible
-    );
+    // Imaging method not stated: possible only with super-resolution.
+    match bound_verdict("abbe_limit", bound * 0.9, "m", &p) {
+        Verdict::Conditional { satisfying } => {
+            let options: Vec<String> = satisfying
+                .iter()
+                .flat_map(|s| s.config.iter().map(|(_, o)| o.as_str().to_string()))
+                .collect();
+            assert_eq!(options, ["super_resolution"]);
+        }
+        other => panic!("expected CONDITIONAL, got {other:?}"),
+    }
     // A far-field optical microscope resolving 50 nm with green light is
     // inconsistent with the limit under the far-field, linear assumptions.
     assert_eq!(
-        bound_verdict("abbe_limit", 50.0, "nm", &p),
+        constrained_verdict("abbe_limit", 50.0, "nm", &p, "conventional_far_field"),
         Verdict::Impossible
     );
+    assert_eq!(
+        constrained_verdict("abbe_limit", bound * 0.9, "m", &p, "conventional_far_field"),
+        Verdict::Impossible
+    );
+    // Super-resolution: this law gives no bound, so the claim is not inconsistent.
+    assert_eq!(
+        constrained_verdict("abbe_limit", 50.0, "nm", &p, "super_resolution"),
+        Verdict::Compatible
+    );
+}
+
+fn constrained_verdict(
+    id: &str,
+    claim: f64,
+    unit: &str,
+    params: &[(&str, f64, &str)],
+    method: &str,
+) -> Verdict {
+    let registry = Registry::builtin().expect("builtin");
+    let law = registry.get(id).expect("law");
+    let mut i = input(claim, unit, params);
+    i.constraints.allow(
+        limina_core::AssumptionId::new("imaging_method"),
+        [limina_core::OptionId::new(method)].into_iter().collect(),
+    );
+    decide(law, &i).expect("decides").verdict
 }
 #[test]
 fn abbe_limit_missing_parameter_is_insufficient_data() {
