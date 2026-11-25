@@ -96,7 +96,7 @@ export class Workbench {
   private loadLimits(): void {
     this.api.getLimits().subscribe({
       next: (r) => {
-        for (const l of r.limits) rememberDirection(l.id, l.direction);
+        for (const l of r.limits) rememberDirection(l.id, l.direction === 'Min' ? 'Min' : 'Max');
         this.limits.set(r.limits);
       },
       error: () => undefined,

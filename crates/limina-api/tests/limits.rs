@@ -32,7 +32,23 @@ async fn lists_betz_and_carnot() {
         .iter()
         .map(|l| l["id"].as_str().expect("id"))
         .collect();
-    assert_eq!(ids, ["betz", "carnot", "cop"]);
+    assert_eq!(
+        ids,
+        [
+            "betz",
+            "carnot",
+            "cop",
+            "speed_limit",
+            "tsiolkovsky",
+            "energy_momentum",
+            "escape_velocity",
+            "kepler_third",
+            "length_contraction",
+            "newton_gravity",
+            "relativistic_kinetic_energy",
+            "time_dilation"
+        ]
+    );
 }
 
 #[tokio::test]
@@ -257,15 +273,23 @@ async fn every_listed_unit_is_accepted_by_evaluate() {
             let name = parameter["id"].as_str().expect("parameter id");
             for unit in parameter["units"].as_array().expect("units") {
                 let unit = unit.as_str().expect("unit");
+                let declared = |n: &str| {
+                    limit["parameters"]
+                        .as_array()
+                        .is_some_and(|ps| ps.iter().any(|p| p["id"] == n))
+                };
+                let mut parameters = serde_json::Map::new();
+                if declared("Th") && declared("Tc") {
+                    parameters.insert("Th".into(), json!({"value": 600.0, "unit": "K"}));
+                    parameters.insert("Tc".into(), json!({"value": 300.0, "unit": "K"}));
+                }
+                let value = if name == "Th" { 600.0 } else { 300.0 };
+                parameters.insert(name.to_string(), json!({"value": value, "unit": unit}));
                 let status = evaluate(json!({
                     "limit_id": id,
                     "claim": {"value": 0.4, "unit": claim_unit},
                     "constraints": constraints,
-                    "parameters": {
-                        "Th": {"value": 600.0, "unit": "K"},
-                        "Tc": {"value": 300.0, "unit": "K"},
-                        name: {"value": if name == "Th" { 600.0 } else { 300.0 }, "unit": unit}
-                    }
+                    "parameters": parameters
                 }))
                 .await;
                 assert_eq!(status, StatusCode::OK, "{id}.{name} in {unit}");

@@ -1,0 +1,23 @@
+{
+  "id": "speed_limit",
+  "title": "Speed limit of a massive body",
+  "direction": "max",
+  "bounded_dimension": "m/s",
+  "parameters": [],
+  "formula": "c",
+  "validity": [],
+  "references": [
+    "Einstein, A., Zur Elektrodynamik bewegter Koerper, Annalen der Physik 322(10), 891-921 (1905), doi:10.1002/andp.19053221004",
+    "Rindler, W., Relativity: Special, General, and Cosmological, 2nd ed., Oxford University Press (2006)"
+  ],
+  "status": "draft",
+  "epistemic_status": "theorem",
+  "classification": "theoretical_bound",
+  "validity_domain": "Speed of a body with non-zero rest mass, measured in an inertial frame, through space.",
+  "limitations": [
+    "Does not apply to light or other massless particles, nor to phase or group velocities in a medium",
+    "Does not apply to the recession velocity of distant galaxies or to coordinate speeds in curved spacetime",
+    "A bound of special relativity: a body of non-zero mass stays strictly below c, and no technology is implied to approach it"
+  ],
+  "variables": {}
+}

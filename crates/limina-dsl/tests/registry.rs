@@ -21,14 +21,14 @@ fn registry() -> Registry {
 fn the_registry_loads_betz_carnot_and_cop_as_drafts() {
     let r = registry();
     let ids: Vec<&str> = r.limits().iter().map(|l| l.id()).collect();
-    assert_eq!(ids, ["betz", "carnot", "cop"]);
+    assert_eq!(ids, ["betz", "carnot", "cop", "speed_limit", "tsiolkovsky"]);
     for l in r.limits() {
         assert_eq!(l.definition().status, Status::Draft);
         assert!(!l.is_validated());
         assert!(l.definition().has_real_reference(), "{}", l.id());
         assert!(l.definition().classification.is_some(), "{}", l.id());
     }
-    assert_eq!(r.as_limits().len(), 3);
+    assert_eq!(r.as_limits().len(), 5);
 }
 
 #[test]

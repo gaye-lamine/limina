@@ -1,0 +1,26 @@
+{
+  "id": "escape_velocity",
+  "title": "Escape velocity",
+  "direction": "equal",
+  "bounded_dimension": "m/s",
+  "parameters": [
+    { "name": "M", "dimension": "kg", "units": ["kg", "g"], "test_range": [1e20, 1e32] },
+    { "name": "r", "dimension": "m", "units": ["m", "km"], "test_range": [1e5, 1e9] }
+  ],
+  "formula": "sqrt(2*G*M/r)",
+  "tolerance": 0.005,
+  "validity": ["r > 0"],
+  "references": [
+    "Kleppner, D. and Kolenkow, R. J., An Introduction to Mechanics, 2nd ed., Cambridge University Press (2014)"
+  ],
+  "status": "draft",
+  "epistemic_status": "model_bound",
+  "classification": "model",
+  "validity_domain": "Speed needed at distance r from the centre of a spherically symmetric, non-rotating mass M to reach infinity at rest, with no atmosphere and no other body.",
+  "limitations": [
+    "Newtonian: not valid near a black hole",
+    "Ignores atmospheric drag, rotation of the body and the pull of other bodies",
+    "Speed at the instant of launch for a ballistic trajectory, not the speed a powered vehicle needs"
+  ],
+  "variables": { "M": "Mass of the attracting body", "r": "Distance from its centre" }
+}

@@ -1,0 +1,27 @@
+{
+  "id": "energy_momentum",
+  "title": "Relativistic energy-momentum relation",
+  "direction": "equal",
+  "bounded_dimension": "J",
+  "parameters": [
+    { "name": "p", "dimension": "kg*m/s", "units": ["kg*m/s"], "test_range": [1e-27, 1e-18] },
+    { "name": "m", "dimension": "kg", "units": ["kg", "g"], "test_range": [1e-30, 1e-20] }
+  ],
+  "formula": "sqrt((p*c)^2 + (m*c^2)^2)",
+  "tolerance": 0.005,
+  "validity": ["m >= 0"],
+  "references": [
+    "Rindler, W., Relativity: Special, General, and Cosmological, 2nd ed., Oxford University Press (2006)",
+    "Taylor, E. F. and Wheeler, J. A., Spacetime Physics, 2nd ed., W. H. Freeman (1992)"
+  ],
+  "status": "draft",
+  "epistemic_status": "theorem",
+  "classification": "theorem",
+  "validity_domain": "Total energy of a free body or particle of rest mass m and momentum magnitude p in an inertial frame, in special relativity.",
+  "limitations": [
+    "Total energy including rest energy, not kinetic energy",
+    "Free body: no potential energy, no field energy",
+    "The 0.5 % tolerance covers the rounding of a stated figure, it is not a physical uncertainty"
+  ],
+  "variables": { "p": "Momentum magnitude", "m": "Rest mass" }
+}

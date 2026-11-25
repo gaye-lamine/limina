@@ -19,7 +19,7 @@ export interface ParameterSpec {
 
 export interface LimitInfo {
   id: string;
-  direction: 'Max' | 'Min';
+  direction: 'Max' | 'Min' | 'Equal';
   /** Display title, for example "Betz limit". */
   title: string;
   /** The bound as plain text, for example "Cp <= 16/27". */

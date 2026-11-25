@@ -1,0 +1,28 @@
+{
+  "id": "newton_gravity",
+  "title": "Newtonian gravitational force",
+  "direction": "equal",
+  "bounded_dimension": "N",
+  "parameters": [
+    { "name": "m1", "dimension": "kg", "units": ["kg", "g"], "test_range": [1, 1e30] },
+    { "name": "m2", "dimension": "kg", "units": ["kg", "g"], "test_range": [1, 1e30] },
+    { "name": "r", "dimension": "m", "units": ["m", "km"], "test_range": [1e-2, 1e12] }
+  ],
+  "formula": "G*m1*m2/r^2",
+  "tolerance": 0.005,
+  "validity": ["r > 0"],
+  "references": [
+    "Goldstein, H., Poole, C. and Safko, J., Classical Mechanics, 3rd ed., Addison-Wesley (2002)",
+    "CODATA 2022 recommended value of the Newtonian constant of gravitation G, https://physics.nist.gov/cgi-bin/cuu/Value?bg"
+  ],
+  "status": "draft",
+  "epistemic_status": "model_bound",
+  "classification": "model",
+  "validity_domain": "Force between two point masses or spherically symmetric bodies at centre distance r, weak field and speeds much below c.",
+  "limitations": [
+    "An approximation of general relativity: not valid near compact objects or for precision orbital work",
+    "r is the distance between centres; for non-spherical bodies the formula is approximate",
+    "The uncertainty of G (CODATA 2022) is propagated by the engine, apart from the tolerance"
+  ],
+  "variables": { "m1": "First mass", "m2": "Second mass", "r": "Distance between the centres" }
+}

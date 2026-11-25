@@ -15,8 +15,21 @@ pub fn find_limit(id: &str) -> Option<Box<dyn Limit>> {
         "betz" => Some(Box::new(Betz::new())),
         "carnot" => Some(Box::new(Carnot::new())),
         "cop" => Some(Box::new(Cop::new())),
-        _ => None,
+        _ => library_limit(id),
     }
+}
+
+/// A built-in law of the DSL library (`data/limits`). An equality law is
+/// served as its upper bound, which is the predicted value widened by the
+/// tolerance; its verdict never comes from here, see `find_equality`.
+fn library_limit(id: &str) -> Option<Box<dyn Limit>> {
+    let registry = Registry::builtin().ok()?;
+    if let Some(limit) = registry.get(id) {
+        return Some(Box::new(limit.clone()));
+    }
+    registry
+        .equality(id)
+        .map(|law| Box::new(law.upper().clone()) as Box<dyn Limit>)
 }
 
 /// Looks up a built-in equality law by id.
@@ -262,6 +275,55 @@ pub fn list() -> LimitsResponse {
                 }
                 dto
             })
+            .chain(library_descriptions(definitions.as_ref()))
             .collect(),
     }
+}
+
+/// The library laws that are not one of the three core limits: the max and
+/// min laws, then the equality laws, each sorted by id.
+fn library_descriptions(registry: Option<&Registry>) -> Vec<LimitDto> {
+    let Some(registry) = registry else {
+        return Vec::new();
+    };
+    let core = ["betz", "carnot", "cop"];
+    let bounds = registry
+        .limits()
+        .iter()
+        .filter(|l| !core.contains(&l.id()))
+        .map(|l| describe_library(l, l.definition(), false));
+    let equalities = registry
+        .equalities()
+        .iter()
+        .map(|e| describe_library(e.upper(), e.definition(), true));
+    bounds.chain(equalities).collect()
+}
+
+/// Describes a library law from its definition. An equality law is listed
+/// with direction `Equal` and its formula as the predicted value.
+fn describe_library(limit: &DeclarativeLimit, def: &LimitDefinition, equal: bool) -> LimitDto {
+    let mut dto = describe(limit);
+    let formula = def.formula.clone().unwrap_or_default();
+    dto.title = def.title.clone();
+    dto.formula = if equal {
+        format!("predicted = {formula}")
+    } else {
+        formula
+    };
+    dto.statement = def.validity_domain.clone().unwrap_or_default();
+    // The unit table lists no compound unit such as m/s: the claim unit and
+    // the parameter units are the ones the definition declares.
+    if let limina_dsl::definition::DimensionSpec::Unit(unit) = &def.bounded_dimension {
+        dto.claim_unit = unit.clone();
+    }
+    for p in &mut dto.parameters {
+        if let Some(declared) = def.parameters.iter().find(|d| d.name == p.id) {
+            p.units = declared.units.clone();
+        }
+    }
+    if equal {
+        dto.direction = "Equal";
+    }
+    apply_definition(&mut dto, def);
+    dto
 }

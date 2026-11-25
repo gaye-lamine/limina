@@ -1,0 +1,27 @@
+{
+  "id": "length_contraction",
+  "title": "Length contraction",
+  "direction": "equal",
+  "bounded_dimension": "m",
+  "parameters": [
+    { "name": "L0", "dimension": "m", "units": ["m", "km"], "test_range": [1e-3, 1e6] },
+    { "name": "v", "dimension": "m/s", "units": ["m/s", "km/s"], "test_range": [1e3, 2.5e8] }
+  ],
+  "formula": "L0*sqrt(1 - (v/c)^2)",
+  "tolerance": 0.005,
+  "validity": ["v < c"],
+  "references": [
+    "Einstein, A., Zur Elektrodynamik bewegter Koerper, Annalen der Physik 322(10), 891-921 (1905), doi:10.1002/andp.19053221004",
+    "Rindler, W., Relativity: Special, General, and Cosmological, 2nd ed., Oxford University Press (2006)"
+  ],
+  "status": "draft",
+  "epistemic_status": "theorem",
+  "classification": "theorem",
+  "validity_domain": "Length along the direction of motion of a body at constant speed v < c, measured in a frame where it moves, given its proper length L0.",
+  "limitations": [
+    "Length along the direction of motion only; transverse lengths do not contract",
+    "Length defined by simultaneous marking of both ends in the observer frame, which is not what a camera records",
+    "The 0.5 % tolerance covers the rounding of a stated figure, it is not a physical uncertainty"
+  ],
+  "variables": { "L0": "Proper length, in the rest frame of the body", "v": "Speed of the body in the observer frame" }
+}

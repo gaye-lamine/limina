@@ -1,0 +1,26 @@
+{
+  "id": "time_dilation",
+  "title": "Time dilation",
+  "direction": "equal",
+  "bounded_dimension": "s",
+  "parameters": [
+    { "name": "tau", "dimension": "s", "units": ["s", "ms"], "test_range": [1e-9, 1e9] },
+    { "name": "v", "dimension": "m/s", "units": ["m/s", "km/s"], "test_range": [1e3, 2.5e8] }
+  ],
+  "formula": "tau/sqrt(1 - (v/c)^2)",
+  "tolerance": 0.005,
+  "validity": ["v < c"],
+  "references": [
+    "Einstein, A., Zur Elektrodynamik bewegter Koerper, Annalen der Physik 322(10), 891-921 (1905), doi:10.1002/andp.19053221004",
+    "Rindler, W., Relativity: Special, General, and Cosmological, 2nd ed., Oxford University Press (2006)"
+  ],
+  "status": "draft",
+  "epistemic_status": "theorem",
+  "classification": "theorem",
+  "validity_domain": "Interval measured by an inertial observer for a clock moving at constant speed v < c, given its proper time tau.",
+  "limitations": [
+    "Constant velocity in an inertial frame; acceleration and gravitational time dilation are not included",
+    "The 0.5 % tolerance covers the rounding of a stated figure, it is not a physical uncertainty"
+  ],
+  "variables": { "tau": "Proper time measured by the moving clock", "v": "Speed of the clock in the observer frame" }
+}

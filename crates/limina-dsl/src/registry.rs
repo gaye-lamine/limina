@@ -60,6 +60,42 @@ impl Registry {
                 include_str!("../../../data/limits/carnot.json"),
             ),
             ("cop.json", include_str!("../../../data/limits/cop.json")),
+            (
+                "energy_momentum.json",
+                include_str!("../../../data/limits/energy_momentum.json"),
+            ),
+            (
+                "escape_velocity.json",
+                include_str!("../../../data/limits/escape_velocity.json"),
+            ),
+            (
+                "kepler_third.json",
+                include_str!("../../../data/limits/kepler_third.json"),
+            ),
+            (
+                "length_contraction.json",
+                include_str!("../../../data/limits/length_contraction.json"),
+            ),
+            (
+                "newton_gravity.json",
+                include_str!("../../../data/limits/newton_gravity.json"),
+            ),
+            (
+                "relativistic_kinetic_energy.json",
+                include_str!("../../../data/limits/relativistic_kinetic_energy.json"),
+            ),
+            (
+                "speed_limit.json",
+                include_str!("../../../data/limits/speed_limit.json"),
+            ),
+            (
+                "time_dilation.json",
+                include_str!("../../../data/limits/time_dilation.json"),
+            ),
+            (
+                "tsiolkovsky.json",
+                include_str!("../../../data/limits/tsiolkovsky.json"),
+            ),
         ];
         let mut definitions = Vec::new();
         for (name, text) in files {

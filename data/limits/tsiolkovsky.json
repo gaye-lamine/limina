@@ -1,0 +1,28 @@
+{
+  "id": "tsiolkovsky",
+  "title": "Tsiolkovsky rocket equation",
+  "direction": "max",
+  "bounded_dimension": "m/s",
+  "parameters": [
+    { "name": "ve", "dimension": "m/s", "units": ["m/s", "km/s"], "test_range": [1e3, 5e3] },
+    { "name": "m0", "dimension": "kg", "units": ["kg", "g"], "test_range": [2e3, 1e6] },
+    { "name": "mf", "dimension": "kg", "units": ["kg", "g"], "test_range": [1e3, 1e5] }
+  ],
+  "formula": "ve*ln(max(m0, mf)/min(m0, mf))",
+  "validity": [],
+  "references": [
+    "Sutton, G. P. and Biblarz, O., Rocket Propulsion Elements, 9th ed., Wiley (2016)",
+    "Kleppner, D. and Kolenkow, R. J., An Introduction to Mechanics, 2nd ed., Cambridge University Press (2014)"
+  ],
+  "status": "draft",
+  "epistemic_status": "model_bound",
+  "classification": "theoretical_bound",
+  "validity_domain": "Non-relativistic rocket with constant effective exhaust speed ve, burning from initial mass m0 to final mass mf, with no external force.",
+  "limitations": [
+    "Gravity, drag and any other external force lower the achievable change of speed below this value",
+    "Non-relativistic: not valid when the speed approaches c",
+    "The masses are ordered in the formula (larger over smaller), so that swapped inputs never give a false IMPOSSIBLE; m0 is the mass before the burn",
+    "A bound of an idealized rocket, not a figure that a real vehicle reaches"
+  ],
+  "variables": { "ve": "Effective exhaust speed relative to the rocket", "m0": "Initial total mass", "mf": "Final total mass after the burn" }
+}

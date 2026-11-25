@@ -1,0 +1,2 @@
+# Design: law-length_contraction
+One JSON definition, no Rust code. Tests: `crates/limina-dsl/tests/mechanics_relativity.rs` (golden values, negative cases, properties) and `crates/limina-api/tests/library.rs` (listing, evaluation). The unit of the claim is the declared SI unit `m`; a claim in another unit is refused by the extractor, not converted.

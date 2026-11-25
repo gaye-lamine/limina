@@ -1,0 +1,27 @@
+{
+  "id": "kepler_third",
+  "title": "Kepler's third law",
+  "direction": "equal",
+  "bounded_dimension": "s",
+  "parameters": [
+    { "name": "a", "dimension": "m", "units": ["m", "km"], "test_range": [1e6, 1e13] },
+    { "name": "m1", "dimension": "kg", "units": ["kg", "g"], "test_range": [1e20, 1e32] },
+    { "name": "m2", "dimension": "kg", "units": ["kg", "g"], "test_range": [1, 1e30] }
+  ],
+  "formula": "2*pi*sqrt(a^3/(G*(m1 + m2)))",
+  "tolerance": 0.005,
+  "validity": ["a > 0"],
+  "references": [
+    "Goldstein, H., Poole, C. and Safko, J., Classical Mechanics, 3rd ed., Addison-Wesley (2002)"
+  ],
+  "status": "draft",
+  "epistemic_status": "model_bound",
+  "classification": "model",
+  "validity_domain": "Orbital period T = 2 pi sqrt(a^3 / (G (m1 + m2))) of an isolated two-body system under Newtonian gravity, with semi-major axis a.",
+  "limitations": [
+    "Two bodies only: perturbations by other bodies are ignored",
+    "Newtonian: relativistic corrections are not included",
+    "a is the semi-major axis of the relative orbit, not the distance to the centre of mass"
+  ],
+  "variables": { "a": "Semi-major axis of the relative orbit", "m1": "Mass of the first body", "m2": "Mass of the second body" }
+}

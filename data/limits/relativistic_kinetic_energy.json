@@ -1,0 +1,27 @@
+{
+  "id": "relativistic_kinetic_energy",
+  "title": "Relativistic kinetic energy",
+  "direction": "equal",
+  "bounded_dimension": "J",
+  "parameters": [
+    { "name": "m", "dimension": "kg", "units": ["kg", "g"], "test_range": [1e-3, 1e3] },
+    { "name": "v", "dimension": "m/s", "units": ["m/s", "km/s"], "test_range": [1e3, 2.5e8] }
+  ],
+  "formula": "m*c^2*(1/sqrt(1 - (v/c)^2) - 1)",
+  "tolerance": 0.005,
+  "validity": ["v < c"],
+  "references": [
+    "Rindler, W., Relativity: Special, General, and Cosmological, 2nd ed., Oxford University Press (2006)",
+    "Taylor, E. F. and Wheeler, J. A., Spacetime Physics, 2nd ed., W. H. Freeman (1992)"
+  ],
+  "status": "draft",
+  "epistemic_status": "theorem",
+  "classification": "theorem",
+  "validity_domain": "Kinetic energy (gamma - 1) m c^2 of a body of non-zero rest mass m at speed v < c in an inertial frame.",
+  "limitations": [
+    "Kinetic energy only: the rest energy m c^2 is not included",
+    "Free body in an inertial frame; rotation and internal energy are not included",
+    "The 0.5 % tolerance covers the rounding of a stated figure, it is not a physical uncertainty"
+  ],
+  "variables": { "m": "Rest mass", "v": "Speed in the inertial frame" }
+}
