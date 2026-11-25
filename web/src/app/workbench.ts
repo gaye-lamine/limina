@@ -1,22 +1,38 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, ElementRef, HostListener, computed, inject, signal, viewChild } from '@angular/core';
 import { Observable, firstValueFrom } from 'rxjs';
 import { AnalyzeResponse, AnalyzedClaim, PipelineInfo } from './analysis.models';
 import { AnalysisService } from './analysis.service';
-import { ApiFailure, LimitInfo, Verdict } from './api.models';
+import { ApiFailure, LimitInfo } from './api.models';
 import { ApiService } from './api.service';
 import { CarnotApparatus } from './carnot-apparatus';
 import { formatValue } from './chart-geometry';
 import { CopApparatus, TwinVerdicts } from './cop-apparatus';
 import { Explorer } from './explorer';
-import { STRINGS, WB } from './strings';
 import {
+  Entry,
+  Segment,
+  StampKind,
+  boundText,
+  claimText,
+  reviewMarkdown,
+  score,
+  scoreLine,
+  segments,
+  stampKind,
+  stampLabel,
+  stampRotation,
+  stampSeed,
+  stampSentence,
+} from './review-logic';
+import { REVIEW, STRINGS, WB } from './strings';
+import {
+  Paragraph,
   badge,
   explain,
   paragraphs,
   rememberDirection,
   shiftClaim,
   solveSentence,
-  verdictLabel,
 } from './workbench-logic';
 
 /** The pre-filled text: synthetic claims about imaginary products, one per discipline. */
@@ -32,10 +48,23 @@ export const ILLUSTRATIVE_TEXT = [
 /** Answers tried per paragraph when the model answer is unusable. */
 export const ATTEMPTS = 3;
 
-/** One tab: a claim, or a paragraph the pipeline could not analyse. */
-export type Entry =
-  | { kind: 'claim'; claim: AnalyzedClaim }
-  | { kind: 'failure'; paragraph: number; text: string; failure: ApiFailure; attempts: number };
+export type { Entry } from './review-logic';
+
+/** A stamp in the margin of the document. */
+export interface Stamp {
+  index: number;
+  kind: StampKind;
+  label: string;
+  sentence: string;
+  rotation: number;
+  order: number;
+}
+
+/** A paragraph of the document with its underlined numbers and its stamps. */
+export interface DocParagraph {
+  segments: Segment[];
+  stamps: Stamp[];
+}
 
 /** A line of the run log, shown above the trace while and after analysing. */
 export interface LogLine {
@@ -43,27 +72,28 @@ export interface LogLine {
   status: 'running' | 'done' | 'failed';
 }
 
-const VERDICT_CLASS: Record<Verdict, string> = {
-  IMPOSSIBLE: 'verdict--impossible',
-  CONDITIONAL: 'verdict--conditional',
-  COMPATIBLE: 'verdict--compatible',
-  INSUFFICIENT_DATA: 'verdict--insufficient-data',
-};
-
 /**
- * The analysis screen: the text, the pipeline trace of the selected claim
- * on the left, the claims on the right with the engine verdict, the plain
- * explanation, the law badge and the explorer.
+ * The analysis screen as a stamped document. Three states: the input
+ * text; the running document with a scan line and a ticker; the reviewed
+ * document (stamps in the margin, scoreboard above) beside the instrument
+ * panel of the selected claim. The pipeline trace is in a drawer.
  */
 @Component({
   selector: 'app-workbench',
   imports: [Explorer, CarnotApparatus, CopApparatus],
   templateUrl: './workbench.html',
+  host: { '[attr.data-state]': 'state()' },
 })
 export class Workbench {
   private readonly analysis = inject(AnalysisService);
   private readonly api = inject(ApiService);
   protected readonly s = WB;
+  protected readonly r = REVIEW;
+  protected readonly parts = signal<Paragraph[]>([]);
+  protected readonly current = signal(-1);
+  protected readonly highlight = signal<string | null>(null);
+  protected readonly howOpen = signal(false);
+  private readonly howDrawer = viewChild<ElementRef<HTMLElement>>('how');
 
   protected readonly text = signal(ILLUSTRATIVE_TEXT);
   protected readonly running = signal(false);
@@ -89,6 +119,45 @@ export class Workbench {
     const c = this.claim();
     return c ? explain(c) : [];
   });
+  /** input: the text box; running: the document being scanned; reviewed: document and instrument. */
+  protected readonly state = computed<'input' | 'running' | 'reviewed'>(() =>
+    this.running() ? 'running' : this.analysed() ? 'reviewed' : 'input',
+  );
+  protected readonly stamps = computed<Stamp[]>(() => {
+    let order = 0;
+    return this.entries().map((e, index) => ({
+      index,
+      kind: stampKind(e),
+      label: stampLabel(e),
+      sentence: stampSentence(e, this.directionOf(e)),
+      rotation: stampRotation(stampSeed(e, index)),
+      order: order++,
+    }));
+  });
+  protected readonly doc = computed<DocParagraph[]>(() => {
+    const entries = this.entries();
+    const stamps = this.stamps();
+    return this.parts().map((p, k) => {
+      const mine = entries.map((e, index) => ({ e, index })).filter(({ e }) => e.paragraph === k + 1);
+      const claims = mine.flatMap(({ e, index }) => (e.kind === 'claim' ? [{ index, claim: e.claim }] : []));
+      return { segments: segments(p.text, p.start, claims), stamps: mine.map(({ index }) => stamps[index]) };
+    });
+  });
+  protected readonly board = computed(() => score(this.entries(), this.parts().length));
+  protected readonly boardLine = computed(() => scoreLine(this.board()));
+  protected readonly selectedStamp = computed(() => this.stamps()[this.selected()] ?? null);
+  protected readonly selectedParagraph = computed(() => (this.entry()?.paragraph ?? 0) - 1);
+  protected readonly ticker = computed(() => {
+    const l = this.log();
+    const last = l[l.length - 1];
+    return last ? last.text : REVIEW.tickerIdle;
+  });
+  protected readonly references = computed(() => this.limit()?.references ?? []);
+
+  private directionOf(e: Entry): 'Max' | 'Min' | 'Equal' {
+    if (e.kind !== 'claim') return 'Max';
+    return this.limits().find((l) => l.id === e.claim.limit_id)?.direction ?? 'Max';
+  }
 
   constructor() {
     this.loadLimits();
@@ -105,22 +174,69 @@ export class Workbench {
     });
   }
 
-  protected label(e: Entry): string {
-    return e.kind === 'claim' ? verdictLabel(e.claim) : WB.paragraphFailed;
+  protected claimLine(c: AnalyzedClaim): string {
+    return claimText(c);
   }
 
-  protected tabTitle(e: Entry): string {
-    return e.kind === 'claim'
-      ? `${e.claim.quantity}: ${formatValue(e.claim.raw_value)} ${e.claim.raw_unit}`
-      : `${WB.progressParagraph} ${e.paragraph}`;
+  protected entryTitle(e: Entry): string {
+    return e.kind === 'claim' ? claimText(e.claim) : `${WB.progressParagraph} ${e.paragraph}`;
   }
 
-  protected verdictText(c: AnalyzedClaim): string {
-    return verdictLabel(c);
+  protected isLit(i: number): boolean {
+    const h = this.highlight();
+    return h !== null && this.stamps()[i]?.label === h;
   }
 
-  protected verdictClass(c: AnalyzedClaim): string {
-    return c.result ? VERDICT_CLASS[c.result.verdict] : 'verdict--insufficient-data';
+  protected toggleHighlight(label: string): void {
+    const next = this.highlight() === label ? null : label;
+    this.highlight.set(next);
+    const first = this.stamps().find((s) => s.label === next);
+    if (first) this.select(first.index);
+  }
+
+  protected edit(): void {
+    this.analysed.set(false);
+    this.howOpen.set(false);
+  }
+
+  protected openHow(): void {
+    this.howOpen.set(true);
+    setTimeout(() => this.howDrawer()?.nativeElement.focus());
+  }
+
+  protected closeHow(): void {
+    this.howOpen.set(false);
+  }
+
+  @HostListener('document:keydown.escape')
+  protected onEscape(): void {
+    this.closeHow();
+  }
+
+  /** Arrow keys move between claims in the reviewed state, except inside form controls. */
+  @HostListener('document:keydown', ['$event'])
+  protected onDocKey(event: KeyboardEvent): void {
+    if (this.state() !== 'reviewed' || this.howOpen()) return;
+    const t = event.target as HTMLElement | null;
+    if (t && (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable)) return;
+    const n = this.entries().length;
+    if (n === 0) return;
+    const i = this.selected();
+    if (event.key === 'ArrowDown' || event.key === 'ArrowRight') this.select((i + 1) % n);
+    else if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') this.select((i - 1 + n) % n);
+    else return;
+    event.preventDefault();
+  }
+
+  /** The review as Markdown, downloaded from the browser. */
+  protected download(): void {
+    const md = reviewMarkdown(this.entries(), this.parts().length, this.limits());
+    const url = URL.createObjectURL(new Blob([md], { type: 'text/markdown;charset=utf-8' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = REVIEW.reportFile;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url));
   }
 
   protected badgeOf(c: AnalyzedClaim): string {
@@ -138,9 +254,7 @@ export class Workbench {
   }
 
   protected bound(c: AnalyzedClaim): string {
-    const b = c.result?.bounds?.permissive;
-    if (!b) return '-';
-    return b.b_min === b.b_max ? formatValue(b.b_min) : `${formatValue(b.b_min)} to ${formatValue(b.b_max)}`;
+    return boundText(c);
   }
 
   protected paramText(c: AnalyzedClaim, id: string): string {
@@ -156,14 +270,6 @@ export class Workbench {
   protected select(i: number): void {
     this.selected.set(i);
     void this.enrich(i);
-  }
-
-  protected onKey(event: KeyboardEvent, i: number): void {
-    const n = this.entries().length;
-    if (event.key === 'ArrowRight') this.select((i + 1) % n);
-    else if (event.key === 'ArrowLeft') this.select((i - 1 + n) % n);
-    else return;
-    event.preventDefault();
   }
 
   private push(line: LogLine): number {
@@ -221,10 +327,13 @@ export class Workbench {
     this.solved.set({});
     this.twins.set({});
     this.selected.set(0);
+    this.highlight.set(null);
     this.log.set(this.log().filter((l) => l.text.startsWith(WB.imageRead)));
     const text = this.text();
     const parts = paragraphs(text);
+    this.parts.set(parts);
     for (const [k, p] of parts.entries()) {
+      this.current.set(k);
       const head = `${WB.progressParagraph} ${k + 1} ${WB.progressOf} ${parts.length}`;
       const line = this.push({ text: `${head}: ${p.text}`, status: 'running' });
       let attempt = 0;
@@ -233,7 +342,7 @@ export class Workbench {
         try {
           const r = await this.analyzeOnce(p.text);
           const claims = r.claims.map((c) => shiftClaim(c, p.start));
-          this.entries.update((e) => [...e, ...claims.map((claim) => ({ kind: 'claim' as const, claim }))]);
+          this.entries.update((e) => [...e, ...claims.map((claim) => ({ kind: 'claim' as const, claim, paragraph: k + 1 }))]);
           this.settle(line, 'done', `${head}: ${claims.length} claim(s)`);
           break;
         } catch (e) {
@@ -251,6 +360,7 @@ export class Workbench {
         }
       }
     }
+    this.current.set(-1);
     this.running.set(false);
     this.analysed.set(true);
     this.loadLimits();
