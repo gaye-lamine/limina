@@ -1,0 +1,28 @@
+{
+  "id": "heisenberg",
+  "title": "Heisenberg position-momentum relation",
+  "direction": "min",
+  "bounded_dimension": "m",
+  "parameters": [
+    { "name": "dp", "dimension": "kg*m/s", "units": ["kg*m/s"], "test_range": [1e-28, 1e-20] }
+  ],
+  "formula": "hbar/(2*dp)",
+  "validity": [],
+  "references": [
+    "Heisenberg, W., Ueber den anschaulichen Inhalt der quantentheoretischen Kinematik und Mechanik, Zeitschrift fuer Physik 43(3-4), 172-198 (1927), doi:10.1007/BF01397280",
+    "Kennard, E. H., Zur Quantenmechanik einfacher Bewegungstypen, Zeitschrift fuer Physik 44, 326-352 (1927), doi:10.1007/BF01391200",
+    "Griffiths, D. J. and Schroeter, D. F., Introduction to Quantum Mechanics, 3rd ed., Cambridge University Press (2018)"
+  ],
+  "status": "draft",
+  "epistemic_status": "theorem",
+  "classification": "theorem",
+  "validity_domain": "Standard deviations dx and dp of position and momentum along the same axis, for any quantum state of a particle: dx * dp >= hbar / 2 (Kennard 1927). The law bounds dx from below for a given dp.",
+  "limitations": [
+    "dx and dp are standard deviations over an ensemble of identically prepared systems, not the error of one measurement",
+    "The bound is for the same axis; different axes are independent",
+    "A lower bound on the product: real states, such as a non-Gaussian packet, have a larger product",
+    "The core checks no condition dp > 0 here, a non-positive dp is not meaningful and gives no verdict of its own",
+    "Not a statement about measurement disturbance (Ozawa and others show that is a different relation)"
+  ],
+  "variables": { "dp": "Standard deviation of the momentum along the axis" }
+}

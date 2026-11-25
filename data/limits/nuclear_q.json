@@ -1,0 +1,30 @@
+{
+  "id": "nuclear_q",
+  "title": "Energy released by a nuclear reaction",
+  "direction": "equal",
+  "bounded_dimension": "J",
+  "parameters": [
+    { "name": "m_initial", "dimension": "kg", "units": ["kg", "g"], "test_range": [1e-28, 1e-24] },
+    { "name": "m_final", "dimension": "kg", "units": ["kg", "g"], "test_range": [1e-28, 1e-24] }
+  ],
+  "formula": "abs(m_initial - m_final)*c^2",
+  "tolerance": 0.005,
+  "validity": ["m_initial > 0", "m_final > 0"],
+  "references": [
+    "Einstein, A., Ist die Traegheit eines Koerpers von seinem Energieinhalt abhaengig?, Annalen der Physik 323(13), 639-641 (1905), doi:10.1002/andp.19053231314",
+    "Krane, K. S., Introductory Nuclear Physics, 3rd ed., Wiley (1988)",
+    "CODATA 2022 recommended value of the speed of light in vacuum, https://physics.nist.gov/cgi-bin/cuu/Value?c"
+  ],
+  "status": "draft",
+  "epistemic_status": "model_bound",
+  "classification": "fundamental_law",
+  "validity_domain": "Magnitude of the energy Q = |sum of initial masses - sum of final masses| c^2 released or absorbed by a nuclear reaction, the masses being the total rest masses on each side.",
+  "limitations": [
+    "m_initial and m_final are the sums of the rest masses on each side, supplied by the user; no mass is looked up or assumed",
+    "Use the same kind of mass on both sides (all nuclear masses, or all neutral atomic masses with the electrons balanced), otherwise the electron terms are inconsistent",
+    "The difference of two close masses loses precision: the masses must be known far better than the relative size of their difference",
+    "Magnitude only: whether the reaction releases or absorbs energy is not decided",
+    "Masses are in kg or g; atomic mass units must be converted by the user"
+  ],
+  "variables": { "m_initial": "Total rest mass before the reaction", "m_final": "Total rest mass after the reaction" }
+}

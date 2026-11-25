@@ -129,6 +129,26 @@ impl Registry {
                 include_str!("../../../data/limits/photon_energy_wavelength.json"),
             ),
             (
+                "de_broglie.json",
+                include_str!("../../../data/limits/de_broglie.json"),
+            ),
+            (
+                "heisenberg.json",
+                include_str!("../../../data/limits/heisenberg.json"),
+            ),
+            (
+                "hydrogen_levels.json",
+                include_str!("../../../data/limits/hydrogen_levels.json"),
+            ),
+            (
+                "nuclear_q.json",
+                include_str!("../../../data/limits/nuclear_q.json"),
+            ),
+            (
+                "radioactive_decay.json",
+                include_str!("../../../data/limits/radioactive_decay.json"),
+            ),
+            (
                 "tsiolkovsky.json",
                 include_str!("../../../data/limits/tsiolkovsky.json"),
             ),

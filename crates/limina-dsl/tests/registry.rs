@@ -28,6 +28,7 @@ fn the_registry_loads_betz_carnot_and_cop_as_drafts() {
             "betz",
             "carnot",
             "cop",
+            "heisenberg",
             "landauer",
             "luminous_efficacy",
             "shannon_hartley",
@@ -42,7 +43,7 @@ fn the_registry_loads_betz_carnot_and_cop_as_drafts() {
         assert!(l.definition().has_real_reference(), "{}", l.id());
         assert!(l.definition().classification.is_some(), "{}", l.id());
     }
-    assert_eq!(r.as_limits().len(), 10);
+    assert_eq!(r.as_limits().len(), 11);
 }
 
 #[test]

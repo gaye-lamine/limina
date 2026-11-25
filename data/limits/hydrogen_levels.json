@@ -1,0 +1,29 @@
+{
+  "id": "hydrogen_levels",
+  "title": "Hydrogen binding energy of level n",
+  "direction": "equal",
+  "bounded_dimension": "J",
+  "parameters": [
+    { "name": "n", "dimension": "dimensionless", "units": ["dimensionless"], "test_range": [1, 10] }
+  ],
+  "formula": "R_inf*h*c/n^2",
+  "tolerance": 0.001,
+  "validity": ["n >= 1"],
+  "references": [
+    "Bohr, N., On the constitution of atoms and molecules, Part I, Philosophical Magazine 26(151), 1-25 (1913), doi:10.1080/14786441308634955",
+    "Griffiths, D. J. and Schroeter, D. F., Introduction to Quantum Mechanics, 3rd ed., Cambridge University Press (2018)",
+    "CODATA 2022 recommended value of the Rydberg constant, https://physics.nist.gov/cgi-bin/cuu/Value?ryd"
+  ],
+  "status": "draft",
+  "epistemic_status": "model_bound",
+  "classification": "model",
+  "validity_domain": "Binding energy |E_n| = R_inf h c / n^2 of the level n of hydrogen in the non-relativistic model with an infinitely heavy nucleus. The claim is the magnitude of the binding energy, the energy E_n itself being negative.",
+  "limitations": [
+    "Non-relativistic model: fine structure (relative order alpha^2), the Lamb shift and hyperfine structure are neglected",
+    "Infinite nuclear mass: the reduced-mass correction for hydrogen (about 0.05 %) is covered by the 0.1 % tolerance; other one-electron ions need a nuclear charge Z that is not included",
+    "n must be a positive integer; the core does not check that it is an integer",
+    "Hydrogen only: multi-electron atoms are outside the model",
+    "The magnitude of the binding energy is compared, the sign convention E_n < 0 is not decided"
+  ],
+  "variables": { "n": "Principal quantum number" }
+}

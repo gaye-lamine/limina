@@ -1,0 +1,28 @@
+{
+  "id": "de_broglie",
+  "title": "de Broglie wavelength",
+  "direction": "equal",
+  "bounded_dimension": "m",
+  "parameters": [
+    { "name": "p", "dimension": "kg*m/s", "units": ["kg*m/s"], "test_range": [1e-27, 1e-20] }
+  ],
+  "formula": "h/p",
+  "tolerance": 0.005,
+  "validity": ["p > 0"],
+  "references": [
+    "de Broglie, L., Recherches sur la theorie des Quanta, Annales de Physique 10(3), 22-128 (1925), doi:10.1051/anphys/192510030022",
+    "Griffiths, D. J. and Schroeter, D. F., Introduction to Quantum Mechanics, 3rd ed., Cambridge University Press (2018)",
+    "CODATA 2022 recommended value of the Planck constant, https://physics.nist.gov/cgi-bin/cuu/Value?h"
+  ],
+  "status": "draft",
+  "epistemic_status": "model_bound",
+  "classification": "fundamental_law",
+  "validity_domain": "Wavelength associated with a free particle of momentum magnitude p: lambda = h / p.",
+  "limitations": [
+    "p is the relativistic momentum magnitude; the relation holds at any speed, but the Newtonian p = m v does not near c",
+    "Free particle: inside a potential the local wavelength varies",
+    "The wavelength of a macroscopic body is defined but far below any measurable size",
+    "The 0.5 % tolerance covers the rounding of a stated figure, it is not a physical uncertainty"
+  ],
+  "variables": { "p": "Magnitude of the momentum of the particle" }
+}

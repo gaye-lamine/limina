@@ -1,0 +1,30 @@
+{
+  "id": "radioactive_decay",
+  "title": "Radioactive decay law",
+  "direction": "equal",
+  "bounded_dimension": "dimensionless",
+  "parameters": [
+    { "name": "n0", "dimension": "dimensionless", "units": ["dimensionless"], "test_range": [1, 1e20] },
+    { "name": "t", "dimension": "s", "units": ["s", "min", "h", "d"], "test_range": [0, 1e7] },
+    { "name": "t_half", "dimension": "s", "units": ["s", "min", "h", "d"], "test_range": [1, 1e7] }
+  ],
+  "formula": "n0*exp(-t*ln2/t_half)",
+  "tolerance": 0.01,
+  "validity": ["t >= 0", "t_half > 0", "n0 >= 0"],
+  "references": [
+    "Rutherford, E. and Soddy, F., The cause and nature of radioactivity, Part I, Philosophical Magazine 4(21), 370-396 (1902), doi:10.1080/14786440209462856",
+    "Krane, K. S., Introductory Nuclear Physics, 3rd ed., Wiley (1988)"
+  ],
+  "status": "draft",
+  "epistemic_status": "model_bound",
+  "classification": "empirical_law",
+  "validity_domain": "Expected number N(t) = N0 exp(-t ln2 / T_half) of undecayed nuclei of one isotope after a time t, from N0 nuclei at t = 0.",
+  "limitations": [
+    "Statistical law: an actual count fluctuates around the expected value (about the square root of N for a Poisson process), so a small sample can lie outside the 1 % band without a contradiction",
+    "The half-life is a parameter of the isotope, it is not provided by the law and is never assumed",
+    "Single isotope with no feeding from a parent: decay chains need the Bateman equations",
+    "Time units are s, min, h and d; a half-life in years must be converted by the user",
+    "Holds for a constant decay probability per unit time, which is the case for ordinary decay modes of free nuclei"
+  ],
+  "variables": { "n0": "Number of nuclei at t = 0", "t": "Elapsed time", "t_half": "Half-life of the isotope" }
+}
