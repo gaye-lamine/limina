@@ -52,8 +52,10 @@ pub async fn analyze_text(state: &AppState, text: &str) -> Result<AnalyzeRespons
     }
     let extractor = state.extractor().ok_or(ApiError::ExtractionUnavailable)?;
     let extraction = extractor.extract(text).await?;
+    let mut claims: Vec<AnalyzedClaimDto> = extraction.claims.iter().map(analyze_claim).collect();
+    crate::pipeline::complete_claims(state, text, &mut claims, extraction.cached).await;
     Ok(AnalyzeResponse {
-        claims: extraction.claims.iter().map(analyze_claim).collect(),
+        claims,
         missing: extraction.missing,
         extraction: ExtractionInfoDto {
             model: extraction.model,
@@ -141,6 +143,8 @@ pub fn analyze_claim(claim: &CheckedClaim) -> AnalyzedClaimDto {
         result: None,
         reason: None,
         code: None,
+        trace: Vec::new(),
+        law: None,
     };
     let Some(request) = engine_request(claim) else {
         dto.reason = claim.not_evaluable_reason().map(str::to_string);

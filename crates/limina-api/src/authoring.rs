@@ -204,7 +204,7 @@ pub fn solve_with(state: &AppState, request: &SolveRequestDto) -> Result<SolveRe
 }
 
 /// The DSL limit with this id, built-in first; true when it is authored.
-fn find_dsl_limit(state: &AppState, id: &str) -> Option<(DeclarativeLimit, bool)> {
+pub(crate) fn find_dsl_limit(state: &AppState, id: &str) -> Option<(DeclarativeLimit, bool)> {
     let builtin = Registry::builtin()
         .ok()
         .and_then(|r| r.get(id).cloned())
@@ -213,7 +213,7 @@ fn find_dsl_limit(state: &AppState, id: &str) -> Option<(DeclarativeLimit, bool)
 }
 
 /// A value in SI units: `K` as kelvin, anything else through the unit table.
-fn si(value: f64, unit: &str) -> Result<f64, EngineError> {
+pub(crate) fn si(value: f64, unit: &str) -> Result<f64, EngineError> {
     if unit == "K" {
         return Ok(value);
     }
@@ -254,7 +254,7 @@ fn solve_request(
     })
 }
 
-fn verdict_name(verdict: &Verdict) -> &'static str {
+pub(crate) fn verdict_name(verdict: &Verdict) -> &'static str {
     match verdict {
         Verdict::Impossible => "IMPOSSIBLE",
         Verdict::Conditional { .. } => "CONDITIONAL",

@@ -55,3 +55,23 @@ pub trait ExtractionProvider: Send + Sync {
     /// Sends one chat completion request.
     fn complete(&self, request: ChatRequest) -> BoxFuture<'_, Result<ChatReply, ProviderError>>;
 }
+
+/// An image sent to a vision-language model: its MIME type and its bytes
+/// in base64.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ImageInput {
+    /// `image/png`, `image/jpeg` or `image/webp`.
+    pub mime: String,
+    /// The image bytes, base64 encoded.
+    pub base64: String,
+}
+
+/// A vision-language model that transcribes the text of an image. The
+/// transcription is then analysed like any pasted text; the image itself
+/// never reaches the engine.
+pub trait VisionProvider: Send + Sync {
+    /// Model id.
+    fn model(&self) -> &str;
+    /// The text written in the image, exactly as written.
+    fn transcribe(&self, image: ImageInput) -> BoxFuture<'_, Result<ChatReply, ProviderError>>;
+}

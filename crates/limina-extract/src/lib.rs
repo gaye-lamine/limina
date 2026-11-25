@@ -15,6 +15,7 @@ pub mod check;
 pub mod config;
 pub mod error;
 pub mod extractor;
+pub mod law;
 pub mod openai;
 pub mod parse;
 pub mod prompt;
@@ -30,6 +31,13 @@ pub use check::{
 pub use config::{ExtractConfig, SecretKey};
 pub use error::ExtractError;
 pub use extractor::{Extraction, Extractor};
+pub use law::{
+    author_two, extract_parameters, identify_law, transcribe_image, FoundParameter, LawStatus,
+    ModelAttempt, TwoModelLaw, WantedParameter, NO_LAW,
+};
 pub use openai::OpenAiProvider;
 pub use parse::ModelOutput;
-pub use provider::{BoxFuture, ChatReply, ChatRequest, ExtractionProvider, ProviderError};
+pub use provider::{
+    BoxFuture, ChatReply, ChatRequest, ExtractionProvider, ImageInput, ProviderError,
+    VisionProvider,
+};

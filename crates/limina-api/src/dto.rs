@@ -146,6 +146,10 @@ pub struct LimitDto {
     /// "draft" for a limit authored from a text; absent for the built-in limits.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub status: Option<String>,
+    /// `draft_agreed` for a law written by two models that agree; absent
+    /// otherwise.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub agreement: Option<String>,
 }
 
 /// An assumption and its options.
@@ -238,6 +242,150 @@ pub struct AnalyzedClaimDto {
     pub reason: Option<String>,
     /// Stable error code of an engine refusal, when that is the reason.
     pub code: Option<&'static str>,
+    /// What the pipeline did with this claim, step by step. Failures are
+    /// listed, never hidden.
+    pub trace: Vec<TraceStepDto>,
+    /// The law the claim was checked against, and where it comes from.
+    pub law: Option<LawDto>,
+}
+
+/// One step of the pipeline for one claim.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct TraceStepDto {
+    /// Step name, for example `extraction`, `law`, `comparison`.
+    pub step: String,
+    /// `done`, `failed` or `skipped`.
+    pub status: &'static str,
+    /// Short factual detail.
+    pub detail: String,
+}
+
+/// The numerical comparison of two model-written definitions.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct ComparisonDto {
+    /// Samples evaluated.
+    pub samples: usize,
+    /// Largest relative difference seen.
+    pub max_relative_difference: f64,
+    /// Why they disagree; null when they agree.
+    pub reason: Option<String>,
+}
+
+/// One model's attempt at writing the law.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct LawAttemptDto {
+    /// Model id.
+    pub model: String,
+    /// Whether it wrote a definition that passed the DSL checks.
+    pub ok: bool,
+    /// Answers used.
+    pub attempts: usize,
+    /// Every error sent back to the model, or the final error.
+    pub errors: Vec<String>,
+    /// The definition, when it passed.
+    pub definition: Option<limina_dsl::LimitDefinition>,
+}
+
+/// The law of a claim.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct LawDto {
+    /// `built_in`, `draft_agreed`, `draft_disputed`, `not_authored` or
+    /// `no_law_identified`.
+    pub source: &'static str,
+    /// The limit evaluated, when there is one.
+    pub limit_id: Option<String>,
+    /// The law as one sentence, when a model named it.
+    pub sentence: Option<String>,
+    /// The two authoring attempts, for an AI-written law.
+    pub attempts: Vec<LawAttemptDto>,
+    /// The comparison, when both definitions passed.
+    pub comparison: Option<ComparisonDto>,
+}
+
+/// Body of `POST /v1/transcribe`: an image as base64.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TranscribeRequest {
+    /// `image/png`, `image/jpeg` or `image/webp`.
+    pub mime: String,
+    /// The image bytes, base64 encoded (no `data:` prefix).
+    pub base64: String,
+}
+
+/// Body of a successful `POST /v1/transcribe`.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct TranscribeResponse {
+    /// The text read from the image.
+    pub text: String,
+    /// The vision model used.
+    pub model: String,
+}
+
+/// Body of `POST /v1/curve`. Parameter values in the given units; `range`
+/// in SI units (kelvin for temperatures).
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CurveRequest {
+    /// A built-in or authored limit id.
+    pub limit_id: String,
+    /// Assumption id to the allowed option ids.
+    #[serde(default)]
+    pub constraints: BTreeMap<String, Vec<String>>,
+    /// Every parameter other than the free one, fixed.
+    #[serde(default)]
+    pub parameters: BTreeMap<String, ParameterDto>,
+    /// The parameter on the horizontal axis.
+    pub free_parameter: String,
+    /// Range of the free parameter; absent uses the plausible domain, else
+    /// the test range of the definition.
+    #[serde(default)]
+    pub range: Option<[f64; 2]>,
+    /// Number of points, 2 to 1000; default 101.
+    #[serde(default)]
+    pub points: Option<usize>,
+}
+
+/// One point of a curve: the bound range over the configurations, null
+/// where the bound is undefined.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct CurvePointDto {
+    /// Value of the free parameter, SI.
+    pub x: f64,
+    /// Smallest bound over the configurations.
+    pub b_min: Option<f64>,
+    /// Largest bound over the configurations.
+    pub b_max: Option<f64>,
+    /// The bound that decides IMPOSSIBLE: `b_max` for a Max limit, `b_min`
+    /// for a Min limit.
+    pub decisive: Option<f64>,
+}
+
+/// Body of a successful `POST /v1/curve`.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct CurveResponse {
+    /// The limit.
+    pub limit_id: String,
+    /// `Max` or `Min`.
+    pub direction: &'static str,
+    /// The free parameter.
+    pub free_parameter: String,
+    /// Range used, SI.
+    pub range: [f64; 2],
+    /// The points, in order of `x`.
+    pub points: Vec<CurvePointDto>,
+}
+
+/// Body of `GET /v1/pipeline`: what the analysis pipeline can do here.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct PipelineInfoDto {
+    /// Claims are read from text.
+    pub extraction: bool,
+    /// Claims without a built-in limit get a law written by two models.
+    pub law_authoring: bool,
+    /// Images can be transcribed.
+    pub vision: bool,
+    /// Model ids: extraction and model A, model B, vision.
+    pub models: Vec<String>,
 }
 
 /// How the extraction ran.

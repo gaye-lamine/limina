@@ -1,10 +1,28 @@
 <a class="skip" href="#main">{{ s.skipLink }}</a>
-<header class="site-header">
+<header class="topbar">
   <h1>{{ s.appName }}</h1>
-  <p>{{ s.appTagline }}</p>
+  <p class="topbar-tagline">{{ s.appTagline }}</p>
+  <button type="button" class="topbar-button" (click)="openDrawer()" [attr.aria-expanded]="drawerOpen()" aria-controls="drawer">
+    {{ wb.topBarDrawer }}
+  </button>
 </header>
-<main id="main">
-  <app-evaluate-form [limits]="limits()" />
+<main id="main" class="wb">
+  <app-workbench />
+</main>
+<aside
+  id="drawer"
+  class="drawer"
+  [hidden]="!drawerOpen()"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="drawer-title"
+  tabindex="-1"
+  #drawer
+>
+  <div class="drawer-head">
+    <h2 id="drawer-title">{{ wb.drawerTitle }}</h2>
+    <button type="button" class="topbar-button" (click)="closeDrawer()">{{ wb.drawerClose }}</button>
+  </div>
   <section class="panel how" aria-labelledby="how-title">
     <h2 id="how-title">{{ s.howTitle }}</h2>
     <p>{{ s.howDeterministic }}</p>
@@ -12,8 +30,5 @@
     <p class="muted">{{ s.howPriorArt }}</p>
   </section>
   <app-limits-list [limits]="limits()" [failure]="limitsFailure()" />
-</main>
-<footer class="site-footer">
-  <p>{{ s.footerNote }}</p>
-</footer>
-
+  <p class="muted">{{ s.footerNote }}</p>
+</aside>

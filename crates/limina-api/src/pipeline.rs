@@ -1,0 +1,651 @@
+//! The automatic pipeline of `POST /v1/analyze` for claims with no
+//! built-in limit, the trace of every claim, and the endpoints that serve
+//! the explorer: `POST /v1/curve`, `POST /v1/transcribe`, `GET /v1/pipeline`.
+//!
+//! For a claim with no built-in limit: (i) a model names the established
+//! law that bounds it, or answers "no law identified"; (ii) two models
+//! write that law in the DSL and the two definitions are compared on 200
+//! samples; (iii) a second extraction pass reads the law's parameters from
+//! the same text with the same evidence rules; (iv) the claim is evaluated
+//! by the engine, only when the two models agree. Every step is recorded.
+
+use std::collections::BTreeMap;
+
+use axum::body::Bytes;
+use axum::extract::State;
+use axum::Json;
+use limina_core::{
+    AssumptionId, ConstraintsMap, Direction, DomainRange, EngineError, Limit, OptionId,
+};
+use limina_dsl::{bound_curve, decisive, CurveError, DeclarativeLimit, Registry};
+use limina_extract::check::{number_in, LIMIT_NOT_RECOGNIZED};
+use limina_extract::{
+    transcribe_image, AuthorError, ImageInput, LawStatus, ModelAttempt, TwoModelLaw,
+    WantedParameter,
+};
+
+use crate::authoring::{si, verdict_name};
+use crate::dto::{
+    AnalyzedClaimDto, AnalyzedParameterDto, ClaimDto, ComparisonDto, CurvePointDto, CurveRequest,
+    CurveResponse, EvaluateRequest, EvidenceDto, LawAttemptDto, LawDto, ParameterDto,
+    PipelineInfoDto, TraceStepDto, TranscribeRequest, TranscribeResponse,
+};
+use crate::error::ApiError;
+use crate::handlers::evaluate_draft;
+use crate::{registry, AppState};
+
+/// Status word of a step that ran and succeeded.
+pub const DONE: &str = "done";
+/// Status word of a step that ran and failed.
+pub const FAILED: &str = "failed";
+/// Status word of a step that did not run.
+pub const SKIPPED: &str = "skipped";
+
+/// Default number of points of `POST /v1/curve`.
+pub const DEFAULT_CURVE_POINTS: usize = 101;
+
+fn step(name: &str, status: &'static str, detail: impl Into<String>) -> TraceStepDto {
+    TraceStepDto {
+        step: name.to_string(),
+        status,
+        detail: detail.into(),
+    }
+}
+
+fn number(v: f64) -> String {
+    if v != 0.0 && (v.abs() >= 1e6 || v.abs() < 1e-3) {
+        format!("{v:e}")
+    } else {
+        format!("{v}")
+    }
+}
+
+fn verdict_step(claim: &AnalyzedClaimDto) -> TraceStepDto {
+    match (&claim.result, &claim.reason) {
+        (Some(r), _) => step("evaluation", DONE, format!("engine verdict {}", r.verdict)),
+        (None, Some(reason)) => step("evaluation", FAILED, format!("not evaluated: {reason}")),
+        (None, None) => step("evaluation", FAILED, "not evaluated"),
+    }
+}
+
+fn parameters_detail(claim: &AnalyzedClaimDto, declared: &[String]) -> (bool, String) {
+    let mut found = Vec::new();
+    let mut missing = Vec::new();
+    for name in declared {
+        match claim.parameters.get(name) {
+            Some(p) if p.value.is_some() => found.push(format!(
+                "{name} = {} {}",
+                number(p.value.unwrap_or(0.0)),
+                p.unit
+            )),
+            Some(p) => missing.push(format!("{name} ({})", p.flags.join(", "))),
+            None => missing.push(format!("{name} (not stated in the text)")),
+        }
+    }
+    let mut parts = Vec::new();
+    if !found.is_empty() {
+        parts.push(format!("found {}", found.join(", ")));
+    }
+    if !missing.is_empty() {
+        parts.push(format!("missing {}", missing.join(", ")));
+    }
+    if parts.is_empty() {
+        parts.push("the limit needs no parameter".to_string());
+    }
+    (missing.is_empty(), parts.join("; "))
+}
+
+fn extraction_step(claim: &AnalyzedClaimDto, cached: bool) -> TraceStepDto {
+    let at = claim
+        .evidence
+        .as_ref()
+        .map(|e| format!(", evidence \"{}\"", e.text))
+        .unwrap_or_else(|| ", no evidence found in the text".to_string());
+    let flags = if claim.flags.is_empty() {
+        String::new()
+    } else {
+        format!("; flags: {}", claim.flags.join(", "))
+    };
+    step(
+        "extraction",
+        DONE,
+        format!(
+            "read {}: {} {}{at}{}{flags}",
+            claim.quantity,
+            number(claim.raw_value),
+            claim.raw_unit,
+            if cached { " (cached answer)" } else { "" }
+        ),
+    )
+}
+
+fn built_in(claim: &AnalyzedClaimDto) -> Option<String> {
+    let id = claim.limit_id.clone()?;
+    (registry::find_limit(&id).is_some() && !claim.flags.iter().any(|f| f == LIMIT_NOT_RECOGNIZED))
+        .then_some(id)
+}
+
+/// Adds the trace to every claim, and runs the law pipeline on the claims
+/// with no built-in limit when two-model authoring is configured.
+pub async fn complete_claims(
+    state: &AppState,
+    text: &str,
+    claims: &mut Vec<AnalyzedClaimDto>,
+    cached: bool,
+) {
+    merge_duplicates(claims);
+    for claim in claims.iter_mut() {
+        let first = extraction_step(claim, cached);
+        claim.trace.insert(0, first);
+        if let Some(id) = built_in(claim) {
+            claim
+                .trace
+                .push(step("limit", DONE, format!("built-in limit {id}")));
+            let declared: Vec<String> = registry::find_limit(&id)
+                .map(|l| {
+                    l.parameters()
+                        .iter()
+                        .map(|p| p.id.as_str().to_string())
+                        .collect()
+                })
+                .unwrap_or_default();
+            let (all, detail) = parameters_detail(claim, &declared);
+            claim
+                .trace
+                .push(step("parameters", if all { DONE } else { FAILED }, detail));
+            claim.trace.push(verdict_step(claim));
+            claim.law = Some(LawDto {
+                source: "built_in",
+                limit_id: Some(id),
+                sentence: None,
+                attempts: Vec::new(),
+                comparison: None,
+            });
+            continue;
+        }
+        claim.trace.push(step(
+            "limit",
+            FAILED,
+            "no built-in limit matches this claim",
+        ));
+        law_pipeline(state, text, claim).await;
+    }
+}
+
+fn overlaps(a: &Option<EvidenceDto>, b: &Option<EvidenceDto>) -> bool {
+    match (a, b) {
+        (Some(a), Some(b)) => a.start < b.end && b.start < a.end,
+        _ => false,
+    }
+}
+
+/// A claim with no built-in limit that reads the same number at the same
+/// place as a claim with a built-in limit is the same claim read twice by
+/// the model: it is dropped, and the kept claim says so in its trace.
+fn merge_duplicates(claims: &mut Vec<AnalyzedClaimDto>) {
+    let mut drop = vec![false; claims.len()];
+    let mut merged = vec![0usize; claims.len()];
+    for i in 0..claims.len() {
+        if built_in(&claims[i]).is_some() {
+            continue;
+        }
+        let twin = (0..claims.len()).find(|&j| {
+            j != i
+                && !drop[j]
+                && built_in(&claims[j]).is_some()
+                && claims[j].raw_value == claims[i].raw_value
+                && overlaps(&claims[j].evidence, &claims[i].evidence)
+        });
+        if let Some(j) = twin {
+            drop[i] = true;
+            merged[j] += 1;
+        }
+    }
+    let mut k = 0;
+    claims.retain(|_| {
+        k += 1;
+        !drop[k - 1]
+    });
+    let kept: Vec<usize> = (0..merged.len())
+        .filter(|i| !drop[*i])
+        .map(|i| merged[i])
+        .collect();
+    for (claim, n) in claims.iter_mut().zip(kept) {
+        if n > 0 {
+            claim.trace.push(step(
+                "deduplication",
+                DONE,
+                format!("{n} other reading(s) of the same number at the same place, without a known limit, merged into this claim"),
+            ));
+        }
+    }
+}
+
+fn attempt_dto(a: &ModelAttempt) -> LawAttemptDto {
+    match &a.result {
+        Ok(x) => LawAttemptDto {
+            model: a.model.clone(),
+            ok: true,
+            attempts: x.attempts,
+            errors: x.errors.clone(),
+            definition: Some(x.definition.clone()),
+        },
+        Err(AuthorError::NotAuthored {
+            attempts, errors, ..
+        }) => LawAttemptDto {
+            model: a.model.clone(),
+            ok: false,
+            attempts: *attempts,
+            errors: errors.clone(),
+            definition: None,
+        },
+        Err(e) => LawAttemptDto {
+            model: a.model.clone(),
+            ok: false,
+            attempts: 0,
+            errors: vec![e.to_string()],
+            definition: None,
+        },
+    }
+}
+
+fn attempt_step(a: &ModelAttempt) -> TraceStepDto {
+    let name = format!("authoring by {}", a.model);
+    match &a.result {
+        Ok(x) => step(
+            &name,
+            DONE,
+            format!(
+                "valid definition after {} attempt(s){}; DSL checks passed; formula {}",
+                x.attempts,
+                if x.errors.is_empty() {
+                    String::new()
+                } else {
+                    format!(" (repaired: {})", x.errors.join(" | "))
+                },
+                x.definition
+                    .formula
+                    .clone()
+                    .unwrap_or_else(|| "per option".into())
+            ),
+        ),
+        Err(e) => step(&name, FAILED, e.to_string()),
+    }
+}
+
+fn comparison_step(law: &TwoModelLaw) -> TraceStepDto {
+    match (law.status, &law.comparison) {
+        (LawStatus::Agreed, Some(c)) => step(
+            "comparison",
+            DONE,
+            format!(
+                "draft_agreed: the two definitions agree on {} samples (largest relative difference {:e})",
+                c.samples, c.max_relative_difference
+            ),
+        ),
+        (_, Some(c)) => step(
+            "comparison",
+            FAILED,
+            format!(
+                "draft_disputed: {}",
+                c.reason.clone().unwrap_or_else(|| "the definitions differ".into())
+            ),
+        ),
+        (LawStatus::NotAuthored, None) => step(
+            "comparison",
+            SKIPPED,
+            "not_authored: neither model wrote a valid definition",
+        ),
+        (_, None) => step(
+            "comparison",
+            FAILED,
+            "draft_disputed: only one model wrote a valid definition",
+        ),
+    }
+}
+
+fn needs_input(claim: &mut AnalyzedClaimDto, reason: &str) {
+    claim.status = crate::analyze::NEEDS_INPUT;
+    claim.result = None;
+    claim.reason = Some(reason.to_string());
+}
+
+/// Steps (i) to (iv) for one claim with no built-in limit.
+async fn law_pipeline(state: &AppState, text: &str, claim: &mut AnalyzedClaimDto) {
+    let (Some(extractor), Some(second)) = (state.extractor(), state.second()) else {
+        claim.trace.push(step(
+            "law",
+            SKIPPED,
+            "two-model law authoring is not configured on this server",
+        ));
+        return;
+    };
+    let traced = claim
+        .evidence
+        .as_ref()
+        .is_some_and(|e| number_in(&e.text, claim.raw_value));
+    let Some(evidence) = claim.evidence.clone().filter(|_| traced) else {
+        claim.trace.push(step(
+            "law",
+            SKIPPED,
+            "claim value not traceable to the text",
+        ));
+        return;
+    };
+    // (i) Which law bounds this quantity.
+    let question = format!(
+        "Quantity: {}. Claimed value: {} {}. Sentence: {}",
+        claim.quantity,
+        number(claim.raw_value),
+        claim.raw_unit,
+        evidence.text
+    );
+    let sentence = match extractor.identify_law(&question).await {
+        Ok(Some(s)) => {
+            claim.trace.push(step("law", DONE, s.clone()));
+            s
+        }
+        Ok(None) => {
+            claim
+                .trace
+                .push(step("law", FAILED, limina_extract::NO_LAW));
+            claim.law = Some(LawDto {
+                source: "no_law_identified",
+                limit_id: None,
+                sentence: None,
+                attempts: Vec::new(),
+                comparison: None,
+            });
+            needs_input(claim, "no established law identified for this quantity");
+            return;
+        }
+        Err(e) => {
+            claim.trace.push(step("law", FAILED, e.to_string()));
+            needs_input(claim, &format!("the law could not be identified: {e}"));
+            return;
+        }
+    };
+    // (ii) Two models write it; the definitions are compared.
+    let brief = format!(
+        "{sentence}\nThe bounded quantity is: {} (claimed in {}).",
+        claim.quantity, claim.raw_unit
+    );
+    let law = extractor.author_two(second, &brief).await;
+    claim.trace.push(attempt_step(&law.a));
+    claim.trace.push(attempt_step(&law.b));
+    claim.trace.push(comparison_step(&law));
+    let agreed = law.agreed_limit().cloned();
+    claim.law = Some(LawDto {
+        source: law.status.as_str(),
+        limit_id: agreed.as_ref().map(|a| a.definition.id.clone()),
+        sentence: Some(sentence),
+        attempts: vec![attempt_dto(&law.a), attempt_dto(&law.b)],
+        comparison: law.comparison.as_ref().map(|c| ComparisonDto {
+            samples: c.samples,
+            max_relative_difference: c.max_relative_difference,
+            reason: c.reason.clone(),
+        }),
+    });
+    let Some(authored) = agreed else {
+        let reason = match law.status {
+            LawStatus::NotAuthored => "no valid definition of the law could be written",
+            _ => "the two models wrote different laws; no verdict is given",
+        };
+        claim
+            .trace
+            .push(step("parameters", SKIPPED, "no agreed law"));
+        claim.trace.push(step(
+            "evaluation",
+            SKIPPED,
+            format!("not evaluated: {reason}"),
+        ));
+        needs_input(claim, reason);
+        return;
+    };
+    let id = authored.definition.id.clone();
+    state.register(authored.limit.clone());
+    state.set_agreement(&id, LawStatus::Agreed.as_str());
+    claim.limit_id = Some(id.clone());
+    // (iii) The law's parameters, from the same text.
+    let wanted: Vec<WantedParameter> = authored
+        .definition
+        .parameters
+        .iter()
+        .map(|p| WantedParameter {
+            name: p.name.clone(),
+            units: p.units.clone(),
+            meaning: String::new(),
+        })
+        .collect();
+    claim.parameters.clear();
+    if wanted.is_empty() {
+        claim
+            .trace
+            .push(step("parameters", SKIPPED, "the law needs no parameter"));
+    } else {
+        match extractor.extract_parameters(text, &wanted).await {
+            Ok(found) => {
+                for f in found {
+                    claim.parameters.insert(
+                        f.name.clone(),
+                        AnalyzedParameterDto {
+                            value: f.value,
+                            raw_value: f.value.unwrap_or(f64::NAN),
+                            unit: f.unit,
+                            evidence: f.evidence.map(|s| EvidenceDto {
+                                text: s.text,
+                                start: s.start,
+                                end: s.end,
+                            }),
+                            flags: f.flags,
+                        },
+                    );
+                }
+                let names: Vec<String> = wanted.iter().map(|w| w.name.clone()).collect();
+                let (all, detail) = parameters_detail(claim, &names);
+                claim
+                    .trace
+                    .push(step("parameters", if all { DONE } else { FAILED }, detail));
+            }
+            Err(e) => claim.trace.push(step(
+                "parameters",
+                FAILED,
+                format!("second extraction pass failed: {e}"),
+            )),
+        }
+    }
+    // (iv) The engine.
+    let (value, unit) = if claim.raw_unit == "%" {
+        claim.notes.push(format!(
+            "{} % becomes {}",
+            number(claim.raw_value),
+            number(claim.raw_value / 100.0)
+        ));
+        (claim.raw_value / 100.0, "dimensionless".to_string())
+    } else {
+        (claim.raw_value, claim.raw_unit.clone())
+    };
+    claim.value = Some(value);
+    claim.unit = unit.clone();
+    let request = EvaluateRequest {
+        limit_id: id,
+        claim: ClaimDto {
+            value,
+            unit,
+            uncertainty: None,
+        },
+        constraints: BTreeMap::new(),
+        parameters: claim
+            .parameters
+            .iter()
+            .filter_map(|(k, p)| {
+                p.value.map(|v| {
+                    (
+                        k.clone(),
+                        ParameterDto {
+                            value: v,
+                            unit: p.unit.clone(),
+                        },
+                    )
+                })
+            })
+            .collect(),
+    };
+    match evaluate_draft(&authored.limit, &request) {
+        Ok(result) => {
+            claim.status = crate::analyze::EVALUATED;
+            claim.reason = None;
+            claim.code = None;
+            claim.result = Some(result);
+        }
+        Err(e) => {
+            claim.code = Some(e.code());
+            needs_input(claim, &e.to_string());
+        }
+    }
+    claim.trace.push(verdict_step(claim));
+}
+
+/// `GET /v1/pipeline`.
+pub async fn info(State(state): State<AppState>) -> Json<PipelineInfoDto> {
+    Json(state.pipeline_info())
+}
+
+/// `POST /v1/transcribe`: the text of an image, read by the vision model.
+/// The text is then analysed like any pasted text.
+pub async fn transcribe(
+    State(state): State<AppState>,
+    body: Bytes,
+) -> Result<Json<TranscribeResponse>, ApiError> {
+    let request: TranscribeRequest =
+        serde_json::from_slice(&body).map_err(|e| ApiError::InvalidJson(e.to_string()))?;
+    let vision = state.vision().ok_or(ApiError::ExtractionUnavailable)?;
+    let text = transcribe_image(
+        vision,
+        ImageInput {
+            mime: request.mime,
+            base64: request.base64,
+        },
+    )
+    .await?;
+    Ok(Json(TranscribeResponse {
+        text,
+        model: vision.model().to_string(),
+    }))
+}
+
+/// The DSL definition behind a limit id: the embedded built-in one or the
+/// authored one.
+fn definition_of(state: &AppState, id: &str) -> Option<DeclarativeLimit> {
+    Registry::builtin()
+        .ok()
+        .and_then(|r| r.get(id).cloned())
+        .or_else(|| state.authored(id))
+}
+
+fn default_range(state: &AppState, limit: &dyn Limit, id: &str, free: &str) -> Option<(f64, f64)> {
+    let spec = limit.parameters().iter().find(|p| p.id.as_str() == free)?;
+    if let Some(DomainRange::Interval(i)) = spec.plausible.as_ref().map(|d| &d.range) {
+        return Some((i.lo(), i.hi()));
+    }
+    definition_of(state, id)?
+        .definition()
+        .parameters
+        .iter()
+        .find(|p| p.name == free)
+        .and_then(|p| p.test_range)
+        .map(|[lo, hi]| (lo, hi))
+}
+
+/// `POST /v1/curve`: the bound against one parameter, computed by the
+/// limit itself, for the explorer. No verdict.
+pub async fn curve(
+    State(state): State<AppState>,
+    body: Bytes,
+) -> Result<Json<CurveResponse>, ApiError> {
+    let request: CurveRequest =
+        serde_json::from_slice(&body).map_err(|e| ApiError::InvalidJson(e.to_string()))?;
+    Ok(Json(curve_with(&state, &request)?))
+}
+
+/// The curve itself, shared by the endpoint and its tests.
+pub fn curve_with(state: &AppState, request: &CurveRequest) -> Result<CurveResponse, ApiError> {
+    let id = request.limit_id.as_str();
+    let limit: Box<dyn Limit> = match registry::find_limit(id) {
+        Some(l) => l,
+        None => Box::new(
+            state
+                .authored(id)
+                .ok_or_else(|| ApiError::UnknownLimit(id.to_string()))?,
+        ),
+    };
+    let mut constraints = ConstraintsMap::new();
+    for (a, options) in &request.constraints {
+        constraints.allow(
+            AssumptionId::new(a),
+            options.iter().map(OptionId::new).collect(),
+        );
+    }
+    if !limit
+        .parameters()
+        .iter()
+        .any(|s| s.id.as_str() == request.free_parameter)
+    {
+        return Err(ApiError::UnknownFreeParameter(
+            request.free_parameter.clone(),
+        ));
+    }
+    let mut fixed = BTreeMap::new();
+    for (name, p) in &request.parameters {
+        if !limit.parameters().iter().any(|s| s.id.as_str() == name) {
+            return Err(EngineError::UnknownParameter(name.clone()).into());
+        }
+        if name != &request.free_parameter {
+            fixed.insert(name.clone(), si(p.value, &p.unit)?);
+        }
+    }
+    let range = match request.range {
+        Some([lo, hi]) => (lo, hi),
+        None => default_range(state, limit.as_ref(), id, &request.free_parameter)
+            .ok_or_else(|| ApiError::NoSearchRange(request.free_parameter.clone()))?,
+    };
+    let points = request.points.unwrap_or(DEFAULT_CURVE_POINTS);
+    let curve = bound_curve(
+        limit.as_ref(),
+        &constraints,
+        &fixed,
+        &request.free_parameter,
+        range,
+        points,
+    )
+    .map_err(|e| match e {
+        CurveError::UnknownFreeParameter(p) => ApiError::UnknownFreeParameter(p),
+        CurveError::MissingFixedParameter(p) => ApiError::MissingFixedParameter(p),
+        CurveError::Invalid(m) => ApiError::InvalidCurveRequest(m),
+        CurveError::Engine(e) => ApiError::Engine(e),
+    })?;
+    let direction = limit.direction();
+    Ok(CurveResponse {
+        limit_id: id.to_string(),
+        direction: match direction {
+            Direction::Max => "Max",
+            Direction::Min => "Min",
+        },
+        free_parameter: request.free_parameter.clone(),
+        range: [range.0, range.1],
+        points: curve
+            .iter()
+            .map(|p| CurvePointDto {
+                x: p.x,
+                b_min: p.b_min,
+                b_max: p.b_max,
+                decisive: decisive(direction, p),
+            })
+            .collect(),
+    })
+}
+
+/// Name of the engine verdict, re-exported for the trace of other callers.
+pub fn verdict_word(v: &limina_core::Verdict) -> &'static str {
+    verdict_name(v)
+}

@@ -1,0 +1,143 @@
+<section class="wb-input" aria-labelledby="wb-input-label">
+  <div class="wb-input-head">
+    <label id="wb-input-label" for="wb-text">{{ s.inputLabel }}</label>
+    <span class="muted">{{ s.inputIllustrative }}</span>
+    <span class="muted">{{ info()?.vision ? s.inputImageHint : '' }}</span>
+  </div>
+  <div class="wb-input-row">
+    <textarea
+      id="wb-text"
+      class="control wb-text"
+      [value]="text()"
+      (input)="text.set($any($event.target).value)"
+      (drop)="onDrop($event)"
+      (dragover)="$event.preventDefault()"
+      (paste)="onPaste($event)"
+    ></textarea>
+    <button type="button" class="wb-analyze" (click)="run()" [disabled]="running()">
+      {{ running() ? s.analyzing : s.analyze }}
+    </button>
+  </div>
+</section>
+
+<div class="wb-columns">
+  <section class="wb-trace" aria-labelledby="wb-trace-title" aria-live="polite">
+    <h2 id="wb-trace-title" class="wb-title">{{ s.traceTitle }}</h2>
+    @if (log().length === 0 && !claim()) {
+      <p class="muted">{{ s.traceEmpty }}</p>
+    }
+    @if (log().length) {
+      <ol class="wb-log">
+        @for (l of log(); track $index) {
+          <li><span class="wb-status">{{ l.status === 'running' ? s.traceRunning : s.traceStatus[l.status] }}</span> {{ l.text }}</li>
+        }
+      </ol>
+    }
+    @if (claim(); as c) {
+      <ol class="wb-steps">
+        @for (t of c.trace; track $index) {
+          <li class="wb-step">
+            <span class="wb-step-name">{{ t.step }}</span>
+            <span class="wb-status">{{ s.traceStatus[t.status] }}</span>
+            <span class="wb-step-detail">{{ t.detail }}</span>
+          </li>
+        }
+      </ol>
+    }
+    @if (entry(); as e) {
+      @if (e.kind === 'failure') {
+        <ol class="wb-steps">
+          <li class="wb-step">
+            <span class="wb-step-name">extraction</span>
+            <span class="wb-status">{{ s.traceStatus['failed'] }}</span>
+            <span class="wb-step-detail">{{ e.failure.code }}: {{ e.failure.message }} ({{ e.attempts }} answer(s))</span>
+          </li>
+        </ol>
+      }
+    }
+  </section>
+
+  <section class="wb-claims" aria-labelledby="wb-claims-title">
+    <h2 id="wb-claims-title" class="wb-title">{{ s.claimsTitle }}</h2>
+    @if (entries().length === 0) {
+      <p class="muted">{{ analysed() && !running() ? s.claimsNone : s.claimsEmpty }}</p>
+    } @else {
+      <div class="wb-tabs" role="tablist" [attr.aria-label]="s.claimsTitle">
+        @for (e of entries(); track $index) {
+          <button
+            type="button"
+            role="tab"
+            class="wb-tab"
+            [id]="'wb-tab-' + $index"
+            [attr.aria-selected]="selected() === $index"
+            [attr.tabindex]="selected() === $index ? 0 : -1"
+            (click)="select($index)"
+            (keydown)="onKey($event, $index)"
+          >
+            <span class="wb-tab-verdict">{{ label(e) }}</span>
+            <span class="wb-tab-title">{{ tabTitle(e) }}</span>
+          </button>
+        }
+      </div>
+      <div class="wb-panel" role="tabpanel" [attr.aria-labelledby]="'wb-tab-' + selected()" aria-live="polite">
+        @if (claim(); as c) {
+          <div class="wb-head">
+            <p class="verdict {{ verdictClass(c) }}">{{ c.result?.verdict?.replace('_', ' ') ?? s.needsInput }}</p>
+            <p class="wb-badge">{{ badgeOf(c) }}</p>
+            <p class="mono wb-limit">{{ c.limit_id ?? '' }}</p>
+          </div>
+          @if (c.result) {
+            <p class="wording">{{ c.result.wording }}</p>
+          }
+          <dl class="wb-figures">
+            <dt>{{ s.claimLine }}</dt>
+            <dd class="num">{{ number(c.value ?? c.raw_value) }} {{ c.value !== null ? c.unit : c.raw_unit }}</dd>
+            <dt>{{ s.boundLine }}</dt>
+            <dd class="num">{{ bound(c) }}</dd>
+          </dl>
+          @if (c.law?.sentence) {
+            <p class="wb-law"><span class="muted">{{ s.lawSentence }}:</span> {{ c.law?.sentence }}</p>
+          }
+          <div class="wb-explain">
+            <h3 class="wb-subtitle">{{ s.explainTitle }}</h3>
+            @for (line of explanation(); track $index) {
+              <p>{{ line }}</p>
+            }
+            @if (solved()[selected()]; as sentence) {
+              <p>{{ sentence }}</p>
+            }
+          </div>
+          <div class="wb-visual">
+            @if (c.limit_id && limit()) {
+              <app-explorer [claim]="c" [limit]="limit()" />
+            } @else {
+              <p class="muted">{{ s.explorerUnavailable }}</p>
+            }
+            @if (c.limit_id === 'carnot') {
+              <div class="wb-apparatus">
+                <app-carnot-apparatus [th]="paramText(c, 'Th')" [tc]="paramText(c, 'Tc')" [claim]="number(c.value)" />
+              </div>
+            } @else if (c.limit_id === 'cop') {
+              <div class="wb-apparatus">
+                <app-cop-apparatus
+                  [th]="paramText(c, 'Th')"
+                  [tc]="paramText(c, 'Tc')"
+                  [claim]="number(c.value)"
+                  [mode]="c.constraints['mode'] === 'cooling' ? 'cooling' : c.constraints['mode'] === 'heating' ? 'heating' : ''"
+                  [twinVerdicts]="twinOf(selected())"
+                  [evaluated]="true"
+                />
+              </div>
+            }
+          </div>
+        } @else if (entry(); as e) {
+          @if (e.kind === 'failure') {
+            <p class="verdict verdict--insufficient-data">{{ s.paragraphFailed }}</p>
+            <p class="error-block"><span class="mono">{{ e.failure.code }}</span> {{ e.failure.message }}</p>
+            <p class="muted">{{ e.text }}</p>
+          }
+        }
+      </div>
+    }
+  </section>
+</div>

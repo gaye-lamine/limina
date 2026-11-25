@@ -155,6 +155,7 @@ pub fn describe(limit: &dyn Limit) -> LimitDto {
             })
             .collect(),
         status: None,
+        agreement: None,
     }
 }
 

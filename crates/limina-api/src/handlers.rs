@@ -19,12 +19,11 @@ pub async fn healthz() -> Json<Value> {
 /// `GET /v1/limits`: the served limits, then the authored drafts.
 pub async fn limits(State(state): State<AppState>) -> Json<LimitsResponse> {
     let mut list = registry::list();
-    list.limits.extend(
-        state
-            .authored_limits()
-            .iter()
-            .map(registry::describe_authored),
-    );
+    list.limits.extend(state.authored_limits().iter().map(|l| {
+        let mut dto = registry::describe_authored(l);
+        dto.agreement = state.agreement(&dto.id);
+        dto
+    }));
     Json(list)
 }
 
@@ -53,7 +52,7 @@ pub async fn evaluate(
 }
 
 /// The evaluation of an authored limit, worded as a draft.
-fn evaluate_draft(
+pub fn evaluate_draft(
     limit: &DeclarativeLimit,
     request: &EvaluateRequest,
 ) -> Result<EvaluateResponse, ApiError> {

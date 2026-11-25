@@ -11,7 +11,10 @@ describe('App "How it works"', () => {
     }).compileComponents();
     const fixture = TestBed.createComponent(App);
     await fixture.whenStable();
-    TestBed.inject(HttpTestingController).expectOne('/v1/limits').flush({ limits: [] });
+    const http = TestBed.inject(HttpTestingController);
+    for (const r of http.match('/v1/limits')) r.flush({ limits: [] });
+    for (const r of http.match('/v1/pipeline'))
+      r.flush({ extraction: false, law_authoring: false, vision: false, models: [] });
     await fixture.whenStable();
     return fixture.nativeElement as HTMLElement;
   }

@@ -5,7 +5,10 @@ use std::collections::VecDeque;
 use std::sync::Mutex;
 
 use crate::catalog::{Catalog, CatalogAssumption, CatalogLimit, CatalogOption, CatalogParameter};
-use crate::provider::{BoxFuture, ChatReply, ChatRequest, ExtractionProvider, ProviderError};
+use crate::provider::{
+    BoxFuture, ChatReply, ChatRequest, ExtractionProvider, ImageInput, ProviderError,
+    VisionProvider,
+};
 
 /// A provider that answers from a queue and records what it was sent.
 /// With an empty queue it answers HTTP 500.
@@ -71,6 +74,84 @@ impl ExtractionProvider for MockProvider {
             .pop_front()
             .unwrap_or(Err(ProviderError::Status(500)));
         Box::pin(async move { reply })
+    }
+}
+
+/// A vision model that answers from a queue and records the images sent.
+/// With an empty queue it answers HTTP 500.
+#[derive(Debug, Default)]
+pub struct MockVision {
+    replies: Mutex<VecDeque<Result<ChatReply, ProviderError>>>,
+    images: Mutex<Vec<ImageInput>>,
+}
+
+impl MockVision {
+    /// An empty mock.
+    pub fn new() -> MockVision {
+        MockVision::default()
+    }
+
+    /// Queues one successful transcription.
+    pub fn push_content(&self, content: &str) {
+        self.replies
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .push_back(Ok(ChatReply {
+                content: Some(content.to_string()),
+                finish_reason: Some("stop".to_string()),
+            }));
+    }
+
+    /// How many images were sent.
+    pub fn calls(&self) -> usize {
+        self.images.lock().unwrap_or_else(|p| p.into_inner()).len()
+    }
+}
+
+impl VisionProvider for MockVision {
+    fn model(&self) -> &str {
+        "mock-vision"
+    }
+    fn transcribe(&self, image: ImageInput) -> BoxFuture<'_, Result<ChatReply, ProviderError>> {
+        self.images
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .push(image);
+        let reply = self
+            .replies
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .pop_front()
+            .unwrap_or(Err(ProviderError::Status(500)));
+        Box::pin(async move { reply })
+    }
+}
+
+/// A mock provider with its own model id, for two-model tests.
+#[derive(Debug, Default)]
+pub struct NamedMock {
+    /// Its model id.
+    pub name: String,
+    /// The scripted provider.
+    pub inner: MockProvider,
+}
+
+impl NamedMock {
+    /// An empty mock reporting this model id.
+    pub fn new(name: &str) -> NamedMock {
+        NamedMock {
+            name: name.to_string(),
+            inner: MockProvider::new(),
+        }
+    }
+}
+
+impl ExtractionProvider for NamedMock {
+    fn model(&self) -> &str {
+        &self.name
+    }
+    fn complete(&self, request: ChatRequest) -> BoxFuture<'_, Result<ChatReply, ProviderError>> {
+        self.inner.complete(request)
     }
 }
 

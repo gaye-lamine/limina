@@ -7,6 +7,12 @@ pub const DEFAULT_MODEL: &str = "nvidia/nemotron-3.5-lightning-30b-a3b";
 /// Default OpenAI-compatible base URL.
 pub const DEFAULT_BASE_URL: &str = "https://integrate.api.nvidia.com/v1";
 
+/// Default second model for two-model law authoring (`LIMINA_LLM_MODEL_B`).
+pub const DEFAULT_SECOND_MODEL: &str = "nvidia/nemotron-3-ultra-550b-a55b";
+
+/// Default vision-language model for image input (`LIMINA_LLM_VISION_MODEL`).
+pub const DEFAULT_VISION_MODEL: &str = "nvidia/nemotron-3.5-super-vl-120b-a12b";
+
 /// The provider key. It has no `Display` and no `Serialize`; its `Debug`
 /// prints `[redacted]`. Only the provider implementation reads it.
 #[derive(Clone)]
@@ -43,6 +49,8 @@ pub struct ExtractConfig {
     base_url: String,
     disable_thinking: bool,
     api_key: Option<SecretKey>,
+    second_model: String,
+    vision_model: String,
 }
 
 impl ExtractConfig {
@@ -65,6 +73,10 @@ impl ExtractConfig {
                 .to_string(),
             disable_thinking,
             api_key: get("NVIDIA_API_KEY").map(SecretKey::new),
+            second_model: get("LIMINA_LLM_MODEL_B")
+                .unwrap_or_else(|| DEFAULT_SECOND_MODEL.to_string()),
+            vision_model: get("LIMINA_LLM_VISION_MODEL")
+                .unwrap_or_else(|| DEFAULT_VISION_MODEL.to_string()),
         }
     }
 
@@ -95,6 +107,23 @@ impl ExtractConfig {
 
     pub(crate) fn api_key(&self) -> Option<&SecretKey> {
         self.api_key.as_ref()
+    }
+
+    /// Second model id, for two-model law authoring (`LIMINA_LLM_MODEL_B`).
+    pub fn second_model(&self) -> &str {
+        &self.second_model
+    }
+
+    /// Vision-language model id, for image input (`LIMINA_LLM_VISION_MODEL`).
+    pub fn vision_model(&self) -> &str {
+        &self.vision_model
+    }
+
+    /// The same settings with another model id.
+    pub fn with_model(&self, model: &str) -> ExtractConfig {
+        let mut c = self.clone();
+        c.model = model.to_string();
+        c
     }
 }
 

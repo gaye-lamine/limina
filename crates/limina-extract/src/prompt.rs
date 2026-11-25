@@ -68,6 +68,7 @@ pub fn system_prompt(catalog: &Catalog) -> String {
         s.push_str(".\n");
     }
     s.push_str("\nRules:\n");
+    s.push_str("- List every numeric performance claim of the text. A claim that none of the limits above covers gets limit_id null, its own quantity, value, unit and evidence, empty constraints and empty parameters.\n");
     s.push_str("- evidence is an exact quotation from the text that contains the number.\n");
     s.push_str("- value is the number as written in the text; unit is the unit as written: \"%\" for a percentage, \"dimensionless\" for a pure number.\n");
     s.push_str("- Use only the parameter names and units listed above. Never convert a unit.\n");

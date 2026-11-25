@@ -13,6 +13,7 @@ pub mod dto;
 pub mod error;
 pub mod handlers;
 pub mod labels;
+pub mod pipeline;
 pub mod registry;
 pub mod response;
 
@@ -24,7 +25,10 @@ use limina_dsl::DeclarativeLimit;
 
 use axum::routing::{get, post};
 use axum::Router;
-use limina_extract::{ExtractConfig, ExtractError, ExtractionProvider, Extractor, OpenAiProvider};
+use limina_extract::{
+    ExtractConfig, ExtractError, ExtractionProvider, Extractor, OpenAiProvider, VisionProvider,
+};
+use std::collections::BTreeMap;
 
 /// Shared state: the extractor, present only when a key is configured, and
 /// the limits authored while the server runs (in memory, never persisted).
@@ -32,6 +36,9 @@ use limina_extract::{ExtractConfig, ExtractError, ExtractionProvider, Extractor,
 pub struct AppState {
     extractor: Option<Arc<Extractor>>,
     authored: Arc<RwLock<Vec<DeclarativeLimit>>>,
+    second: Option<Arc<dyn ExtractionProvider>>,
+    vision: Option<Arc<dyn VisionProvider>>,
+    agreements: Arc<RwLock<BTreeMap<String, String>>>,
 }
 
 impl fmt::Debug for AppState {
@@ -53,9 +60,72 @@ impl AppState {
         if !config.has_key() {
             return Ok(AppState::default());
         }
-        Ok(AppState::with_provider(Arc::new(OpenAiProvider::new(
-            config,
-        )?)))
+        let second = OpenAiProvider::new(&config.with_model(config.second_model()))?;
+        let vision = OpenAiProvider::new(&config.with_model(config.vision_model()))?;
+        Ok(
+            AppState::with_provider(Arc::new(OpenAiProvider::new(config)?))
+                .with_second_model(Arc::new(second))
+                .with_vision(Arc::new(vision)),
+        )
+    }
+
+    /// Enables two-model law authoring in `POST /v1/analyze`, with this
+    /// provider as model B. Without it, a claim with no built-in limit is
+    /// reported as such and nothing is authored.
+    pub fn with_second_model(mut self, provider: Arc<dyn ExtractionProvider>) -> AppState {
+        self.second = Some(provider);
+        self
+    }
+
+    /// Enables `POST /v1/transcribe` with this vision model.
+    pub fn with_vision(mut self, vision: Arc<dyn VisionProvider>) -> AppState {
+        self.vision = Some(vision);
+        self
+    }
+
+    pub(crate) fn second(&self) -> Option<&dyn ExtractionProvider> {
+        self.second.as_deref()
+    }
+
+    pub(crate) fn vision(&self) -> Option<&dyn VisionProvider> {
+        self.vision.as_deref()
+    }
+
+    /// Records the agreement status of an authored limit.
+    pub fn set_agreement(&self, id: &str, status: &str) {
+        self.agreements
+            .write()
+            .unwrap_or_else(|p| p.into_inner())
+            .insert(id.to_string(), status.to_string());
+    }
+
+    /// The agreement status of an authored limit, when it has one.
+    pub fn agreement(&self, id: &str) -> Option<String> {
+        self.agreements
+            .read()
+            .unwrap_or_else(|p| p.into_inner())
+            .get(id)
+            .cloned()
+    }
+
+    /// What the pipeline can do: `GET /v1/pipeline`.
+    pub fn pipeline_info(&self) -> dto::PipelineInfoDto {
+        let mut models = Vec::new();
+        if let Some(e) = self.extractor() {
+            models.push(e.model().to_string());
+        }
+        if let Some(s) = self.second() {
+            models.push(s.model().to_string());
+        }
+        if let Some(v) = self.vision() {
+            models.push(v.model().to_string());
+        }
+        dto::PipelineInfoDto {
+            extraction: self.extraction_available(),
+            law_authoring: self.extraction_available() && self.second.is_some(),
+            vision: self.vision.is_some(),
+            models,
+        }
     }
 
     /// [`AppState::from_config`] on the process environment.
@@ -72,7 +142,7 @@ impl AppState {
     pub fn with_extractor(extractor: Extractor) -> AppState {
         AppState {
             extractor: Some(Arc::new(extractor)),
-            authored: Arc::default(),
+            ..AppState::default()
         }
     }
 
@@ -135,5 +205,8 @@ pub fn router_with(state: AppState) -> Router {
         .route("/v1/analyze", post(analyze::analyze))
         .route("/v1/limits/author", post(authoring::author))
         .route("/v1/solve", post(authoring::solve))
+        .route("/v1/curve", post(pipeline::curve))
+        .route("/v1/transcribe", post(pipeline::transcribe))
+        .route("/v1/pipeline", get(pipeline::info))
         .with_state(state)
 }

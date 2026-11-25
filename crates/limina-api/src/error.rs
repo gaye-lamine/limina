@@ -80,6 +80,9 @@ pub enum ApiError {
     /// `POST /v1/solve`: a declared parameter has no fixed value.
     #[error("parameter {0} needs a fixed value")]
     MissingFixedParameter(String),
+    /// `POST /v1/curve`: the range or the point count is invalid.
+    #[error("invalid curve request: {0}")]
+    InvalidCurveRequest(String),
 }
 
 impl From<ExtractError> for ApiError {
@@ -128,6 +131,7 @@ impl ApiError {
             ApiError::NoThresholdInRange { .. } => "NoThresholdInRange",
             ApiError::UnknownFreeParameter(_) => "UnknownFreeParameter",
             ApiError::MissingFixedParameter(_) => "MissingFixedParameter",
+            ApiError::InvalidCurveRequest(_) => "InvalidCurveRequest",
         }
     }
 
@@ -151,7 +155,8 @@ impl ApiError {
             | ApiError::NoSearchRange(_)
             | ApiError::NoThresholdInRange { .. }
             | ApiError::UnknownFreeParameter(_)
-            | ApiError::MissingFixedParameter(_) => StatusCode::UNPROCESSABLE_ENTITY,
+            | ApiError::MissingFixedParameter(_)
+            | ApiError::InvalidCurveRequest(_) => StatusCode::UNPROCESSABLE_ENTITY,
         }
     }
 }

@@ -12,6 +12,8 @@
 //! IMPOSSIBLE. On point enclosures the evaluation is exact.
 
 pub mod analysis;
+pub mod compare;
+pub mod curve;
 pub mod definition;
 pub mod error;
 pub mod expr;
@@ -21,6 +23,11 @@ pub mod registry;
 pub mod report;
 pub mod solve;
 
+pub use compare::{
+    compare_limits, relative_difference, Comparison, AGREEMENT_TOLERANCE, COMPARISON_SAMPLES,
+    COMPARISON_SEED,
+};
+pub use curve::{bound_curve, decisive, CurveError, CurvePoint, MAX_CURVE_POINTS};
 pub use definition::{EpistemicStatus, LimitDefinition, Status};
 pub use error::DslError;
 pub use limit::{CompiledFormula, DeclarativeLimit};

@@ -136,6 +136,16 @@ Invoke-RestMethod -Method Post -Uri http://127.0.0.1:3000/v1/evaluate -ContentTy
 ```
 The engine guard is relative only by default (`1e-9 * |bound|`, decision D-24), so verdicts work at any scale; a limit may declare its own absolute floor.
 
+## Analysis screen and laws written by two models
+The web app (http://localhost:4200) is one screen: a text (or a pasted or dropped image, read by the vision model through `POST /v1/transcribe`), an "Analyze" button, the pipeline trace of the selected claim on the left, and on the right the claim tabs with the engine verdict, a plain explanation built from engine numbers, a badge ("built-in law", "AI-written, not validated", "disputed between models") and an explorer. The explorer plots the bound against one parameter with a slider per parameter, the claim as a dashed line and the inconsistent region hatched; every curve comes from `POST /v1/curve`, never from the browser. The library and "How it works" are in a drawer opened from the top bar and closed with Escape.
+
+For a claim with no built-in limit, `POST /v1/analyze` runs four steps, each recorded in the claim's `trace` with its failures: (i) a model names the established law that bounds the quantity, or answers "no law identified"; (ii) two models write the law in the DSL (`LIMINA_LLM_MODEL`, default `nvidia/nemotron-3.5-lightning-30b-a3b`, and `LIMINA_LLM_MODEL_B`, default `nvidia/nemotron-3-ultra-550b-a55b`), and the two definitions are compared on 200 deterministic samples inside their test ranges: a relative difference of at most 1e-6 everywhere gives `draft_agreed`, anything else `draft_disputed` and no verdict; (iii) a second extraction pass reads the law's parameters from the same text with the same evidence rules; (iv) the engine evaluates the claim against the agreed draft. A draft law never gets `validated_by`. `GET /v1/pipeline` lists what is enabled and the model ids (`LIMINA_LLM_VISION_MODEL`, default `nvidia/nemotron-3.5-super-vl-120b-a12b`).
+```
+$body = @{ limit_id = "carnot"; parameters = @{ Tc = @{ value = 300; unit = "K" } }; free_parameter = "Th"; range = @(300, 1000); points = 8 } | ConvertTo-Json -Depth 5
+Invoke-RestMethod -Method Post -Uri http://127.0.0.1:3000/v1/curve -ContentType "application/json" -Body $body
+```
+Live test: `cargo test -p limina-api --test pipeline_live -- --ignored --nocapture`.
+
 ## Physics lint
 `limina check` reads a text or markdown file, extracts its performance claims and checks each one with the same code as `POST /v1/analyze`, then prints it at its line and column, like a compiler. It needs the key in the environment or in `.env` in the current directory.
 ```
