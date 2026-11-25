@@ -53,6 +53,23 @@ pub fn bound_curve(
     range: (f64, f64),
     points: usize,
 ) -> Result<Vec<CurvePoint>, CurveError> {
+    let enclosed: BTreeMap<String, (f64, f64)> =
+        fixed.iter().map(|(k, v)| (k.clone(), (*v, *v))).collect();
+    bound_curve_enclosed(limit, constraints, &enclosed, free, range, points)
+}
+
+/// Like [`bound_curve`], each fixed parameter given as an SI enclosure
+/// `(lo, hi)`: the bound range then includes the effect of the parameter
+/// uncertainties, on top of the uncertainty of the constants, which the
+/// limit already carries. This gives the uncertainty band of a curve.
+pub fn bound_curve_enclosed(
+    limit: &dyn Limit,
+    constraints: &ConstraintsMap,
+    fixed: &BTreeMap<String, (f64, f64)>,
+    free: &str,
+    range: (f64, f64),
+    points: usize,
+) -> Result<Vec<CurvePoint>, CurveError> {
     if !limit.parameters().iter().any(|p| p.id.as_str() == free) {
         return Err(CurveError::UnknownFreeParameter(free.to_string()));
     }
@@ -72,7 +89,7 @@ pub fn bound_curve(
     let mut base = BTreeMap::new();
     for (name, v) in fixed {
         if name != free {
-            base.insert(ParameterId::new(name.clone()), Interval::point(*v)?);
+            base.insert(ParameterId::new(name.clone()), Interval::new(v.0, v.1)?);
         }
     }
     let mut out = Vec::with_capacity(points);
@@ -80,27 +97,65 @@ pub fn bound_curve(
         let x = lo + (hi - lo) * i as f64 / (points - 1) as f64;
         let mut map = base.clone();
         map.insert(ParameterId::new(free), Interval::point(x)?);
-        let enclosure = ParameterEnclosure::new(map);
-        let mut range: Option<(f64, f64)> = None;
-        let mut defined = true;
-        for config in set.iter() {
-            match limit.bound(config, &enclosure) {
-                Ok(b) => {
-                    range = Some(match range {
-                        None => (b.lo(), b.hi()),
-                        Some((l, h)) => (l.min(b.lo()), h.max(b.hi())),
-                    })
-                }
-                Err(_) => defined = false,
-            }
-        }
-        let (b_min, b_max) = match (defined, range) {
-            (true, Some((l, h))) => (Some(l), Some(h)),
-            _ => (None, None),
-        };
+        let (b_min, b_max) = bound_range(limit, &set, &ParameterEnclosure::new(map));
         out.push(CurvePoint { x, b_min, b_max });
     }
     Ok(out)
+}
+
+/// Smallest and largest bound over the configurations at one enclosure;
+/// None where the bound is undefined in any configuration.
+pub(crate) fn bound_range(
+    limit: &dyn Limit,
+    set: &ConfigurationSet,
+    enclosure: &ParameterEnclosure,
+) -> (Option<f64>, Option<f64>) {
+    let mut range: Option<(f64, f64)> = None;
+    let mut defined = true;
+    for config in set.iter() {
+        match limit.bound(config, enclosure) {
+            Ok(b) => {
+                range = Some(match range {
+                    None => (b.lo(), b.hi()),
+                    Some((l, h)) => (l.min(b.lo()), h.max(b.hi())),
+                })
+            }
+            Err(_) => defined = false,
+        }
+    }
+    match (defined, range) {
+        (true, Some((l, h))) => (Some(l), Some(h)),
+        _ => (None, None),
+    }
+}
+
+/// Intervals of `x` where `outside` holds, from the first to the last
+/// sample of each run of consecutive samples.
+pub fn zones<F: Fn(&CurvePoint) -> bool>(points: &[CurvePoint], outside: F) -> Vec<(f64, f64)> {
+    let mut out: Vec<(f64, f64)> = Vec::new();
+    let mut open: Option<f64> = None;
+    let mut last = f64::NAN;
+    for p in points {
+        match (outside(p), open) {
+            (true, None) => open = Some(p.x),
+            (false, Some(start)) => {
+                out.push((start, last));
+                open = None;
+            }
+            _ => {}
+        }
+        last = p.x;
+    }
+    if let Some(start) = open {
+        out.push((start, last));
+    }
+    out
+}
+
+/// Validity zones of a curve: where the bound is undefined because a
+/// validity condition of the law fails.
+pub fn validity_zones(points: &[CurvePoint]) -> Vec<(f64, f64)> {
+    zones(points, |p| p.b_max.is_none())
 }
 
 /// The bound that decides IMPOSSIBLE at a point: a claim above `b_max`

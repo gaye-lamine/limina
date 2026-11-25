@@ -11,6 +11,7 @@ pub mod authoring;
 pub mod convert;
 pub mod dto;
 pub mod error;
+pub mod graphs;
 pub mod handlers;
 pub mod labels;
 pub mod pipeline;
@@ -206,6 +207,7 @@ pub fn router_with(state: AppState) -> Router {
         .route("/v1/limits/author", post(authoring::author))
         .route("/v1/solve", post(authoring::solve))
         .route("/v1/curve", post(pipeline::curve))
+        .route("/v1/surface", post(graphs::surface))
         .route("/v1/transcribe", post(pipeline::transcribe))
         .route("/v1/pipeline", get(pipeline::info))
         .with_state(state)

@@ -14,25 +14,23 @@ use std::collections::BTreeMap;
 use axum::body::Bytes;
 use axum::extract::State;
 use axum::Json;
-use limina_core::{
-    AssumptionId, ConstraintsMap, Direction, DomainRange, EngineError, Limit, OptionId,
-};
-use limina_dsl::{bound_curve, decisive, CurveError, DeclarativeLimit, Registry};
+use limina_core::{Direction, DomainRange, Limit};
+use limina_dsl::{bound_curve_enclosed, DeclarativeLimit, Registry};
 use limina_extract::check::{number_in, LIMIT_NOT_RECOGNIZED};
 use limina_extract::{
     transcribe_image, AuthorError, ImageInput, LawAnswer, LawStatus, ModelAttempt, TwoModelLaw,
     WantedParameter,
 };
 
-use crate::authoring::{si, verdict_name};
+use crate::authoring::verdict_name;
 use crate::dto::{
-    AnalyzedClaimDto, AnalyzedParameterDto, ClaimDto, ComparisonDto, CurvePointDto, CurveRequest,
-    CurveResponse, EvaluateRequest, EvidenceDto, LawAttemptDto, LawDto, ParameterDto,
-    PipelineInfoDto, TraceStepDto, TranscribeRequest, TranscribeResponse,
+    AnalyzedClaimDto, AnalyzedParameterDto, ClaimDto, ComparisonDto, CurveRequest, CurveResponse,
+    EvaluateRequest, EvidenceDto, LawAttemptDto, LawDto, ParameterDto, PipelineInfoDto,
+    TraceStepDto, TranscribeRequest, TranscribeResponse,
 };
 use crate::error::ApiError;
 use crate::handlers::{evaluate_draft, evaluate_request};
-use crate::{registry, AppState};
+use crate::{graphs, registry, AppState};
 
 /// Status word of a step that ran and succeeded.
 pub const DONE: &str = "done";
@@ -613,11 +611,20 @@ pub async fn transcribe(
 fn definition_of(state: &AppState, id: &str) -> Option<DeclarativeLimit> {
     Registry::builtin()
         .ok()
-        .and_then(|r| r.get(id).cloned())
+        .and_then(|r| {
+            r.get(id)
+                .cloned()
+                .or_else(|| r.equality(id).map(|e| e.upper().clone()))
+        })
         .or_else(|| state.authored(id))
 }
 
-fn default_range(state: &AppState, limit: &dyn Limit, id: &str, free: &str) -> Option<(f64, f64)> {
+pub(crate) fn default_range(
+    state: &AppState,
+    limit: &dyn Limit,
+    id: &str,
+    free: &str,
+) -> Option<(f64, f64)> {
     let spec = limit.parameters().iter().find(|p| p.id.as_str() == free)?;
     if let Some(DomainRange::Interval(i)) = spec.plausible.as_ref().map(|d| &d.range) {
         return Some((i.lo(), i.hi()));
@@ -645,6 +652,7 @@ pub async fn curve(
 /// The curve itself, shared by the endpoint and its tests.
 pub fn curve_with(state: &AppState, request: &CurveRequest) -> Result<CurveResponse, ApiError> {
     let id = request.limit_id.as_str();
+    let equality = registry::find_equality(id);
     let limit: Box<dyn Limit> = match registry::find_limit(id) {
         Some(l) => l,
         None => Box::new(
@@ -653,52 +661,45 @@ pub fn curve_with(state: &AppState, request: &CurveRequest) -> Result<CurveRespo
                 .ok_or_else(|| ApiError::UnknownLimit(id.to_string()))?,
         ),
     };
-    let mut constraints = ConstraintsMap::new();
-    for (a, options) in &request.constraints {
-        constraints.allow(
-            AssumptionId::new(a),
-            options.iter().map(OptionId::new).collect(),
-        );
+    let constraints = graphs::constraints_of(&request.constraints);
+    let free = request.free_parameter.as_str();
+    if !limit.parameters().iter().any(|s| s.id.as_str() == free) {
+        return Err(ApiError::UnknownFreeParameter(free.to_string()));
     }
-    if !limit
-        .parameters()
-        .iter()
-        .any(|s| s.id.as_str() == request.free_parameter)
-    {
-        return Err(ApiError::UnknownFreeParameter(
-            request.free_parameter.clone(),
-        ));
-    }
-    let mut fixed = BTreeMap::new();
-    for (name, p) in &request.parameters {
-        if !limit.parameters().iter().any(|s| s.id.as_str() == name) {
-            return Err(EngineError::UnknownParameter(name.clone()).into());
-        }
-        if name != &request.free_parameter {
-            fixed.insert(name.clone(), si(p.value, &p.unit)?);
-        }
-    }
+    let fixed = graphs::fixed_si(limit.as_ref(), &request.parameters, &[free])?;
     let range = match request.range {
         Some([lo, hi]) => (lo, hi),
-        None => default_range(state, limit.as_ref(), id, &request.free_parameter)
-            .ok_or_else(|| ApiError::NoSearchRange(request.free_parameter.clone()))?,
+        None => default_range(state, limit.as_ref(), id, free)
+            .ok_or_else(|| ApiError::NoSearchRange(free.to_string()))?,
     };
     let points = request.points.unwrap_or(DEFAULT_CURVE_POINTS);
-    let curve = bound_curve(
-        limit.as_ref(),
-        &constraints,
-        &fixed,
-        &request.free_parameter,
-        range,
-        points,
-    )
-    .map_err(|e| match e {
-        CurveError::UnknownFreeParameter(p) => ApiError::UnknownFreeParameter(p),
-        CurveError::MissingFixedParameter(p) => ApiError::MissingFixedParameter(p),
-        CurveError::Invalid(m) => ApiError::InvalidCurveRequest(m),
-        CurveError::Engine(e) => ApiError::Engine(e),
-    })?;
+    let curve = |l: &dyn Limit, f: &BTreeMap<String, (f64, f64)>| {
+        bound_curve_enclosed(l, &constraints, f, free, range, points).map_err(graphs::curve_error)
+    };
+    let exact: BTreeMap<String, (f64, f64)> =
+        fixed.iter().map(|(k, v)| (k.clone(), (*v, *v))).collect();
+    let nominal = curve(limit.as_ref(), &exact)?;
     let direction = limit.direction();
+    let lower = match &equality {
+        Some(law) => Some(graphs::dto_points(
+            Direction::Min,
+            &curve(law.lower(), &exact)?,
+        )),
+        None => None,
+    };
+    let band = if request.uncertainties.is_empty() {
+        None
+    } else {
+        let enclosed = graphs::enclosed_si(limit.as_ref(), request, &fixed)?;
+        Some(graphs::dto_points(
+            direction,
+            &curve(limit.as_ref(), &enclosed)?,
+        ))
+    };
+    let zones = match &equality {
+        Some(law) => graphs::equality_zones(law, &fixed, free, &nominal),
+        None => limina_dsl::validity_zones(&nominal),
+    };
     Ok(CurveResponse {
         limit_id: id.to_string(),
         direction: match direction {
@@ -707,18 +708,17 @@ pub fn curve_with(state: &AppState, request: &CurveRequest) -> Result<CurveRespo
         },
         free_parameter: request.free_parameter.clone(),
         range: [range.0, range.1],
-        points: curve
-            .iter()
-            .map(|p| CurvePointDto {
-                x: p.x,
-                b_min: p.b_min,
-                b_max: p.b_max,
-                decisive: decisive(direction, p),
-            })
-            .collect(),
+        points: graphs::dto_points(direction, &nominal),
+        kind: if equality.is_some() {
+            "equality"
+        } else {
+            "bound"
+        },
+        lower,
+        band,
+        validity_zones: zones.into_iter().map(|(a, b)| [a, b]).collect(),
     })
 }
-
 /// Name of the engine verdict, re-exported for the trace of other callers.
 pub fn verdict_word(v: &limina_core::Verdict) -> &'static str {
     verdict_name(v)

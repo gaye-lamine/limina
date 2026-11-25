@@ -89,6 +89,24 @@ export interface CurveResponse {
   free_parameter: string;
   range: [number, number];
   points: CurvePoint[];
+  /** 'equality' for a law that predicts a value; its points are the upper edge of the tolerance band. */
+  kind?: 'bound' | 'equality';
+  /** Equality law: the lower edge of the tolerance band. */
+  lower?: CurvePoint[];
+  /** The curve with the uncertainties of the fixed parameters applied. */
+  band?: CurvePoint[];
+  /** Intervals of the free parameter where a validity condition fails. */
+  validity_zones?: [number, number][];
+}
+export interface SurfaceResponse {
+  limit_id: string;
+  direction: 'Max' | 'Min';
+  x_parameter: string;
+  y_parameter: string;
+  x: number[];
+  y: number[];
+  /** values[j][i] is the deciding bound at y[j], x[i]; null where undefined. */
+  values: (number | null)[][];
 }
 
 export interface PipelineInfo {

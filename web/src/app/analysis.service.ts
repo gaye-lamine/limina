@@ -6,6 +6,7 @@ import {
   CurveResponse,
   PipelineInfo,
   SolveResponse,
+  SurfaceResponse,
   TranscribeResponse,
 } from './analysis.models';
 import { ParameterValue } from './api.models';
@@ -18,6 +19,18 @@ export interface CurveRequest {
   free_parameter: string;
   range?: [number, number];
   points?: number;
+  uncertainties?: Record<string, number>;
+}
+
+export interface SurfaceRequest {
+  limit_id: string;
+  constraints: Record<string, string[]>;
+  parameters: Record<string, ParameterValue>;
+  x_parameter: string;
+  y_parameter: string;
+  x_range?: [number, number];
+  y_range?: [number, number];
+  samples?: number;
 }
 
 export interface SolveRequest {
@@ -53,6 +66,10 @@ export class AnalysisService {
 
   curve(request: CurveRequest): Observable<CurveResponse> {
     return this.post<CurveResponse>('/v1/curve', request);
+  }
+
+  surface(request: SurfaceRequest): Observable<SurfaceResponse> {
+    return this.post<SurfaceResponse>('/v1/surface', request);
   }
 
   transcribe(mime: string, base64: string): Observable<TranscribeResponse> {

@@ -1,10 +1,20 @@
-import { Component, OnDestroy, computed, effect, inject, input, signal, untracked } from '@angular/core';
-import { AnalyzedClaim, CurveResponse } from './analysis.models';
+import {
+  Component,
+  OnDestroy,
+  computed,
+  effect,
+  inject,
+  input,
+  signal,
+  untracked,
+} from '@angular/core';
+import { AnalyzedClaim, CurveResponse, SurfaceResponse } from './analysis.models';
 import { AnalysisService } from './analysis.service';
 import { ApiFailure, LimitInfo } from './api.models';
-import { formatValue } from './chart-geometry';
+import { formatValue, summarizeBounds } from './chart-geometry';
+import { comparisonScale, graphGeometry, heatGeometry } from './graph-geometry';
 import { WB } from './strings';
-import { PLOT, plotGeometry, rememberDirection } from './workbench-logic';
+import { PLOT, rememberDirection } from './workbench-logic';
 
 /** One slider: a parameter of the law, its unit and its range. */
 interface Slider {
@@ -37,6 +47,13 @@ export class Explorer implements OnDestroy {
   protected readonly curve = signal<CurveResponse | null>(null);
   protected readonly failure = signal<ApiFailure | null>(null);
   protected readonly loading = signal(false);
+  /** Curve of one parameter, or heat map of two (laws with two parameters or more). */
+  protected readonly view = signal<'curve' | 'map'>('curve');
+  protected readonly yParam = signal('');
+  protected readonly surface = signal<SurfaceResponse | null>(null);
+  /** Relative uncertainty applied to the fixed parameters, in percent; 0 draws no band. */
+  protected readonly uncertainty = signal(0);
+  protected readonly uncertaintyChoices = [0, 1, 5, 10];
   private timer: ReturnType<typeof setTimeout> | null = null;
 
   protected readonly parameters = computed(() => this.limit()?.parameters ?? []);
@@ -63,8 +80,28 @@ export class Explorer implements OnDestroy {
 
   protected readonly geometry = computed(() => {
     const c = this.curve();
-    return c ? plotGeometry(c.points, c.direction, this.claim().value) : null;
+    return c ? graphGeometry(c, this.claim().value) : null;
   });
+  protected readonly heat = computed(() => {
+    const m = this.surface();
+    return m ? heatGeometry(m, this.claim().value) : null;
+  });
+  protected readonly canMap = computed(() => this.parameters().length >= 2);
+  protected readonly isEquality = computed(() => this.limit()?.direction === 'Equal');
+  /** The claim against the bound on a log axis, for a law with no parameter. */
+  protected readonly scale = computed(() => {
+    if (this.parameters().length > 0) return null;
+    const claim = this.claim();
+    const bounds = summarizeBounds(claim.result?.bounds ?? null);
+    const direction = this.limit()?.direction;
+    if (!bounds || claim.value === null || (direction !== 'Max' && direction !== 'Min'))
+      return null;
+    const bound = direction === 'Max' ? bounds.high : bounds.low;
+    return comparisonScale(claim.value, bound, direction);
+  });
+  protected readonly otherParameters = computed(() =>
+    this.parameters().filter((p) => p.id !== this.free()),
+  );
 
   /** Position of the free parameter's own value on the axis. */
   protected readonly marker = computed(() => {
@@ -100,6 +137,9 @@ export class Explorer implements OnDestroy {
         const missing = params.find((p) => values[p.id] === undefined);
         this.free.set(missing?.id ?? params[0]?.id ?? '');
         this.curve.set(null);
+        this.surface.set(null);
+        this.view.set('curve');
+        this.yParam.set(params.find((p) => p.id !== this.free())?.id ?? '');
         this.request(0);
       });
     });
@@ -112,6 +152,24 @@ export class Explorer implements OnDestroy {
   protected chooseFree(id: string): void {
     this.free.set(id);
     this.curve.set(null);
+    this.surface.set(null);
+    if (this.yParam() === id) this.yParam.set(this.otherParameters()[0]?.id ?? '');
+    this.request(0);
+  }
+
+  protected chooseView(view: 'curve' | 'map'): void {
+    this.view.set(view);
+    this.request(0);
+  }
+
+  protected chooseY(id: string): void {
+    this.yParam.set(id);
+    this.surface.set(null);
+    this.request(0);
+  }
+
+  protected chooseUncertainty(raw: string): void {
+    this.uncertainty.set(Number(raw) || 0);
     this.request(0);
   }
 
@@ -119,7 +177,7 @@ export class Explorer implements OnDestroy {
     const v = Number(raw);
     if (!Number.isFinite(v)) return;
     this.values.update((m) => ({ ...m, [id]: v }));
-    if (id !== this.free()) this.request(150);
+    if (id !== this.free() && !(this.view() === 'map' && id === this.yParam())) this.request(150);
   }
 
   protected valueOr(id: string, fallback: number): number {
@@ -149,13 +207,59 @@ export class Explorer implements OnDestroy {
       Object.entries(claim.constraints).map(([a, o]) => [a, [o]]),
     );
     this.loading.set(true);
+    if (this.view() === 'map') {
+      this.loadSurface(claim, constraints);
+      return;
+    }
+    const pct = this.uncertainty() / 100;
+    const uncertainties =
+      pct > 0
+        ? Object.fromEntries(
+            Object.entries(parameters).map(([id, p]) => [id, Math.abs(p.value) * pct]),
+          )
+        : undefined;
     this.api
-      .curve({ limit_id: claim.limit_id, constraints, parameters, free_parameter: free })
+      .curve({
+        limit_id: claim.limit_id,
+        constraints,
+        parameters,
+        free_parameter: free,
+        uncertainties,
+      })
       .subscribe({
         next: (c) => {
           rememberDirection(c.limit_id, c.direction);
           this.failure.set(null);
           this.curve.set(c);
+          this.loading.set(false);
+        },
+        error: (f: ApiFailure) => {
+          this.failure.set(f);
+          this.loading.set(false);
+        },
+      });
+  }
+  private loadSurface(claim: AnalyzedClaim, constraints: Record<string, string[]>): void {
+    const x = this.free();
+    const y = this.yParam();
+    const parameters: Record<string, { value: number; unit: string }> = {};
+    for (const [id, v] of Object.entries(this.values())) {
+      if (id === x || id === y) continue;
+      parameters[id] = { value: v, unit: claim.parameters[id]?.unit || 'K' };
+    }
+    this.api
+      .surface({
+        limit_id: claim.limit_id ?? '',
+        constraints,
+        parameters,
+        x_parameter: x,
+        y_parameter: y,
+      })
+      .subscribe({
+        next: (m) => {
+          rememberDirection(m.limit_id, m.direction);
+          this.failure.set(null);
+          this.surface.set(m);
           this.loading.set(false);
         },
         error: (f: ApiFailure) => {

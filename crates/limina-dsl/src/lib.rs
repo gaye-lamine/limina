@@ -23,12 +23,16 @@ pub mod limit;
 pub mod registry;
 pub mod report;
 pub mod solve;
+pub mod surface;
 
 pub use compare::{
     compare_limits, relative_difference, Comparison, AGREEMENT_TOLERANCE, COMPARISON_SAMPLES,
     COMPARISON_SEED,
 };
-pub use curve::{bound_curve, decisive, CurveError, CurvePoint, MAX_CURVE_POINTS};
+pub use curve::{
+    bound_curve, bound_curve_enclosed, decisive, validity_zones, zones, CurveError, CurvePoint,
+    MAX_CURVE_POINTS,
+};
 pub use definition::{Classification, EpistemicStatus, LimitDefinition, Status};
 pub use equality::{combine_verdicts, EqualityDecision, EqualityLimit, EqualityOutcome};
 pub use error::DslError;
@@ -36,3 +40,4 @@ pub use limit::{CompiledFormula, DeclarativeLimit};
 pub use registry::{default_dir, Registry};
 pub use report::{check_definition, check_limit, CheckReport, DimensionCheck, Monotonicity};
 pub use solve::{solve_for, Solution, SolveError, SolveRequest, ThresholdDirection};
+pub use surface::{bound_surface, SurfaceAxis, MAX_SURFACE_AXIS};

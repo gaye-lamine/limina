@@ -1,49 +1,347 @@
 <section class="explorer" aria-labelledby="explorer-title">
   <h3 id="explorer-title" class="wb-subtitle">{{ s.explorerTitle }}</h3>
   @if (parameters().length === 0) {
-    <p class="muted">{{ s.explorerNoParameter }}</p>
+    @if (scale(); as sc) {
+      <figure class="explorer-figure">
+        <svg
+          [attr.viewBox]="'0 0 ' + plot.width + ' ' + plot.height"
+          role="img"
+          [attr.aria-label]="s.explorerScaleAlt"
+        >
+          <defs>
+            <pattern
+              id="explorer-hatch-scale"
+              width="8"
+              height="8"
+              patternUnits="userSpaceOnUse"
+              patternTransform="rotate(45)"
+            >
+              <line x1="0" y1="0" x2="0" y2="8" class="hatch-line" />
+            </pattern>
+          </defs>
+          <rect
+            class="explorer-region"
+            [attr.x]="sc.hatch.x"
+            [attr.y]="plot.top + 60"
+            [attr.width]="sc.hatch.width"
+            height="80"
+            fill="url(#explorer-hatch-scale)"
+          />
+          <line
+            class="explorer-axis-line"
+            [attr.x1]="plot.left"
+            [attr.x2]="plot.width - plot.right"
+            y1="200"
+            y2="200"
+          />
+          @for (t of sc.ticks; track $index) {
+            <line
+              class="explorer-axis-line"
+              [attr.x1]="t.pos"
+              [attr.x2]="t.pos"
+              y1="200"
+              y2="206"
+            />
+            <text class="fig-value" text-anchor="middle" [attr.x]="t.pos" y="222">
+              {{ t.label }}
+            </text>
+          }
+          <line
+            class="explorer-bound"
+            [attr.x1]="sc.boundX"
+            [attr.x2]="sc.boundX"
+            [attr.y1]="plot.top + 40"
+            y2="200"
+          />
+          <text
+            class="fig-label"
+            text-anchor="middle"
+            [attr.x]="sc.boundX"
+            [attr.y]="plot.top + 32"
+          >
+            {{ s.explorerScaleBound }}
+          </text>
+          <line
+            class="explorer-claim"
+            [attr.x1]="sc.claimX"
+            [attr.x2]="sc.claimX"
+            [attr.y1]="plot.top + 60"
+            y2="200"
+          />
+          <text
+            class="fig-label"
+            text-anchor="middle"
+            [attr.x]="sc.claimX"
+            [attr.y]="plot.top + 152"
+          >
+            {{ s.explorerClaim }}
+          </text>
+        </svg>
+        <figcaption class="fig-caption">
+          {{ s.explorerScaleCaption }}; {{ s.explorerInconsistent }}.
+        </figcaption>
+      </figure>
+    } @else {
+      <p class="muted">
+        {{ isEquality() ? s.explorerEqualityNoParameter : s.explorerNoParameter }}
+        {{ s.explorerScaleLimit }}
+      </p>
+    }
   } @else {
     <div class="explorer-axis">
+      @if (canMap()) {
+        <span id="explorer-view-label">{{ s.explorerView }}</span>
+        <span class="explorer-views" role="group" aria-labelledby="explorer-view-label">
+          <button
+            type="button"
+            class="control"
+            [attr.aria-pressed]="view() === 'curve'"
+            (click)="chooseView('curve')"
+          >
+            {{ s.explorerCurve }}
+          </button>
+          <button
+            type="button"
+            class="control"
+            [attr.aria-pressed]="view() === 'map'"
+            (click)="chooseView('map')"
+          >
+            {{ s.explorerMap }}
+          </button>
+        </span>
+      }
       <label for="explorer-free">{{ s.explorerAxis }}</label>
-      <select id="explorer-free" class="control" [value]="free()" (change)="chooseFree($any($event.target).value)">
+      <select
+        id="explorer-free"
+        class="control"
+        [value]="free()"
+        (change)="chooseFree($any($event.target).value)"
+      >
         @for (p of parameters(); track p.id) {
           <option [value]="p.id">{{ p.id }}</option>
         }
       </select>
+      @if (view() === 'map') {
+        <label for="explorer-y">{{ s.explorerYAxis }}</label>
+        <select
+          id="explorer-y"
+          class="control"
+          [value]="yParam()"
+          (change)="chooseY($any($event.target).value)"
+        >
+          @for (p of otherParameters(); track p.id) {
+            <option [value]="p.id">{{ p.id }}</option>
+          }
+        </select>
+      } @else if (parameters().length > 1) {
+        <label for="explorer-uncertainty">{{ s.explorerUncertainty }}</label>
+        <select
+          id="explorer-uncertainty"
+          class="control"
+          [value]="uncertainty()"
+          (change)="chooseUncertainty($any($event.target).value)"
+        >
+          @for (u of uncertaintyChoices; track u) {
+            <option [value]="u">
+              {{ u === 0 ? s.explorerNoUncertainty : u + ' ' + s.explorerPercent }}
+            </option>
+          }
+        </select>
+      }
       @if (loading()) {
         <span class="muted">{{ s.explorerLoading }}</span>
       }
     </div>
     @if (failure(); as f) {
-      <p class="error-block"><span class="mono">{{ f.code }}</span> {{ f.message }}</p>
+      <p class="error-block">
+        <span class="mono">{{ f.code }}</span> {{ f.message }}
+      </p>
     }
-    @if (geometry(); as g) {
+    @if (view() === 'map') {
+      @if (heat(); as hm) {
+        <figure class="explorer-figure">
+          <svg
+            [attr.viewBox]="'0 0 ' + plot.width + ' ' + plot.height"
+            role="img"
+            [attr.aria-label]="s.explorerMapAlt"
+          >
+            <defs>
+              <pattern
+                id="explorer-hatch-map"
+                width="6"
+                height="6"
+                patternUnits="userSpaceOnUse"
+                patternTransform="rotate(45)"
+              >
+                <line x1="0" y1="0" x2="0" y2="6" class="hatch-line" />
+              </pattern>
+            </defs>
+            @for (c of hm.cells; track $index) {
+              @if (c.grey !== null) {
+                <rect
+                  [attr.x]="c.x"
+                  [attr.y]="c.y"
+                  [attr.width]="c.width"
+                  [attr.height]="c.height"
+                  [attr.fill]="'rgb(' + c.grey + ',' + c.grey + ',' + c.grey + ')'"
+                />
+              } @else {
+                <rect
+                  [attr.x]="c.x"
+                  [attr.y]="c.y"
+                  [attr.width]="c.width"
+                  [attr.height]="c.height"
+                  fill="url(#explorer-hatch-map)"
+                />
+              }
+            }
+            @if (hm.contour) {
+              <path class="explorer-bound" [attr.d]="hm.contour" />
+            }
+            <line
+              class="explorer-axis-line"
+              [attr.x1]="plot.left"
+              [attr.x2]="plot.width - plot.right"
+              [attr.y1]="plot.height - plot.bottom"
+              [attr.y2]="plot.height - plot.bottom"
+            />
+            <line
+              class="explorer-axis-line"
+              [attr.x1]="plot.left"
+              [attr.x2]="plot.left"
+              [attr.y1]="plot.top"
+              [attr.y2]="plot.height - plot.bottom"
+            />
+            @for (t of hm.xTicks; track $index) {
+              <text
+                class="fig-value"
+                text-anchor="middle"
+                [attr.x]="t.pos"
+                [attr.y]="plot.height - plot.bottom + 18"
+              >
+                {{ t.label }}
+              </text>
+            }
+            @for (t of hm.yTicks; track $index) {
+              <text
+                class="fig-value"
+                text-anchor="end"
+                [attr.x]="plot.left - 6"
+                [attr.y]="t.pos + 4"
+              >
+                {{ t.label }}
+              </text>
+            }
+          </svg>
+          <figcaption class="fig-caption">
+            {{ s.explorerMapCaption }} {{ free() }} and {{ yParam() }}; {{ s.explorerMapNote }}.
+          </figcaption>
+        </figure>
+      }
+    } @else if (geometry(); as g) {
       <figure class="explorer-figure">
-        <svg [attr.viewBox]="'0 0 ' + plot.width + ' ' + plot.height" role="img" [attr.aria-label]="alt()">
+        <svg
+          [attr.viewBox]="'0 0 ' + plot.width + ' ' + plot.height"
+          role="img"
+          [attr.aria-label]="alt()"
+        >
           <defs>
-            <pattern id="explorer-hatch" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+            <pattern
+              id="explorer-hatch"
+              width="8"
+              height="8"
+              patternUnits="userSpaceOnUse"
+              patternTransform="rotate(45)"
+            >
               <line x1="0" y1="0" x2="0" y2="8" class="hatch-line" />
             </pattern>
           </defs>
-          <path class="explorer-region" [attr.d]="g.hatch" fill="url(#explorer-hatch)" />
-          <line class="explorer-axis-line" [attr.x1]="plot.left" [attr.x2]="plot.width - plot.right" [attr.y1]="plot.height - plot.bottom" [attr.y2]="plot.height - plot.bottom" />
-          <line class="explorer-axis-line" [attr.x1]="plot.left" [attr.x2]="plot.left" [attr.y1]="plot.top" [attr.y2]="plot.height - plot.bottom" />
+          @for (z of g.zones; track $index) {
+            <rect
+              class="explorer-zone"
+              [attr.x]="z.x"
+              [attr.width]="z.width"
+              [attr.y]="plot.top"
+              [attr.height]="plot.height - plot.top - plot.bottom"
+              fill="url(#explorer-hatch)"
+            />
+          }
+          @if (g.forbidden) {
+            <path class="explorer-region" [attr.d]="g.forbidden" fill="url(#explorer-hatch)" />
+          }
+          @if (g.tolerance) {
+            <path class="explorer-band" [attr.d]="g.tolerance" />
+          }
+          @if (g.band) {
+            <path class="explorer-band" [attr.d]="g.band" />
+          }
+          <line
+            class="explorer-axis-line"
+            [attr.x1]="plot.left"
+            [attr.x2]="plot.width - plot.right"
+            [attr.y1]="plot.height - plot.bottom"
+            [attr.y2]="plot.height - plot.bottom"
+          />
+          <line
+            class="explorer-axis-line"
+            [attr.x1]="plot.left"
+            [attr.x2]="plot.left"
+            [attr.y1]="plot.top"
+            [attr.y2]="plot.height - plot.bottom"
+          />
           @for (t of g.xTicks; track $index) {
-            <text class="fig-value" text-anchor="middle" [attr.x]="t.x" [attr.y]="plot.height - plot.bottom + 18">{{ t.label }}</text>
+            <text
+              class="fig-value"
+              text-anchor="middle"
+              [attr.x]="t.pos"
+              [attr.y]="plot.height - plot.bottom + 18"
+            >
+              {{ t.label }}
+            </text>
           }
           @for (t of g.yTicks; track $index) {
-            <text class="fig-value" text-anchor="end" [attr.x]="plot.left - 6" [attr.y]="t.y + 4">{{ t.label }}</text>
+            <text class="fig-value" text-anchor="end" [attr.x]="plot.left - 6" [attr.y]="t.pos + 4">
+              {{ t.label }}
+            </text>
           }
-          <path class="explorer-bound" [attr.d]="g.bound" />
+          <path class="explorer-bound" [attr.d]="g.line" />
           @if (g.claimY !== null) {
-            <line class="explorer-claim" [attr.x1]="plot.left" [attr.x2]="plot.width - plot.right" [attr.y1]="g.claimY" [attr.y2]="g.claimY" />
-            <text class="fig-label" [attr.x]="plot.width - plot.right - 4" [attr.y]="g.claimY - 6" text-anchor="end">{{ s.explorerClaim }}</text>
+            <line
+              class="explorer-claim"
+              [attr.x1]="plot.left"
+              [attr.x2]="plot.width - plot.right"
+              [attr.y1]="g.claimY"
+              [attr.y2]="g.claimY"
+            />
+            <text
+              class="fig-label"
+              [attr.x]="plot.width - plot.right - 4"
+              [attr.y]="g.claimY - 6"
+              text-anchor="end"
+            >
+              {{ s.explorerClaim }}
+            </text>
           }
           @if (marker(); as m) {
-            <line class="explorer-marker" [attr.x1]="m" [attr.x2]="m" [attr.y1]="plot.top" [attr.y2]="plot.height - plot.bottom" />
+            <line
+              class="explorer-marker"
+              [attr.x1]="m"
+              [attr.x2]="m"
+              [attr.y1]="plot.top"
+              [attr.y2]="plot.height - plot.bottom"
+            />
           }
         </svg>
-        <figcaption class="fig-caption">{{ s.explorerCaption }} {{ free() }}; {{ s.explorerInconsistent }}.</figcaption>
+        <figcaption class="fig-caption">
+          {{ g.kind === 'equality' ? s.explorerToleranceCaption : s.explorerCaption }} {{ free() }};
+          {{ g.kind === 'equality' ? s.explorerToleranceNote : s.explorerInconsistent }}.
+          @if (g.band) {
+            {{ s.explorerBandNote }}.
+          }
+          @if (g.zones.length) {
+            {{ s.explorerZoneNote }}.
+          }
+        </figcaption>
       </figure>
     }
     <fieldset class="explorer-sliders">
@@ -60,7 +358,9 @@
             [value]="valueOr(sl.id, sl.min)"
             (input)="slide(sl.id, $any($event.target).value)"
           />
-          <span class="num">{{ values()[sl.id] !== undefined ? label(values()[sl.id]) : '-' }} {{ sl.unit }}</span>
+          <span class="num"
+            >{{ values()[sl.id] !== undefined ? label(values()[sl.id]) : '-' }} {{ sl.unit }}</span
+          >
         </div>
       }
     </fieldset>

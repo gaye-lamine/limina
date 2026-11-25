@@ -356,6 +356,10 @@ pub struct CurveRequest {
     /// Number of points, 2 to 1000; default 101.
     #[serde(default)]
     pub points: Option<usize>,
+    /// Absolute uncertainty of fixed parameters, in the unit of their
+    /// value. When present the response carries an uncertainty and.
+    #[serde(default)]
+    pub uncertainties: BTreeMap<String, f64>,
 }
 
 /// One point of a curve: the bound range over the configurations, null
@@ -386,6 +390,66 @@ pub struct CurveResponse {
     pub range: [f64; 2],
     /// The points, in order of `x`.
     pub points: Vec<CurvePointDto>,
+    /// `bound` for a limit, `equality` for a law that predicts a value.
+    pub kind: &'static str,
+    /// Equality law only: the lower edge of the tolerance band, the
+    /// `points` being the upper edge.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lower: Option<Vec<CurvePointDto>>,
+    /// The curve with the uncertainties of the fixed parameters applied;
+    /// present only when the request gave some.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub band: Option<Vec<CurvePointDto>>,
+    /// Intervals of the free parameter where a validity condition of the
+    /// law fails and the law says nothing.
+    pub validity_zones: Vec<[f64; 2]>,
+}
+
+/// Body of `POST /v1/surface`. Values in the given units, ranges in SI.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SurfaceRequest {
+    /// A built-in or authored limit id.
+    pub limit_id: String,
+    /// Assumption id to the allowed option ids.
+    #[serde(default)]
+    pub constraints: BTreeMap<String, Vec<String>>,
+    /// Every parameter other than the two free ones, fixed.
+    #[serde(default)]
+    pub parameters: BTreeMap<String, ParameterDto>,
+    /// The parameter on the horizontal axis.
+    pub x_parameter: String,
+    /// The parameter on the vertical axis.
+    pub y_parameter: String,
+    /// Range of the horizontal parameter; absent uses the plausible domain.
+    #[serde(default)]
+    pub x_range: Option<[f64; 2]>,
+    /// Range of the vertical parameter; absent uses the plausible domain.
+    #[serde(default)]
+    pub y_range: Option<[f64; 2]>,
+    /// Samples per axis, 2 to 50; default 30.
+    #[serde(default)]
+    pub samples: Option<usize>,
+}
+
+/// Body of a successful `POST /v1/surface`.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct SurfaceResponse {
+    /// The limit.
+    pub limit_id: String,
+    /// `Max` or `Min`.
+    pub direction: &'static str,
+    /// Horizontal parameter.
+    pub x_parameter: String,
+    /// Vertical parameter.
+    pub y_parameter: String,
+    /// Horizontal values, SI.
+    pub x: Vec<f64>,
+    /// Vertical values, SI.
+    pub y: Vec<f64>,
+    /// The deciding bound: `values[j][i]` is at `y[j]`, `x[i]`; null
+    /// where the bound is undefined.
+    pub values: Vec<Vec<Option<f64>>>,
 }
 
 /// Body of `GET /v1/pipeline`: what the analysis pipeline can do here.

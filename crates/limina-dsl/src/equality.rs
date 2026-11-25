@@ -15,6 +15,8 @@
 //!
 //! An equality law takes no assumptions: its band is the predicted value.
 
+use std::collections::BTreeMap;
+
 use limina_core::{
     decide, Decision, DecisionInput, EngineError, Interval, MissingParameter, SatisfyingConfig,
     Support, Verdict,
@@ -131,6 +133,20 @@ impl EqualityLimit {
     /// The lower bound `F - |F| t`, as a core limit.
     pub fn lower(&self) -> &DeclarativeLimit {
         &self.lower
+    }
+
+    /// The first validity condition that does not hold for these SI
+    /// parameter values, or None. A condition that needs a parameter not
+    /// given is skipped, as in [`EqualityLimit::evaluate`].
+    pub fn outside_domain(&self, parameters: &BTreeMap<String, f64>) -> Option<String> {
+        let mut values = Values::new();
+        for (name, v) in parameters {
+            values.insert(name.clone(), Interval::new(*v, *v).ok()?);
+        }
+        self.domain
+            .iter()
+            .find(|c| matches!(holds(c, &values), Ok(false)))
+            .map(|c| c.text.clone())
     }
 
     /// Evaluates a claim. The validity conditions are checked first on the

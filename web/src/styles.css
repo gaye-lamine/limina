@@ -1558,3 +1558,22 @@ app-root {
 .wb-apparatus .apparatus-controls {
   display: none !important;
 }
+
+.explorer-band {
+  fill: var(--grey-rule);
+  fill-opacity: 0.45;
+  stroke: none;
+}
+.explorer-zone {
+  stroke: var(--grey-rule);
+  stroke-width: 1;
+}
+.explorer-views {
+  display: inline-flex;
+  gap: 0.25rem;
+}
+.explorer-views .control[aria-pressed='true'] {
+  background: var(--ink);
+  color: var(--paper, #fff);
+}
+
