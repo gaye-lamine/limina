@@ -14,6 +14,7 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use crate::author::{author_limit, AuthorError, AuthoredLimit};
+use crate::catalog::Catalog;
 use crate::check::{locate, number_in, Span};
 use crate::error::ExtractError;
 use crate::extractor::Extractor;
@@ -194,6 +195,77 @@ pub async fn identify_law(
     Ok(law_sentence(&reply_text(&reply)?))
 }
 
+/// Prefix of the answer that names a law of the built-in library.
+pub const BUILT_IN_PREFIX: &str = "built-in:";
+/// The answer of the law question when the built-in library is offered.
+#[derive(Debug, Clone, PartialEq)]
+pub enum LawAnswer {
+    /// A built-in law applies: its id, checked against the catalog.
+    BuiltIn(String),
+    /// An established law that is not in the library, as one sentence.
+    Sentence(String),
+    /// No established law identified.
+    NoLaw,
+}
+
+/// System prompt of the law question with the built-in library listed: the
+/// model must answer with a built-in id when one applies.
+pub fn library_law_system_prompt(catalog: &Catalog) -> String {
+    let mut list = String::new();
+    for l in &catalog.limits {
+        list.push_str(&format!("- {}: {} ({})\n", l.id, l.title, l.formula));
+    }
+    format!(
+        "{}\n\
+         The library below holds laws a deterministic engine already knows. If one of them bounds or predicts the claimed quantity, answer exactly: {BUILT_IN_PREFIX} <id> (one id from the list, nothing else). Use a library law only if its quantity is the claimed quantity.\n\
+         Library:\n{list}",
+        law_system_prompt()
+    )
+}
+
+/// Reads the answer of the library law question. A `built-in:` id that is
+/// not in the catalog is an error: no law is guessed.
+pub fn library_answer(answer: &str, catalog: &Catalog) -> Result<LawAnswer, ExtractError> {
+    let line = answer
+        .lines()
+        .map(str::trim)
+        .find(|l| !l.is_empty())
+        .map(|l| l.trim_matches(|c| c == '"' || c == '\'' || c == '`').trim());
+    if let Some(rest) = line.and_then(|l| {
+        l.to_lowercase()
+            .strip_prefix(BUILT_IN_PREFIX)
+            .map(str::to_string)
+    }) {
+        let id = rest
+            .trim()
+            .trim_matches(|c| c == '"' || c == '\'' || c == '`');
+        return catalog
+            .limits
+            .iter()
+            .find(|l| l.id.eq_ignore_ascii_case(id))
+            .map(|l| LawAnswer::BuiltIn(l.id.clone()))
+            .ok_or(ExtractError::ExtractionFailed(
+                "the answer names a built-in law that does not exist",
+            ));
+    }
+    Ok(law_sentence(answer).map_or(LawAnswer::NoLaw, LawAnswer::Sentence))
+}
+
+/// Like [`identify_law`], with the built-in library offered to the model.
+pub async fn identify_law_in_library(
+    provider: &dyn ExtractionProvider,
+    claim: &str,
+    catalog: &Catalog,
+    backoff: Option<Duration>,
+) -> Result<LawAnswer, ExtractError> {
+    let request = ChatRequest {
+        system: library_law_system_prompt(catalog),
+        user: user_message(claim),
+    };
+    let reply = complete(provider, request, backoff).await?;
+    library_answer(&reply_text(&reply)?, catalog)
+}
+
 /// A parameter the authored law needs, as the prompt lists it.
 #[derive(Debug, Clone, PartialEq)]
 pub struct WantedParameter {
@@ -350,6 +422,12 @@ pub async fn transcribe_image(
 }
 
 impl Extractor {
+    /// [`identify_law_in_library`] with this extractor's catalog, taking one
+    /// rate-limit slot.
+    pub async fn identify_law_in_library(&self, claim: &str) -> Result<LawAnswer, ExtractError> {
+        self.acquire()?;
+        identify_law_in_library(self.provider(), claim, self.catalog(), self.retry_backoff()).await
+    }
     /// [`identify_law`] through this extractor's provider, taking one
     /// rate-limit slot.
     pub async fn identify_law(&self, claim: &str) -> Result<Option<String>, ExtractError> {

@@ -20,7 +20,7 @@ use limina_core::{
 use limina_dsl::{bound_curve, decisive, CurveError, DeclarativeLimit, Registry};
 use limina_extract::check::{number_in, LIMIT_NOT_RECOGNIZED};
 use limina_extract::{
-    transcribe_image, AuthorError, ImageInput, LawStatus, ModelAttempt, TwoModelLaw,
+    transcribe_image, AuthorError, ImageInput, LawAnswer, LawStatus, ModelAttempt, TwoModelLaw,
     WantedParameter,
 };
 
@@ -31,7 +31,7 @@ use crate::dto::{
     PipelineInfoDto, TraceStepDto, TranscribeRequest, TranscribeResponse,
 };
 use crate::error::ApiError;
-use crate::handlers::evaluate_draft;
+use crate::handlers::{evaluate_draft, evaluate_request};
 use crate::{registry, AppState};
 
 /// Status word of a step that ran and succeeded.
@@ -340,12 +340,16 @@ async fn law_pipeline(state: &AppState, text: &str, claim: &mut AnalyzedClaimDto
         claim.raw_unit,
         evidence.text
     );
-    let sentence = match extractor.identify_law(&question).await {
-        Ok(Some(s)) => {
+    let sentence = match extractor.identify_law_in_library(&question).await {
+        Ok(LawAnswer::BuiltIn(id)) => {
+            built_in_path(extractor, text, claim, &id).await;
+            return;
+        }
+        Ok(LawAnswer::Sentence(s)) => {
             claim.trace.push(step("law", DONE, s.clone()));
             s
         }
-        Ok(None) => {
+        Ok(LawAnswer::NoLaw) => {
             claim
                 .trace
                 .push(step("law", FAILED, limina_extract::NO_LAW));
@@ -417,44 +421,75 @@ async fn law_pipeline(state: &AppState, text: &str, claim: &mut AnalyzedClaimDto
             meaning: String::new(),
         })
         .collect();
+    read_parameters(extractor, text, claim, &wanted).await;
+    // (iv) The engine.
+    let request = engine_request(claim, id);
+    match evaluate_draft(&authored.limit, &request) {
+        Ok(result) => {
+            claim.status = crate::analyze::EVALUATED;
+            claim.reason = None;
+            claim.code = None;
+            claim.result = Some(result);
+        }
+        Err(e) => {
+            claim.code = Some(e.code());
+            needs_input(claim, &e.to_string());
+        }
+    }
+    claim.trace.push(verdict_step(claim));
+}
+
+/// Reads the parameters of the law out of the text and records them, with
+/// their trace step, on the claim.
+async fn read_parameters(
+    extractor: &limina_extract::Extractor,
+    text: &str,
+    claim: &mut AnalyzedClaimDto,
+    wanted: &[WantedParameter],
+) {
     claim.parameters.clear();
     if wanted.is_empty() {
         claim
             .trace
             .push(step("parameters", SKIPPED, "the law needs no parameter"));
-    } else {
-        match extractor.extract_parameters(text, &wanted).await {
-            Ok(found) => {
-                for f in found {
-                    claim.parameters.insert(
-                        f.name.clone(),
-                        AnalyzedParameterDto {
-                            value: f.value,
-                            raw_value: f.value.unwrap_or(f64::NAN),
-                            unit: f.unit,
-                            evidence: f.evidence.map(|s| EvidenceDto {
-                                text: s.text,
-                                start: s.start,
-                                end: s.end,
-                            }),
-                            flags: f.flags,
-                        },
-                    );
-                }
-                let names: Vec<String> = wanted.iter().map(|w| w.name.clone()).collect();
-                let (all, detail) = parameters_detail(claim, &names);
-                claim
-                    .trace
-                    .push(step("parameters", if all { DONE } else { FAILED }, detail));
-            }
-            Err(e) => claim.trace.push(step(
-                "parameters",
-                FAILED,
-                format!("second extraction pass failed: {e}"),
-            )),
-        }
+        return;
     }
-    // (iv) The engine.
+    match extractor.extract_parameters(text, wanted).await {
+        Ok(found) => {
+            for f in found {
+                claim.parameters.insert(
+                    f.name.clone(),
+                    AnalyzedParameterDto {
+                        value: f.value,
+                        raw_value: f.value.unwrap_or(f64::NAN),
+                        unit: f.unit,
+                        evidence: f.evidence.map(|s| EvidenceDto {
+                            text: s.text,
+                            start: s.start,
+                            end: s.end,
+                        }),
+                        flags: f.flags,
+                    },
+                );
+            }
+            let names: Vec<String> = wanted.iter().map(|w| w.name.clone()).collect();
+            let (all, detail) = parameters_detail(claim, &names);
+            claim
+                .trace
+                .push(step("parameters", if all { DONE } else { FAILED }, detail));
+        }
+        Err(e) => claim.trace.push(step(
+            "parameters",
+            FAILED,
+            format!("second extraction pass failed: {e}"),
+        )),
+    }
+}
+
+/// The engine request of a claim whose law was identified by name: the
+/// claim value (a percentage becomes a fraction) and the parameters read.
+/// No assumption is stated on this path, so none is passed.
+fn engine_request(claim: &mut AnalyzedClaimDto, limit_id: String) -> EvaluateRequest {
     let (value, unit) = if claim.raw_unit == "%" {
         claim.notes.push(format!(
             "{} % becomes {}",
@@ -467,8 +502,8 @@ async fn law_pipeline(state: &AppState, text: &str, claim: &mut AnalyzedClaimDto
     };
     claim.value = Some(value);
     claim.unit = unit.clone();
-    let request = EvaluateRequest {
-        limit_id: id,
+    EvaluateRequest {
+        limit_id,
         claim: ClaimDto {
             value,
             unit,
@@ -490,8 +525,47 @@ async fn law_pipeline(state: &AppState, text: &str, claim: &mut AnalyzedClaimDto
                 })
             })
             .collect(),
-    };
-    match evaluate_draft(&authored.limit, &request) {
+    }
+}
+
+/// A claim that the law question mapped to a built-in law: evaluated
+/// against that law, never sent to authoring.
+async fn built_in_path(
+    extractor: &limina_extract::Extractor,
+    text: &str,
+    claim: &mut AnalyzedClaimDto,
+    id: &str,
+) {
+    claim.trace.push(step(
+        "law",
+        DONE,
+        format!("built-in limit {id} identified by law naming; no authoring"),
+    ));
+    claim.law = Some(LawDto {
+        source: "built_in",
+        limit_id: Some(id.to_string()),
+        sentence: None,
+        attempts: Vec::new(),
+        comparison: None,
+    });
+    claim.limit_id = Some(id.to_string());
+    let wanted: Vec<WantedParameter> = extractor
+        .catalog()
+        .limit(id)
+        .map(|l| {
+            l.parameters
+                .iter()
+                .map(|p| WantedParameter {
+                    name: p.name.clone(),
+                    units: p.units.clone(),
+                    meaning: String::new(),
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    read_parameters(extractor, text, claim, &wanted).await;
+    let request = engine_request(claim, id.to_string());
+    match evaluate_request(&request) {
         Ok(result) => {
             claim.status = crate::analyze::EVALUATED;
             claim.reason = None;
@@ -499,8 +573,8 @@ async fn law_pipeline(state: &AppState, text: &str, claim: &mut AnalyzedClaimDto
             claim.result = Some(result);
         }
         Err(e) => {
-            claim.code = Some(e.code());
-            needs_input(claim, &e.to_string());
+            claim.result = None;
+            crate::analyze::refuse(claim, &e);
         }
     }
     claim.trace.push(verdict_step(claim));

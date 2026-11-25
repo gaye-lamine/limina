@@ -32,8 +32,8 @@ pub use config::{ExtractConfig, SecretKey};
 pub use error::ExtractError;
 pub use extractor::{Extraction, Extractor};
 pub use law::{
-    author_two, extract_parameters, identify_law, transcribe_image, FoundParameter, LawStatus,
-    ModelAttempt, TwoModelLaw, WantedParameter, NO_LAW,
+    author_two, extract_parameters, identify_law, identify_law_in_library, transcribe_image,
+    FoundParameter, LawAnswer, LawStatus, ModelAttempt, TwoModelLaw, WantedParameter, NO_LAW,
 };
 pub use openai::OpenAiProvider;
 pub use parse::ModelOutput;

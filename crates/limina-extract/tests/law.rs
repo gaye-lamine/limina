@@ -183,3 +183,23 @@ async fn images_are_transcribed_and_checked_for_type_and_size() {
         .is_err());
     assert_eq!(vision.calls(), 1, "refused images are never sent");
 }
+
+#[test]
+fn the_library_answer_is_a_checked_built_in_id_a_sentence_or_none() {
+    use limina_extract::law::library_answer;
+    use limina_extract::LawAnswer;
+    let catalog = limina_extract::testing::catalog();
+    assert_eq!(
+        library_answer("Built-in: Carnot\nbecause", &catalog).expect("ok"),
+        LawAnswer::BuiltIn("carnot".into())
+    );
+    assert!(library_answer("built-in: nonsense", &catalog).is_err());
+    assert_eq!(
+        library_answer(LAW, &catalog).expect("ok"),
+        LawAnswer::Sentence(LAW.into())
+    );
+    assert_eq!(
+        library_answer("No law identified.", &catalog).expect("ok"),
+        LawAnswer::NoLaw
+    );
+}

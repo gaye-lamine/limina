@@ -82,3 +82,71 @@ async fn a_landauer_claim_gets_an_agreed_law_and_an_engine_verdict() {
         );
     }
 }
+
+/// The pre-filled text of the web app, one paragraph per request. Prints
+/// the raw verdicts and traces; asserts only that no key leaks and that a
+/// claim without a fundamental bound gets no verdict.
+#[tokio::test]
+#[ignore]
+async fn the_multi_discipline_text_is_identified_from_the_library_first() {
+    let file = dotenv();
+    let config =
+        ExtractConfig::from_lookup(|k| std::env::var(k).ok().or_else(|| file.get(k).cloned()));
+    assert!(config.has_key(), "NVIDIA_API_KEY is not set");
+    let key = file.get("NVIDIA_API_KEY").cloned().unwrap_or_default();
+    let state = AppState::from_config(&config).expect("state");
+    let paragraphs = [
+        "The Helios probe cruises at a speed of 3.6e8 m/s relative to the Sun.",
+        "The Q-Scope locates an electron within 1e-12 m while its momentum is known to within 1e-24 kg*m/s.",
+        "The Lumen microscope resolves details of 100 nm using light of 500 nm wavelength and a numerical aperture of 1.4.",
+        "The Aurora heat pump delivers heat with a COP of 14.5, hot reservoir at 300 K, cold reservoir at 280 K.",
+        "The Quanta logic chip erases one bit at 300 K while dissipating 1e-22 J.",
+        "The Volta cell stores 5 kWh of energy in a mass of 1 kg.",
+    ];
+    for text in paragraphs {
+        let request = Request::post("/v1/analyze")
+            .header("content-type", "application/json")
+            .body(Body::from(json!({ "text": text }).to_string()))
+            .expect("request");
+        let response = router_with(state.clone())
+            .oneshot(request)
+            .await
+            .expect("infallible");
+        let status = response.status();
+        let bytes = response
+            .into_body()
+            .collect()
+            .await
+            .expect("body")
+            .to_bytes();
+        let body = String::from_utf8_lossy(&bytes).to_string();
+        assert!(key.is_empty() || !body.contains(&key), "key leaked");
+        println!("TEXT {text}\nHTTP {status}");
+        let Ok(value) = serde_json::from_str::<Value>(&body) else {
+            println!("  body: {body}");
+            continue;
+        };
+        for claim in value["claims"].as_array().into_iter().flatten() {
+            println!(
+                "claim {} limit {} status {} verdict {} source {}",
+                claim["quantity"],
+                claim["limit_id"],
+                claim["status"],
+                claim["result"]["verdict"],
+                claim["law"]["source"]
+            );
+            for step in claim["trace"].as_array().into_iter().flatten() {
+                println!(
+                    "  [{}] {}: {}",
+                    step["status"], step["step"], step["detail"]
+                );
+            }
+            if text.contains("Volta cell") {
+                assert!(claim["result"].is_null(), "battery claim got a verdict");
+            }
+        }
+        if value["claims"].is_null() {
+            println!("  body: {body}");
+        }
+    }
+}

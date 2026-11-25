@@ -28,11 +28,11 @@ describe('Workbench', () => {
     }
   }
 
-  it('is pre-filled with a four-claim illustrative text', async () => {
+  it('is pre-filled with a six-claim illustrative text', async () => {
     const { el } = await setup();
     const area = el.querySelector('#wb-text') as HTMLTextAreaElement;
     expect(area.value).toBe(ILLUSTRATIVE_TEXT);
-    expect(ILLUSTRATIVE_TEXT.split('\n\n')).toHaveLength(4);
+    expect(ILLUSTRATIVE_TEXT.split('\n\n')).toHaveLength(6);
     expect(el.textContent).toContain('Illustrative text');
     expect(el.textContent).toContain('paste or drop an image');
   });

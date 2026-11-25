@@ -164,6 +164,51 @@ async fn an_unknown_claim_gets_a_law_from_two_models_and_an_engine_verdict() {
 }
 
 #[tokio::test]
+async fn a_claim_mapped_to_a_built_in_law_is_evaluated_without_authoring() {
+    let m = mocks();
+    m.a.push_content(&extraction());
+    m.a.push_content("built-in: landauer");
+    m.a.push_content(&parameters());
+    let claim = analyze(&m.state).await;
+    assert_eq!(
+        steps(&claim),
+        [
+            ("extraction", "done"),
+            ("limit", "failed"),
+            ("law", "done"),
+            ("parameters", "done"),
+            ("evaluation", "done"),
+        ]
+        .map(|(a, b)| (a.to_string(), b.to_string()))
+    );
+    assert!(claim["trace"][2]["detail"]
+        .as_str()
+        .expect("detail")
+        .contains("built-in limit landauer identified by law naming"));
+    assert_eq!(claim["limit_id"], "landauer");
+    assert_eq!(claim["law"]["source"], "built_in");
+    assert_eq!(claim["status"], "evaluated");
+    assert_eq!(claim["result"]["verdict"], "IMPOSSIBLE");
+    assert_eq!(m.b.inner.calls(), 0, "no authoring call");
+    // The naming request lists the library.
+    let requests = m.a.requests();
+    assert!(requests[1].system.contains("- landauer: Landauer limit"));
+}
+#[tokio::test]
+async fn a_built_in_id_that_does_not_exist_gives_no_verdict() {
+    let m = mocks();
+    m.a.push_content(&extraction());
+    m.a.push_content("built-in: perpetual_motion");
+    let claim = analyze(&m.state).await;
+    assert_eq!(claim["status"], "needs_input");
+    assert!(claim["result"].is_null());
+    assert!(claim["reason"]
+        .as_str()
+        .expect("reason")
+        .contains("built-in law that does not exist"));
+    assert_eq!(m.b.inner.calls(), 0);
+}
+#[tokio::test]
 async fn disputed_laws_give_no_verdict_and_are_not_served() {
     let m = mocks();
     m.a.push_content(&extraction());

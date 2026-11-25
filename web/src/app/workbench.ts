@@ -19,12 +19,14 @@ import {
   verdictLabel,
 } from './workbench-logic';
 
-/** The pre-filled text: synthetic claims about imaginary products. */
+/** The pre-filled text: synthetic claims about imaginary products, one per discipline. */
 export const ILLUSTRATIVE_TEXT = [
-  'The Volta cell stores 5 kWh of energy in a mass of 1 kg.',
+  'The Helios probe cruises at a speed of 3.6e8 m/s relative to the Sun.',
+  'The Q-Scope locates an electron within 1e-12 m while its momentum is known to within 1e-24 kg*m/s.',
+  'The Lumen microscope resolves details of 100 nm using light of 500 nm wavelength and a numerical aperture of 1.4.',
   'The Aurora heat pump delivers heat with a COP of 14.5, hot reservoir at 300 K, cold reservoir at 280 K.',
-  'With an unshrouded rotor, the Boreal wind turbine reaches a power coefficient of 0.70.',
   'The Quanta logic chip erases one bit at 300 K while dissipating 1e-22 J.',
+  'The Volta cell stores 5 kWh of energy in a mass of 1 kg.',
 ].join('\n\n');
 
 /** Answers tried per paragraph when the model answer is unusable. */

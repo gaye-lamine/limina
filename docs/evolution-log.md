@@ -61,3 +61,47 @@ Items are appended below in order.
 - Deviations: at the Eddington bound itself the uncertainty of G, m_p and sigma_T straddles the claim, so the engine returns INSUFFICIENT_DATA with no missing parameter instead of COMPATIBLE (existing D-03 behaviour); the test asserts "not IMPOSSIBLE" there. No solar-mass unit and no km/s/Mpc unit exist in the core units table, stated in the limitations. The textbooks are cited from knowledge, not opened; no section numbers given.
 - Deferred laws: none.
 - Tests: cargo fmt --check, clippy -D warnings, cargo test --workspace pass (562 Rust tests; new: 12 in crates/limina-dsl/tests/astro_cosmo.rs incl. 2 proptests with fixed seed 42). Web untouched, not rerun.
+
+## P4-identification
+- The extraction prompt already listed every built-in law (id, title, formula, claim unit, parameters with units, assumptions with options) because the catalog is built from GET /v1/limits. The law-naming prompt now lists the library too.
+- New law-naming step with the library: `identify_law_in_library` (limina-extract) offers the built-in laws to the model, which answers `built-in: <id>`, one sentence, or "no law identified". The id is checked against the catalog; an unknown id is an error (no law is guessed, status needs_input). `identify_law` is unchanged.
+- Pipeline: a claim with limit_id null goes to the naming step. Built-in id: parameters read by the second pass with the catalog units, evaluated by the deterministic engine (equality laws included), no authoring call, trace step "law": "built-in limit X identified by law naming; no authoring". A sentence goes to two-model authoring as before. No law: NEEDS INPUT as before. On the naming path no assumption is passed to the engine (none is stated), so laws with assumptions answer needs_input or CONDITIONAL, never a guessed verdict. Duplicate merging is unchanged.
+- Web: the pre-filled text is now six paragraphs (relativity, quantum, optics, thermodynamics, computing, battery), labelled illustrative.
+- Tests: cargo fmt --check, clippy -D warnings, cargo test --workspace pass (565 Rust tests; new: 2 mock pipeline tests for the built-in path and an unknown id, 1 extract test for the answer parser, 1 ignored live test). Web: lint, build pass, 237 tests pass. The first web run showed again the transient "No test suite found in workbench-logic.spec.ts" (a fixture helper file with no `it` at the top level); the rerun was green.
+- Live smoke (model from .env, one request per paragraph, raw output of the last of two runs):
+    TEXT The Helios probe cruises at a speed of 3.6e8 m/s relative to the Sun.
+    HTTP 200 OK
+    claim "m/s" limit "speed_limit" status "evaluated" verdict "IMPOSSIBLE" source "built_in"
+      ["done"] "extraction": "read m/s: 3.6e8 m/s, evidence \"The Helios probe cruises at a speed of 3.6e8 m/s relative to the Sun.\""
+      ["done"] "limit": "built-in limit speed_limit"
+      ["done"] "parameters": "the limit needs no parameter"
+      ["done"] "evaluation": "engine verdict IMPOSSIBLE"
+    TEXT The Q-Scope locates an electron within 1e-12 m while its momentum is known to within 1e-24 kg*m/s.
+    HTTP 200 OK
+    claim "h/(2*dp)" limit "heisenberg" status "evaluated" verdict "IMPOSSIBLE" source "built_in"
+      ["done"] "extraction": "read h/(2*dp): 1e-12 m, evidence \"The Q-Scope locates an electron within 1e-12 m while its momentum is known to within 1e-24 kg*m/s.\""
+      ["done"] "limit": "built-in limit heisenberg"
+      ["done"] "parameters": "found dp = 1.0000000000000001e-24 kg*m/s"
+      ["done"] "evaluation": "engine verdict IMPOSSIBLE"
+    TEXT The Lumen microscope resolves details of 100 nm using light of 500 nm wavelength and a numerical aperture of 1.4.
+    HTTP 502 Bad Gateway
+      body: {"error":{"code":"ExtractionFailed","message":"extraction failed: the answer does not match the schema"}}
+    TEXT The Aurora heat pump delivers heat with a COP of 14.5, hot reservoir at 300 K, cold reservoir at 280 K.
+    HTTP 502 Bad Gateway
+      body: {"error":{"code":"ExtractionFailed","message":"extraction failed: the answer does not match the schema"}}
+    TEXT The Quanta logic chip erases one bit at 300 K while dissipating 1e-22 J.
+    HTTP 502 Bad Gateway
+      body: {"error":{"code":"ExtractionFailed","message":"extraction failed: the answer holds no JSON object"}}
+    TEXT The Volta cell stores 5 kWh of energy in a mass of 1 kg.
+    HTTP 200 OK
+    claim "energy" limit null status "needs_input" verdict null source "no_law_identified"
+      ["done"] "extraction": "read energy: 5 kWh, evidence \"The Volta cell stores 5 kWh of energy in a mass of 1 kg.\"; flags: limit not recognized"
+      ["failed"] "limit": "no built-in limit matches this claim"
+      ["failed"] "law": "no law identified"
+    claim "mass" limit null status "needs_input" verdict null source "no_law_identified"
+      ["done"] "extraction": "read mass: 1 kg, evidence \"The Volta cell stores 5 kWh of energy in a mass of 1 kg.\"; flags: limit not recognized"
+      ["failed"] "limit": "no built-in limit matches this claim"
+      ["failed"] "law": "no law identified"
+    test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 6.45s
+- Reading of the live runs: the extraction step maps the claims to built-in laws directly, so the naming path with the library was not exercised live (it is covered by the mock tests). The extraction model is unstable on this text: the first run failed on 2 paragraphs (Lumen, Quanta) and read the COP claim with unit "%" (verdict COMPATIBLE on that misreading); the second run failed on 3 paragraphs (Lumen, Aurora, Quanta) with HTTP 502 (answer not matching the schema, or no JSON object). Failures are recorded as is, not retried by the test. Where a verdict was produced it is the engine's (speed_limit and heisenberg IMPOSSIBLE). The Volta battery claim stays NO LAW IDENTIFIED, with no verdict.
+- Deferred laws: none.
