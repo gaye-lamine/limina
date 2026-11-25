@@ -6,7 +6,7 @@ use limina_core::{
 
 use crate::dto::{AssumptionDto, LimitDto, LimitsResponse, ParameterSpecDto};
 use crate::labels::{assumption_label, option_label, parameter_label};
-use limina_dsl::{DeclarativeLimit, LimitDefinition, Registry};
+use limina_dsl::{DeclarativeLimit, EqualityLimit, LimitDefinition, Registry};
 use limina_extract::{Catalog, CatalogAssumption, CatalogLimit, CatalogOption, CatalogParameter};
 
 /// Looks up a served limit by id.
@@ -17,6 +17,11 @@ pub fn find_limit(id: &str) -> Option<Box<dyn Limit>> {
         "cop" => Some(Box::new(Cop::new())),
         _ => None,
     }
+}
+
+/// Looks up a built-in equality law by id.
+pub fn find_equality(id: &str) -> Option<EqualityLimit> {
+    Registry::builtin().ok()?.equality(id).cloned()
 }
 
 /// Every served limit, in listing order.

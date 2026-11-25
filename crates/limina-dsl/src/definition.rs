@@ -4,7 +4,8 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-/// Upper or lower bound.
+/// Upper bound, lower bound, or an equality (an upper and a lower bound at
+/// the predicted value, widened by `tolerance`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum DirectionName {
@@ -12,6 +13,8 @@ pub enum DirectionName {
     Max,
     /// The claim may not fall below the bound.
     Min,
+    /// The claim should equal the predicted value within the tolerance band.
+    Equal,
 }
 
 /// A dimension: seven SI exponents (L, M, T, I, Θ, N, J), or a unit symbol
@@ -153,7 +156,7 @@ pub struct LimitDefinition {
     pub id: String,
     /// Display title.
     pub title: String,
-    /// Upper or lower bound.
+    /// Upper bound, lower bound, or equality.
     pub direction: DirectionName,
     /// Dimension of the bounded quantity.
     pub bounded_dimension: DimensionSpec,
@@ -192,6 +195,11 @@ pub struct LimitDefinition {
     /// Meaning of each variable name.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub variables: BTreeMap<String, String>,
+    /// Relative tolerance of an equality law, in [0, 1): the band is the
+    /// predicted value plus or minus `tolerance` times its magnitude. Only
+    /// for direction `equal`; absent means 0.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tolerance: Option<f64>,
 }
 
 impl LimitDefinition {

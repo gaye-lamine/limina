@@ -55,7 +55,7 @@ export interface AnalyzedClaim {
   parameters: Record<string, AnalyzedParameter>;
   notes: string[];
   flags: string[];
-  status: 'evaluated' | 'needs_input';
+  status: 'evaluated' | 'needs_input' | 'outside_model_domain';
   result: EvaluateResponse | null;
   reason: string | null;
   code: string | null;

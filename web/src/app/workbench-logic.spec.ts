@@ -87,6 +87,17 @@ describe('workbench logic', () => {
     expect(badge(claimOf())).toBe('built-in law');
   });
 
+  it('shows the outside-model-domain status instead of a verdict', () => {
+    const outside = claimOf({
+      result: null,
+      status: 'outside_model_domain',
+      reason: 'outside the model domain of kinetic: the condition "v < c" does not hold',
+    });
+    expect(verdictLabel(outside)).toBe('OUTSIDE MODEL DOMAIN');
+    expect(explain(outside)[0]).toContain('does not apply to these parameters');
+    expect(explain(outside)[0]).toContain('v < c');
+  });
+
   it('rephrases the solver sentence without changing its numbers', () => {
     expect(
       solveSentence('Not inconsistent with limit carnot only if Th is at least 750 K (other parameters fixed at Tc = 300 K)'),

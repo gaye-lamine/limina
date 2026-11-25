@@ -41,6 +41,7 @@ export function shiftClaim(claim: AnalyzedClaim, by: number): AnalyzedClaim {
 
 /** The label of the claim tab and of its verdict. */
 export function verdictLabel(claim: AnalyzedClaim): string {
+  if (claim.status === 'outside_model_domain') return WB.outsideModelDomain;
   return claim.result?.verdict.replace('_', ' ') ?? WB.needsInput;
 }
 
@@ -60,7 +61,13 @@ export function explain(claim: AnalyzedClaim): string[] {
   if (claim.law?.source === 'draft_agreed') out.push(EXPLAIN.aiDraft);
   const r = claim.result;
   if (!r) {
-    if (claim.reason) out.push(EXPLAIN.needsInput(claim.reason));
+    if (claim.reason) {
+      out.push(
+        claim.status === 'outside_model_domain'
+          ? EXPLAIN.outsideModelDomain(claim.reason)
+          : EXPLAIN.needsInput(claim.reason),
+      );
+    }
     return out;
   }
   const margin = r.bounds?.permissive.margin ?? null;

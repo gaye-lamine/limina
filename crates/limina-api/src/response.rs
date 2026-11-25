@@ -7,6 +7,8 @@ use limina_core::{
     MissingParameter, MissingStatus, SatisfyingConfig, Support, Verdict,
 };
 
+use limina_dsl::{EqualityDecision, EqualityLimit};
+
 use crate::dto::{
     BoundsDto, ConfigurationDto, EnclosureDto, EvaluateResponse, MarginDto, MissingParameterDto,
 };
@@ -87,6 +89,46 @@ pub fn build_draft(
         format!("inconsistent with draft limit {id} under assumptions {rest}")
     } else {
         format!("draft limit {id}: {}", response.wording)
+    };
+    Ok(response)
+}
+
+/// [`build`] for an equality law. The decision is the one against the upper
+/// bound with the combined verdict; the bounds shown are the lower end of
+/// the lower bound and the upper end of the upper bound, that is the band
+/// the claim is compared with. The wording says "inconsistent with limit X
+/// under assumptions none" for IMPOSSIBLE (an equality law has no assumption).
+pub fn build_equality(
+    law: &EqualityLimit,
+    input: &DecisionInput,
+    decision: &EqualityDecision,
+) -> Result<EvaluateResponse, EngineError> {
+    let combined = Decision {
+        verdict: decision.verdict.clone(),
+        ..decision.upper.clone()
+    };
+    let mut response = build(law.upper(), input, &combined)?;
+    let id = law.id();
+    response.wording = match &decision.verdict {
+        Verdict::Impossible => format!("inconsistent with limit {id} under assumptions none"),
+        Verdict::Compatible => format!(
+            "consistent with the value predicted by limit {id}, within its tolerance band; this does not prove the performance is reached"
+        ),
+        _ => response.wording,
+    };
+    response.bounds = match (&decision.upper.enclosures, &decision.lower.enclosures) {
+        (Some(up), Some(low)) => {
+            let band = |u: &EnclosureResult, l: &EnclosureResult| EnclosureDto {
+                b_min: l.bounds.b_min,
+                b_max: u.bounds.b_max,
+                margin: None,
+            };
+            Some(BoundsDto {
+                permissive: band(&up.permissive, &low.permissive),
+                restrictive: band(&up.restrictive, &low.restrictive),
+            })
+        }
+        _ => None,
     };
     Ok(response)
 }

@@ -113,6 +113,10 @@ export class Workbench {
       : `${WB.progressParagraph} ${e.paragraph}`;
   }
 
+  protected verdictText(c: AnalyzedClaim): string {
+    return verdictLabel(c);
+  }
+
   protected verdictClass(c: AnalyzedClaim): string {
     return c.result ? VERDICT_CLASS[c.result.verdict] : 'verdict--insufficient-data';
   }

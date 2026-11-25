@@ -5,7 +5,8 @@ use std::path::{Path, PathBuf};
 
 use limina_core::Limit;
 
-use crate::definition::LimitDefinition;
+use crate::definition::{DirectionName, LimitDefinition};
+use crate::equality::EqualityLimit;
 use crate::error::DslError;
 use crate::limit::DeclarativeLimit;
 use crate::report::{check_limit, CheckReport};
@@ -19,6 +20,7 @@ pub fn default_dir() -> PathBuf {
 #[derive(Debug, Clone, Default)]
 pub struct Registry {
     limits: Vec<DeclarativeLimit>,
+    equalities: Vec<EqualityLimit>,
 }
 
 impl Registry {
@@ -73,6 +75,7 @@ impl Registry {
     pub fn from_definitions(definitions: Vec<LimitDefinition>) -> Result<Registry, DslError> {
         let mut seen = BTreeSet::new();
         let mut limits = Vec::new();
+        let mut equalities = Vec::new();
         for d in definitions {
             if !seen.insert(d.id.clone()) {
                 return Err(DslError::InvalidDefinition {
@@ -80,10 +83,15 @@ impl Registry {
                     message: "the id is used by another definition".to_string(),
                 });
             }
-            limits.push(DeclarativeLimit::compile(d)?);
+            if d.direction == DirectionName::Equal {
+                equalities.push(EqualityLimit::compile(d)?);
+            } else {
+                limits.push(DeclarativeLimit::compile(d)?);
+            }
         }
         limits.sort_by(|a, b| a.id().cmp(b.id()));
-        Ok(Registry { limits })
+        equalities.sort_by(|a, b| a.id().cmp(b.id()));
+        Ok(Registry { limits, equalities })
     }
 
     /// The limits, sorted by id.
@@ -94,6 +102,16 @@ impl Registry {
     /// The limit with this id.
     pub fn get(&self, id: &str) -> Option<&DeclarativeLimit> {
         self.limits.iter().find(|l| l.id() == id)
+    }
+
+    /// The equality laws, sorted by id.
+    pub fn equalities(&self) -> &[EqualityLimit] {
+        &self.equalities
+    }
+
+    /// The equality law with this id.
+    pub fn equality(&self, id: &str) -> Option<&EqualityLimit> {
+        self.equalities.iter().find(|l| l.id() == id)
     }
 
     /// The limits as core `Limit`s.

@@ -15,6 +15,7 @@ pub mod analysis;
 pub mod compare;
 pub mod curve;
 pub mod definition;
+pub mod equality;
 pub mod error;
 pub mod expr;
 pub mod ivops;
@@ -29,6 +30,7 @@ pub use compare::{
 };
 pub use curve::{bound_curve, decisive, CurveError, CurvePoint, MAX_CURVE_POINTS};
 pub use definition::{Classification, EpistemicStatus, LimitDefinition, Status};
+pub use equality::{combine_verdicts, EqualityDecision, EqualityLimit, EqualityOutcome};
 pub use error::DslError;
 pub use limit::{CompiledFormula, DeclarativeLimit};
 pub use registry::{default_dir, Registry};

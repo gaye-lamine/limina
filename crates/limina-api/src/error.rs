@@ -83,6 +83,15 @@ pub enum ApiError {
     /// `POST /v1/curve`: the range or the point count is invalid.
     #[error("invalid curve request: {0}")]
     InvalidCurveRequest(String),
+    /// A validity condition of the law does not hold for the given
+    /// parameters: the law does not apply to this claim. No verdict.
+    #[error("outside the model domain of {limit_id}: the condition \"{condition}\" does not hold")]
+    OutsideModelDomain {
+        /// The law.
+        limit_id: String,
+        /// The failed condition, as written in the definition.
+        condition: String,
+    },
 }
 
 impl From<ExtractError> for ApiError {
@@ -132,6 +141,7 @@ impl ApiError {
             ApiError::UnknownFreeParameter(_) => "UnknownFreeParameter",
             ApiError::MissingFixedParameter(_) => "MissingFixedParameter",
             ApiError::InvalidCurveRequest(_) => "InvalidCurveRequest",
+            ApiError::OutsideModelDomain { .. } => "OutsideModelDomain",
         }
     }
 
@@ -156,7 +166,8 @@ impl ApiError {
             | ApiError::NoThresholdInRange { .. }
             | ApiError::UnknownFreeParameter(_)
             | ApiError::MissingFixedParameter(_)
-            | ApiError::InvalidCurveRequest(_) => StatusCode::UNPROCESSABLE_ENTITY,
+            | ApiError::InvalidCurveRequest(_)
+            | ApiError::OutsideModelDomain { .. } => StatusCode::UNPROCESSABLE_ENTITY,
         }
     }
 }

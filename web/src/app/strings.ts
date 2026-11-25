@@ -204,6 +204,7 @@ export const WB = {
   claimsNone: 'No numeric claim was found in the text.',
   paragraphFailed: 'Paragraph not analysed',
   needsInput: 'NEEDS INPUT',
+  outsideModelDomain: 'OUTSIDE MODEL DOMAIN',
   badge: {
     built_in: 'built-in law',
     draft_agreed: 'AI-written, not validated',
@@ -242,6 +243,8 @@ export const EXPLAIN = {
   conditional: 'The claim fits the law only under some of its assumptions.',
   insufficient: (names: string) => `The engine needs a value it does not have: ${names}.`,
   needsInput: (reason: string) => `No verdict: ${reason}.`,
+  outsideModelDomain: (reason: string) =>
+    `No verdict: the law does not apply to these parameters. ${reason}.`,
   solvePrefix: 'It would be consistent only if',
   disputed: 'Two models wrote this law differently, so no verdict is given from it.',
   aiDraft: 'The law was written by two language models that agree on it; nobody has reviewed it.',

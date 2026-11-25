@@ -4,7 +4,7 @@ use axum::body::Bytes;
 use axum::extract::State;
 use axum::Json;
 use limina_core::decide;
-use limina_dsl::DeclarativeLimit;
+use limina_dsl::{DeclarativeLimit, EqualityLimit, EqualityOutcome};
 use serde_json::{json, Value};
 
 use crate::dto::{EvaluateRequest, EvaluateResponse, LimitsResponse};
@@ -61,8 +61,28 @@ pub fn evaluate_draft(
     Ok(response::build_draft(limit, &input, &decision)?)
 }
 
+/// The evaluation of an equality law: both bounds go through the engine and
+/// the verdicts are combined; a failed validity condition is the typed error
+/// `OutsideModelDomain`, not a verdict.
+pub fn evaluate_equality(
+    law: &EqualityLimit,
+    request: &EvaluateRequest,
+) -> Result<EvaluateResponse, ApiError> {
+    let input = convert::decision_input(law.upper(), request)?;
+    match law.evaluate(&input)? {
+        EqualityOutcome::Decided(decision) => Ok(response::build_equality(law, &input, &decision)?),
+        EqualityOutcome::OutsideModelDomain { condition } => Err(ApiError::OutsideModelDomain {
+            limit_id: law.id().to_string(),
+            condition,
+        }),
+    }
+}
+
 /// The evaluation itself, shared by `POST /v1/evaluate` and `POST /v1/analyze`.
 pub fn evaluate_request(request: &EvaluateRequest) -> Result<EvaluateResponse, ApiError> {
+    if let Some(law) = registry::find_equality(&request.limit_id) {
+        return evaluate_equality(&law, request);
+    }
     let limit = registry::find_limit(&request.limit_id)
         .ok_or_else(|| ApiError::UnknownLimit(request.limit_id.clone()))?;
     let input = convert::decision_input(limit.as_ref(), request)?;

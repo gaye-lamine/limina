@@ -247,7 +247,7 @@ pub struct AnalyzedClaimDto {
     pub notes: Vec<String>,
     /// What was found wrong.
     pub flags: Vec<String>,
-    /// `evaluated` or `needs_input`.
+    /// `evaluated`, `needs_input` or `outside_model_domain`.
     pub status: &'static str,
     /// The engine result, when evaluated; the same shape as `POST /v1/evaluate`.
     pub result: Option<EvaluateResponse>,

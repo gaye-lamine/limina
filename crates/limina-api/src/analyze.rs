@@ -28,6 +28,10 @@ pub const EVALUATED: &str = "evaluated";
 /// Status of a claim that needs more input before the engine can decide.
 pub const NEEDS_INPUT: &str = "needs_input";
 
+/// Status of a claim whose law does not apply to the given parameters: a
+/// validity condition of the law fails. No verdict is given.
+pub const OUTSIDE_MODEL_DOMAIN: &str = "outside_model_domain";
+
 /// `POST /v1/analyze`.
 pub async fn analyze(
     State(state): State<AppState>,
@@ -155,15 +159,22 @@ pub fn analyze_claim(claim: &CheckedClaim) -> AnalyzedClaimDto {
             dto.status = EVALUATED;
             dto.result = Some(result);
         }
-        Err(e) => {
-            dto.reason = Some(match &e {
-                ApiError::Engine(EngineError::NotApplicable { .. }) => {
-                    REFERENCE_AREA_NOT_STATED.to_string()
-                }
-                other => other.to_string(),
-            });
-            dto.code = Some(e.code());
-        }
+        Err(e) => refuse(&mut dto, &e),
     }
     dto
+}
+
+/// Records why the engine gave no verdict: `outside_model_domain` when a
+/// validity condition of the law fails, `needs_input` otherwise.
+pub fn refuse(dto: &mut AnalyzedClaimDto, e: &ApiError) {
+    if matches!(e, ApiError::OutsideModelDomain { .. }) {
+        dto.status = OUTSIDE_MODEL_DOMAIN;
+    }
+    dto.reason = Some(match e {
+        ApiError::Engine(EngineError::NotApplicable { .. }) => {
+            REFERENCE_AREA_NOT_STATED.to_string()
+        }
+        other => other.to_string(),
+    });
+    dto.code = Some(e.code());
 }

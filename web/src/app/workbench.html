@@ -82,7 +82,7 @@
       <div class="wb-panel" role="tabpanel" [attr.aria-labelledby]="'wb-tab-' + selected()" aria-live="polite">
         @if (claim(); as c) {
           <div class="wb-head">
-            <p class="verdict {{ verdictClass(c) }}">{{ c.result?.verdict?.replace('_', ' ') ?? s.needsInput }}</p>
+            <p class="verdict {{ verdictClass(c) }}">{{ verdictText(c) }}</p>
             <p class="wb-badge">{{ badgeOf(c) }}@if (classOf(c)) {, {{ classOf(c) }}}</p>
             <p class="mono wb-limit">{{ c.limit_id ?? '' }}</p>
           </div>

@@ -183,6 +183,15 @@ fn parameter(
     ))
 }
 
+/// The types of the parameters of a definition, checked like in `compile`.
+pub(crate) fn environment(def: &LimitDefinition) -> Result<Env, DslError> {
+    let mut env = Env::new();
+    for p in &def.parameters {
+        env.insert(p.name.clone(), parameter(def, p)?.0);
+    }
+    Ok(env)
+}
+
 fn unique<'a>(
     def: &LimitDefinition,
     ids: impl Iterator<Item = &'a str>,
@@ -212,6 +221,15 @@ impl DeclarativeLimit {
                 def,
                 "status validated needs a person in validated_by",
             ));
+        }
+        if def.direction == DirectionName::Equal {
+            return Err(invalid(
+                def,
+                "direction equal is compiled by EqualityLimit, not DeclarativeLimit",
+            ));
+        }
+        if def.tolerance.is_some() {
+            return Err(invalid(def, "tolerance is only for direction equal"));
         }
         let bounded = resolve(def, &def.bounded_dimension)?;
         if bounded.exponents() == TEMPERATURE {
@@ -312,6 +330,10 @@ impl DeclarativeLimit {
             direction: match def.direction {
                 DirectionName::Max => Direction::Max,
                 DirectionName::Min => Direction::Min,
+                // Refused at the top of this function.
+                DirectionName::Equal => {
+                    return Err(invalid(def, "direction equal is not a single bound"))
+                }
             },
             definition,
             bounded,
