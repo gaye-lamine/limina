@@ -115,3 +115,12 @@ Items are appended below in order.
 - Tests: 8 new API tests (tests/graphs.rs: band, validity zones of a bound law and of an equality law, equality tolerance band against the textbook formula, surface against 1 - Tc/Th, grid cap, errors), 13 new web geometry tests (graph-geometry.spec.ts).
 - Layout check, headless Edge at 1920x1080 with the live API on the illustrative text, comparison scale view (speed_limit claim): window height 1080, document height 1080, body height 1080. Only scrolling element: the input textarea (pre-existing, user text). The map view was not measured: the claim open in the panel had no parameter, so the Map switch was not shown. The curve view was not measured either for the same reason; its svg keeps the same max-height as before.
 
+
+## P6-vectors
+- Assessment: a real vector type (3 components, cross product, interval evaluation per component) would need new expression types and dimension checks in limina-dsl and a claim form for vectors. Not done: it would be a design change to the DSL and the claim model, and the one law in scope does not need it.
+- Smallest safe version, implemented: magnitude-only evaluation with the field and speed magnitudes as explicit parameters. Law lorentz_force (max bound, theorem, data/limits/lorentz_force.json, spec .kiro/specs/law-lorentz_force/): |F| <= |q| (|E| + |v| |B|), from the triangle inequality and |v x B| <= |v||B|. Refs: Jackson, Classical Electrodynamics, 3rd ed., Wiley (1999); Griffiths, Introduction to Electrodynamics, 4th ed., CUP (2017), cited from knowledge, not opened.
+- Limits stated in the law: only an excess over the bound is excluded; a force below it is not confirmed (the directions are not modelled). Directions of E, B and v stay out of scope.
+- Behaviour noted: a claim exactly at the bound gives CONDITIONAL (interval rounding), never IMPOSSIBLE; the test asserts not-IMPOSSIBLE there.
+- Open decision for the author: whether to add true vector quantities (components, cross product) to the DSL, which would allow a tight equality F = q (E + v x B) instead of a bound.
+- Tests: cargo fmt --check, clippy -D warnings, cargo test --workspace pass (new: 4 in crates/limina-dsl/tests/lorentz.rs incl. 1 proptest with fixed ChaCha seed, 256 cases, 1024 with CI). Registry and API list tests updated for the 13th max/min law. Web untouched, not rerun.
+- Deferred laws: none.

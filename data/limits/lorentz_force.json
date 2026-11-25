@@ -1,0 +1,29 @@
+{
+  "id": "lorentz_force",
+  "title": "Lorentz force magnitude bound",
+  "direction": "max",
+  "bounded_dimension": "N",
+  "parameters": [
+    { "name": "charge", "dimension": "C", "units": ["C", "uC", "nC"], "test_range": [1e-9, 1e-3] },
+    { "name": "e_field", "dimension": "V/m", "units": ["V/m", "kV/m"], "test_range": [0, 1e6] },
+    { "name": "speed", "dimension": "m/s", "units": ["m/s", "km/s"], "test_range": [0, 1e7] },
+    { "name": "b_field", "dimension": "T", "units": ["T", "mT"], "test_range": [0, 10] }
+  ],
+  "formula": "abs(charge)*(abs(e_field)+abs(speed)*abs(b_field))",
+  "validity": [],
+  "references": [
+    "Jackson, J. D., Classical Electrodynamics, 3rd ed., Wiley (1999)",
+    "Griffiths, D. J., Introduction to Electrodynamics, 4th ed., Cambridge University Press (2017)"
+  ],
+  "status": "draft",
+  "epistemic_status": "theorem",
+  "classification": "theorem",
+  "validity_domain": "Magnitude of the force on a point charge moving at speed `speed` in a field with electric magnitude `e_field` and magnetic magnitude `b_field`, all in one inertial frame. Bound: |F| = |q (E + v x B)| <= |q| (|E| + |v| |B|), by the triangle inequality and |v x B| <= |v| |B|.",
+  "limitations": [
+    "Upper bound on the magnitude only: the equality needs E and v x B parallel, which the magnitudes alone do not tell, so a force below the bound is not confirmed",
+    "The fields and the speed are magnitudes given by the user; the directions are not modelled, so no vector quantity is used",
+    "Point charge, fields at the position of the charge, no radiation reaction, no field produced by the charge itself",
+    "Valid in any inertial frame with the fields and the speed measured in that frame; the force is the rate of change of momentum there"
+  ],
+  "variables": { "charge": "Electric charge of the particle", "e_field": "Magnitude of the electric field", "speed": "Speed of the particle", "b_field": "Magnitude of the magnetic flux density" }
+}

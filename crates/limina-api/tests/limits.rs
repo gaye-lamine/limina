@@ -42,6 +42,7 @@ async fn lists_betz_and_carnot() {
             "eddington_luminosity",
             "heisenberg",
             "landauer",
+            "lorentz_force",
             "luminous_efficacy",
             "shannon_hartley",
             "speed_limit",

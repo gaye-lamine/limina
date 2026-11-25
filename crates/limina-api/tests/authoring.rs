@@ -131,6 +131,7 @@ async fn landauer_is_authored_listed_and_evaluated_as_a_draft() {
             "eddington_luminosity",
             "heisenberg",
             "landauer",
+            "lorentz_force",
             "luminous_efficacy",
             "shannon_hartley",
             "speed_limit",
@@ -156,10 +157,10 @@ async fn landauer_is_authored_listed_and_evaluated_as_a_draft() {
             "draft-landauer"
         ]
     );
-    assert!(limits[..29].iter().all(|l| l.get("status").is_none()));
-    assert_eq!(limits[29]["status"], "draft");
-    assert_eq!(limits[29]["direction"], "Min");
-    assert_eq!(limits[29]["formula"], "kB*T*ln2");
+    assert!(limits[..30].iter().all(|l| l.get("status").is_none()));
+    assert_eq!(limits[30]["status"], "draft");
+    assert_eq!(limits[30]["direction"], "Min");
+    assert_eq!(limits[30]["formula"], "kB*T*ln2");
 
     let bound = KB * 300.0 * std::f64::consts::LN_2;
     let (status, ok) = call(
@@ -351,5 +352,5 @@ async fn three_refused_answers_are_422_and_register_nothing() {
     assert_eq!(r["error"]["code"], "LimitNotAuthored");
     assert_eq!(mock.calls(), 3);
     let (_, list) = call(&state, "GET", "/v1/limits", None).await;
-    assert_eq!(list["limits"].as_array().expect("limits").len(), 29);
+    assert_eq!(list["limits"].as_array().expect("limits").len(), 30);
 }
