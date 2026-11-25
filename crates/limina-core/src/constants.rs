@@ -73,7 +73,7 @@ const fn k(
 }
 
 /// The table, in a stable order.
-pub const CONSTANTS: [PhysicalConstant; 23] = [
+pub const CONSTANTS: [PhysicalConstant; 24] = [
     k(
         "c",
         "speed of light in vacuum",
@@ -270,6 +270,15 @@ pub const CONSTANTS: [PhysicalConstant; 23] = [
         0.000_000_002_9e-24,
         "J T^-1",
         [2, 0, 0, 1, 0, 0, 0],
+        NIST,
+    ),
+    k(
+        "sigma_T",
+        "Thomson cross section",
+        6.652_458_705_1e-29,
+        0.000_000_006_2e-29,
+        "m^2",
+        [2, 0, 0, 0, 0, 0, 0],
         NIST,
     ),
     k(

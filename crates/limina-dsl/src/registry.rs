@@ -149,6 +149,18 @@ impl Registry {
                 include_str!("../../../data/limits/radioactive_decay.json"),
             ),
             (
+                "eddington_luminosity.json",
+                include_str!("../../../data/limits/eddington_luminosity.json"),
+            ),
+            (
+                "friedmann_flat.json",
+                include_str!("../../../data/limits/friedmann_flat.json"),
+            ),
+            (
+                "schwarzschild_radius.json",
+                include_str!("../../../data/limits/schwarzschild_radius.json"),
+            ),
+            (
                 "tsiolkovsky.json",
                 include_str!("../../../data/limits/tsiolkovsky.json"),
             ),

@@ -39,6 +39,7 @@ async fn lists_betz_and_carnot() {
             "carnot",
             "cop",
             "abbe_limit",
+            "eddington_luminosity",
             "heisenberg",
             "landauer",
             "luminous_efficacy",
@@ -51,6 +52,7 @@ async fn lists_betz_and_carnot() {
             "energy_momentum",
             "escape_velocity",
             "faraday_emf",
+            "friedmann_flat",
             "hydrogen_levels",
             "kepler_third",
             "length_contraction",
@@ -60,6 +62,7 @@ async fn lists_betz_and_carnot() {
             "photon_energy_wavelength",
             "radioactive_decay",
             "relativistic_kinetic_energy",
+            "schwarzschild_radius",
             "time_dilation"
         ]
     );

@@ -1,0 +1,36 @@
+{
+  "id": "eddington_luminosity",
+  "title": "Eddington luminosity",
+  "direction": "max",
+  "bounded_dimension": "W",
+  "parameters": [
+    { "name": "M", "dimension": "kg", "units": ["kg", "g"], "test_range": [1e29, 1e40] }
+  ],
+  "assumptions": [
+    {
+      "id": "accretion_geometry",
+      "options": [
+        { "id": "spherical_steady_ionized_hydrogen", "formula": "4*pi*G*M*m_p*c/sigma_T" },
+        { "id": "non_spherical_or_other_composition" }
+      ]
+    }
+  ],
+  "validity": [],
+  "references": [
+    "Rybicki, G. B. and Lightman, A. P., Radiative Processes in Astrophysics, Wiley (1979)",
+    "Frank, J., King, A. and Raine, D., Accretion Power in Astrophysics, 3rd ed., Cambridge University Press (2002)",
+    "CODATA 2022 recommended value of the Thomson cross section, https://physics.nist.gov/cgi-bin/cuu/Value?sigmae"
+  ],
+  "status": "draft",
+  "epistemic_status": "model_bound",
+  "classification": "theoretical_bound",
+  "validity_domain": "Luminosity at which the outward radiation force on fully ionized hydrogen, by Thomson scattering on electrons, balances the inward gravitational force on the protons, for a steady, spherically symmetric flow around a mass M: L_Edd = 4 pi G M m_p c / sigma_T.",
+  "limitations": [
+    "Holds under the stated geometry and composition only; non-spherical accretion, other opacities or non-steady flows can give luminosities above it. Without the assumption the engine gives no verdict (needs input), and a claim above the value is inconsistent with the limit only under the spherical, steady, ionized-hydrogen assumption",
+    "Thomson scattering only: other opacity sources change the value",
+    "Fully ionized hydrogen: a helium-rich composition has a different mass per electron",
+    "A bound of the model for a stable steady flow, not a limit of nature that no source can exceed",
+    "The mass is the mass of the central object in kg or g; no solar-mass unit is in the core units table"
+  ],
+  "variables": { "M": "Mass of the central object" }
+}
