@@ -184,3 +184,55 @@ async fn abbe_limit_against_wavelength_is_computed_by_the_engine() {
         );
     }
 }
+
+#[tokio::test]
+async fn decay_curve_and_heisenberg_hyperbola_are_computed_by_the_engine() {
+    let (status, c) = call(
+        plain_state(),
+        "POST",
+        "/v1/curve",
+        Some(json!({
+            "limit_id": "radioactive_decay",
+            "free_parameter": "t",
+            "parameters": {"n0": {"value": 1000.0, "unit": "dimensionless"}, "t_half": {"value": 10.0, "unit": "s"}},
+            "range": [0.0, 50.0],
+            "points": 6
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{c}");
+    for p in c["points"].as_array().expect("points") {
+        let t = p["x"].as_f64().expect("x");
+        let expected = 1000.0 * (-t * std::f64::consts::LN_2 / 10.0).exp();
+        let hi = p["b_max"].as_f64().expect("b_max");
+        assert!(
+            hi >= expected && hi <= expected * 1.011,
+            "t = {t}: {hi} vs {expected}"
+        );
+    }
+    let (status, c) = call(
+        plain_state(),
+        "POST",
+        "/v1/curve",
+        Some(json!({
+            "limit_id": "heisenberg",
+            "free_parameter": "dp",
+            "parameters": {},
+            "range": [1.0e-25, 1.0e-23],
+            "points": 5
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{c}");
+    assert_eq!(c["direction"], "Min");
+    let hbar = 6.626_070_15e-34 / (2.0 * std::f64::consts::PI);
+    for p in c["points"].as_array().expect("points") {
+        let dp = p["x"].as_f64().expect("x");
+        let expected = hbar / (2.0 * dp);
+        let lo = p["b_min"].as_f64().expect("b_min");
+        assert!(
+            (lo - expected).abs() / expected < 1e-9,
+            "{lo} vs {expected}"
+        );
+    }
+}
