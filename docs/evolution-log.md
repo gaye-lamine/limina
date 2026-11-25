@@ -295,3 +295,15 @@ Items are appended below in order.
       ["failed"] "law": "no law identified (model nvidia/nemotron-3.5-lightning-30b-a3b)"
     test the_multi_discipline_text_is_identified_from_the_library_first ... ok
 - Deferred laws: none.
+
+## Fix after the author's Heisenberg test (25/11, evening)
+Reported: "1 × 10⁻¹⁰ m" and "1 × 10⁻²⁴ kg·m/s" were read as 1 m and 1 kg·m/s. The verdict COMPATIBLE was right only by chance, the explanation said 1.9e34 times the minimum, a stray claim appeared and the plot was flat.
+- Evidence check (limina-extract/check.rs): numbers in scientific notation are read whole ("a × 10ⁿ", "a x 10^-n", "a·10^(-n)", "a*10**n", a bare "10⁻ⁿ", a typographic minus after "× 10"). The mantissa alone is no longer a number of the text, so a model that drops the power of ten is "not traceable" and gets no verdict. "10-20" stays a range.
+- Units: two spellings of the same SI unit ("kg·m/s", "kg*m/s") are the same unit (same dimension and factor, no conversion).
+- Parse: parameters written as a list of named readings are accepted, as some models write them; unknown fields and duplicate names are still refused.
+- A parameter written by the model as its own claim of the same limit is attached to the one claim that lacks it, with the same evidence rules; ambiguous cases are left as they are. The pipeline also merges a null-limit reading of a parameter into its host claim. Both are recorded in the notes and the trace.
+- Prompts: the value is the whole number with its power of ten; quantity is a name in words; a value the claim depends on is a parameter, not a claim.
+- Plots: POST /v1/curve accepts spacing linear (default), log or auto (log when the range spans three decades with a positive lower end) and returns the spacing used. The web explorer asks for auto and draws log axes when the engine sampled logarithmically or the values span three decades; the caption says which axes are logarithmic.
+- Tests: Rust 590 to 598 (check: powers of ten, attachment, unit spellings; parse: list form; pipeline: the author's text end to end, a dropped power of ten is not traceable, log sampling). Web 237 to 252.
+- Live, the author's text without its last sentence: one claim, COMPATIBLE from the engine, bound dx >= hbar/(2 dp) = 5.27e-11 m, claim 1.90 times the minimum, dp = 1e-24 kg·m/s read as the parameter (model nemotron-3.5-lightning).
+- Live, the full text with its last sentence: lightning answers a computed product 1e-34 that is not written in the text (dropped as not traceable) or broken JSON, and bolt garbles the superscripts in the evidence (not traceable), so the claim gets no verdict. No false verdict; the remaining limit is the models' reading, listed under open decisions.

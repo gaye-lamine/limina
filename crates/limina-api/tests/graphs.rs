@@ -26,6 +26,7 @@ fn carnot_curve(range: [f64; 2], points: usize) -> CurveRequest {
         range: Some(range),
         points: Some(points),
         uncertainties: BTreeMap::new(),
+        spacing: None,
     }
 }
 
@@ -38,6 +39,7 @@ fn kinetic_curve(range: [f64; 2], points: usize) -> CurveRequest {
         range: Some(range),
         points: Some(points),
         uncertainties: BTreeMap::new(),
+        spacing: None,
     }
 }
 

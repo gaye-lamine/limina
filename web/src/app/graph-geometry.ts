@@ -25,6 +25,10 @@ export interface GraphGeometry {
   claimY: number | null;
   xTicks: Tick[];
   yTicks: Tick[];
+  /** True when the x axis is logarithmic (the engine sampled it so). */
+  logX: boolean;
+  /** True when the y values span three decades or more and the y axis is logarithmic. */
+  logY: boolean;
 }
 
 const inner = () => ({
@@ -103,14 +107,24 @@ export function graphGeometry(curve: CurveResponse, claim: number | null): Graph
     if (p.b_max !== null) ys.push(p.b_max);
   }
   if (claim !== null && Number.isFinite(claim)) ys.push(claim);
+  const [x0, x1] = curve.range;
+  const { w, h } = inner();
+  const logX = curve.spacing === 'log' && x0 > 0;
+  const logY = wideLogRange(ys);
   let y0 = Math.min(0, ...ys);
   let y1 = Math.max(...ys) * 1.15;
   if (y1 <= y0) y1 = y0 + 1;
   if (y0 < 0) y0 *= 1.15;
-  const [x0, x1] = curve.range;
-  const { w, h } = inner();
-  const sx = (x: number) => PLOT.left + ((x - x0) / (x1 - x0 || 1)) * w;
-  const sy = (y: number) => PLOT.top + h - ((y - y0) / (y1 - y0)) * h;
+  if (logY) {
+    y0 = Math.min(...ys) / 2;
+    y1 = Math.max(...ys) * 2;
+  }
+  const sx = logX
+    ? (x: number) => PLOT.left + (Math.log(x / x0) / Math.log(x1 / x0)) * w
+    : (x: number) => PLOT.left + ((x - x0) / (x1 - x0 || 1)) * w;
+  const sy = logY
+    ? (y: number) => PLOT.top + h - (Math.log(Math.max(y, y0) / y0) / Math.log(y1 / y0)) * h
+    : (y: number) => PLOT.top + h - ((y - y0) / (y1 - y0)) * h;
 
   const indexed = curve.points.map((p, i) => ({ ...p, i }));
   const edgeY = curve.direction === 'Max' ? PLOT.top : PLOT.top + h;
@@ -145,10 +159,28 @@ export function graphGeometry(curve: CurveResponse, claim: number | null): Graph
       x: sx(a),
       width: Math.max(sx(b) - sx(a), 1),
     })),
-    claimY: claim !== null && Number.isFinite(claim) ? sy(claim) : null,
-    xTicks: linearTicks(x0, x1, sx),
-    yTicks: linearTicks(y0, y1, sy),
+    claimY:
+      claim !== null && Number.isFinite(claim) && (!logY || claim > 0) ? sy(claim) : null,
+    xTicks: logX ? logTicks(x0, x1, sx) : linearTicks(x0, x1, sx),
+    yTicks: logY ? logTicks(y0, y1, sy) : linearTicks(y0, y1, sy),
+    logX,
+    logY,
   };
+}
+
+/** Values spanning three decades or more, all positive: drawn on a log axis. */
+export function wideLogRange(values: number[]): boolean {
+  const v = values.filter((x) => Number.isFinite(x));
+  if (v.length < 2 || v.some((x) => x <= 0)) return false;
+  return Math.max(...v) / Math.min(...v) >= 1e3;
+}
+
+/** Five ticks evenly spaced in logarithm from `a` to `b` (both positive). */
+export function logTicks(a: number, b: number, place: (v: number) => number): Tick[] {
+  return [0, 0.25, 0.5, 0.75, 1].map((t) => {
+    const v = Math.exp(Math.log(a) + t * (Math.log(b) - Math.log(a)));
+    return { pos: place(v), label: v.toExponential(1) };
+  });
 }
 
 /** One cell of the heat map. `level` is 0 (smallest bound) to 1 (largest); null where undefined. */

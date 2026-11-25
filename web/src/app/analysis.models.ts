@@ -97,6 +97,8 @@ export interface CurveResponse {
   band?: CurvePoint[];
   /** Intervals of the free parameter where a validity condition fails. */
   validity_zones?: [number, number][];
+  /** Sampling used by the engine; 'log' curves are drawn on a logarithmic x axis. */
+  spacing?: 'linear' | 'log';
 }
 export interface SurfaceResponse {
   limit_id: string;

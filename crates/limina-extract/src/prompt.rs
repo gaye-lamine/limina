@@ -71,6 +71,9 @@ pub fn system_prompt(catalog: &Catalog) -> String {
     s.push_str("- List every numeric performance claim of the text. A claim that none of the limits above covers gets limit_id null, its own quantity, value, unit and evidence, empty constraints and empty parameters.\n");
     s.push_str("- evidence is an exact quotation from the text that contains the number.\n");
     s.push_str("- value is the number as written in the text; unit is the unit as written: \"%\" for a percentage, \"dimensionless\" for a pure number.\n");
+    s.push_str("- value is the whole number, power of ten included: \"1 × 10⁻¹⁰ m\" is value 1e-10, never 1.\n");
+    s.push_str("- quantity names the physical quantity in words (for example \"position uncertainty\"), never a unit or a formula.\n");
+    s.push_str("- A value the claim depends on (a temperature, a mass, an uncertainty of another quantity) is a parameter of that claim, never a claim of its own.\n");
     s.push_str("- Use only the parameter names and units listed above. Never convert a unit.\n");
     s.push_str("- Put an assumption in constraints only if the text states it explicitly; otherwise leave it out.\n");
     s.push_str("- Never invent a value. If a value the limit needs is not in the text, put its name in missing.\n");

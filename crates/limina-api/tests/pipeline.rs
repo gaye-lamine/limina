@@ -349,6 +349,126 @@ async fn a_second_reading_of_a_built_in_claim_is_merged_not_authored() {
     assert_eq!(m.b.inner.calls(), 0);
 }
 
+const HEISENBERG_TEXT: &str = "A particle has a position uncertainty of 1 × 10⁻¹⁰ meters and a momentum uncertainty of 1 × 10⁻²⁴ kg·m/s. Both uncertainties are measured along the same spatial axis.";
+
+fn heisenberg_answer(x: f64, p: f64) -> String {
+    json!({"claims": [
+        {"limit_id": "heisenberg", "quantity": "position uncertainty", "value": x, "unit": "m",
+         "evidence": "position uncertainty of 1 × 10⁻¹⁰ meters", "constraints": {},
+         "parameters": {"dp": {"value": p, "unit": "kg*m/s", "evidence": "momentum uncertainty of 1 × 10⁻²⁴ kg·m/s"}}},
+        {"limit_id": null, "quantity": "momentum uncertainty", "value": p, "unit": "kg*m/s",
+         "evidence": "momentum uncertainty of 1 × 10⁻²⁴ kg·m/s", "constraints": {}, "parameters": {}}
+    ], "missing": []})
+    .to_string()
+}
+
+#[tokio::test]
+async fn powers_of_ten_are_read_whole_and_the_parameter_is_not_a_second_claim() {
+    let m = mocks();
+    m.a.push_content(&heisenberg_answer(1e-10, 1e-24));
+    let (status, body) = call(
+        &m.state,
+        "POST",
+        "/v1/analyze",
+        Some(json!({ "text": HEISENBERG_TEXT })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let claims = body["claims"].as_array().expect("claims");
+    assert_eq!(
+        claims.len(),
+        1,
+        "the momentum is a parameter, not a claim: {body}"
+    );
+    let c = &claims[0];
+    assert_eq!(c["value"], 1e-10);
+    assert_eq!(c["parameters"]["dp"]["value"], 1e-24);
+    assert_eq!(c["result"]["verdict"], "COMPATIBLE");
+    // dx >= hbar / (2 dp) = 1.054571817e-34 / 2e-24 = 5.272859085e-11 m.
+    let b = c["result"]["bounds"]["permissive"]["b_max"]
+        .as_f64()
+        .expect("bound");
+    assert!((b - 1.054_571_817e-34 / 2e-24).abs() / b < 1e-9, "{b}");
+    let margin = c["result"]["bounds"]["permissive"]["margin"]["low"]
+        .as_f64()
+        .expect("margin");
+    assert!(
+        (margin - 1e-10 / b).abs() < 1e-9,
+        "the claim is about 1.9 times the minimum: {margin}"
+    );
+    assert!(steps(c).iter().any(|(n, _)| n == "deduplication"));
+}
+
+#[tokio::test]
+async fn a_model_that_drops_the_power_of_ten_is_not_traceable() {
+    let m = mocks();
+    m.a.push_content(&heisenberg_answer(1.0, 1.0));
+    let (_, body) = call(
+        &m.state,
+        "POST",
+        "/v1/analyze",
+        Some(json!({ "text": HEISENBERG_TEXT })),
+    )
+    .await;
+    let c = &body["claims"][0];
+    assert!(
+        c["result"].is_null(),
+        "no verdict from a misread value: {body}"
+    );
+    assert!(c["value"].is_null());
+    assert!(
+        c["flags"]
+            .as_array()
+            .expect("flags")
+            .iter()
+            .any(|f| f.as_str().is_some_and(|s| s.contains("not traceable"))),
+        "{c}"
+    );
+}
+
+#[tokio::test]
+async fn a_wide_range_is_sampled_logarithmically_on_request() {
+    let state = AppState::default();
+    let body = |spacing: &str| {
+        json!({"limit_id": "heisenberg", "free_parameter": "dp", "range": [1e-28, 1e-20],
+               "points": 9, "spacing": spacing})
+    };
+    let (status, c) = call(&state, "POST", "/v1/curve", Some(body("auto"))).await;
+    assert_eq!(status, StatusCode::OK, "{c}");
+    assert_eq!(c["spacing"], "log");
+    let xs: Vec<f64> = c["points"]
+        .as_array()
+        .expect("points")
+        .iter()
+        .map(|p| p["x"].as_f64().expect("x"))
+        .collect();
+    assert!((xs[0] / 1e-28 - 1.0).abs() < 1e-12, "{}", xs[0]);
+    assert!((xs[8] / 1e-20 - 1.0).abs() < 1e-12, "{}", xs[8]);
+    assert!(
+        (xs[4] / 1e-24 - 1.0).abs() < 1e-9,
+        "the middle sample is the geometric mean: {}",
+        xs[4]
+    );
+    for p in c["points"].as_array().expect("points") {
+        let (x, b) = (
+            p["x"].as_f64().expect("x"),
+            p["decisive"].as_f64().expect("b"),
+        );
+        assert!(
+            (b - 1.054_571_817e-34 / (2.0 * x)).abs() / b < 1e-9,
+            "dx >= hbar / (2 dp) at {x}"
+        );
+    }
+    let (_, c) = call(&state, "POST", "/v1/curve", Some(body("linear"))).await;
+    assert_eq!(c["spacing"], "linear");
+    let (_, c) = call(&state, "POST", "/v1/curve", Some(json!({"limit_id": "carnot", "free_parameter": "Th",
+        "parameters": {"Tc": {"value": 300, "unit": "K"}}, "range": [400, 900], "spacing": "auto"}))).await;
+    assert_eq!(c["spacing"], "linear", "a narrow range stays linear");
+    let (status, r) = call(&state, "POST", "/v1/curve", Some(body("cubic"))).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(r["error"]["code"], "InvalidCurveRequest");
+}
+
 #[tokio::test]
 async fn the_curve_is_the_bound_computed_by_the_limit() {
     let state = AppState::default();

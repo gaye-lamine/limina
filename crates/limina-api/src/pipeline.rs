@@ -15,7 +15,7 @@ use axum::body::Bytes;
 use axum::extract::State;
 use axum::Json;
 use limina_core::{Direction, DomainRange, Limit};
-use limina_dsl::{bound_curve_enclosed, DeclarativeLimit, Registry};
+use limina_dsl::{bound_curve_at, DeclarativeLimit, Registry};
 use limina_extract::check::{number_in, LIMIT_NOT_RECOGNIZED};
 use limina_extract::{
     transcribe_image_routed, AuthorError, ImageInput, LawAnswer, LawStatus, ModelAttempt, Route,
@@ -185,6 +185,7 @@ fn overlaps(a: &Option<EvidenceDto>, b: &Option<EvidenceDto>) -> bool {
 fn merge_duplicates(claims: &mut Vec<AnalyzedClaimDto>) {
     let mut drop = vec![false; claims.len()];
     let mut merged = vec![0usize; claims.len()];
+    let mut as_parameter = vec![0usize; claims.len()];
     for i in 0..claims.len() {
         if built_in(&claims[i]).is_some() {
             continue;
@@ -199,6 +200,21 @@ fn merge_duplicates(claims: &mut Vec<AnalyzedClaimDto>) {
         if let Some(j) = twin {
             drop[i] = true;
             merged[j] += 1;
+            continue;
+        }
+        // A parameter of a built-in claim read again as a claim of its own:
+        // same number at the place of that parameter's evidence.
+        let host = (0..claims.len()).find(|&j| {
+            j != i
+                && !drop[j]
+                && built_in(&claims[j]).is_some()
+                && claims[j].parameters.values().any(|p| {
+                    p.raw_value == claims[i].raw_value && overlaps(&p.evidence, &claims[i].evidence)
+                })
+        });
+        if let Some(j) = host {
+            drop[i] = true;
+            as_parameter[j] += 1;
         }
     }
     let mut k = 0;
@@ -206,16 +222,23 @@ fn merge_duplicates(claims: &mut Vec<AnalyzedClaimDto>) {
         k += 1;
         !drop[k - 1]
     });
-    let kept: Vec<usize> = (0..merged.len())
+    let kept: Vec<(usize, usize)> = (0..merged.len())
         .filter(|i| !drop[*i])
-        .map(|i| merged[i])
+        .map(|i| (merged[i], as_parameter[i]))
         .collect();
-    for (claim, n) in claims.iter_mut().zip(kept) {
+    for (claim, (n, p)) in claims.iter_mut().zip(kept) {
         if n > 0 {
             claim.trace.push(step(
                 "deduplication",
                 DONE,
                 format!("{n} other reading(s) of the same number at the same place, without a known limit, merged into this claim"),
+            ));
+        }
+        if p > 0 {
+            claim.trace.push(step(
+                "deduplication",
+                DONE,
+                format!("{p} reading(s) of one of this claim's parameters as a claim of its own, without a known limit, merged into this claim"),
             ));
         }
     }
@@ -702,8 +725,28 @@ pub fn curve_with(state: &AppState, request: &CurveRequest) -> Result<CurveRespo
             .ok_or_else(|| ApiError::NoSearchRange(free.to_string()))?,
     };
     let points = request.points.unwrap_or(DEFAULT_CURVE_POINTS);
+    let log = match request.spacing.as_deref() {
+        None | Some("linear") => false,
+        Some("log") => range.0 > 0.0,
+        Some("auto") => limina_dsl::wide_range(range),
+        Some(other) => {
+            return Err(ApiError::InvalidCurveRequest(format!(
+                "spacing {other}: use linear, log or auto"
+            )))
+        }
+    };
+    if !(range.0.is_finite() && range.1.is_finite() && range.0 < range.1) {
+        return Err(ApiError::InvalidCurveRequest(format!(
+            "range [{}, {}]",
+            range.0, range.1
+        )));
+    }
+    if !(2..=limina_dsl::MAX_CURVE_POINTS).contains(&points) {
+        return Err(ApiError::InvalidCurveRequest(format!("{points} points")));
+    }
+    let xs = limina_dsl::sample_points(range, points, log);
     let curve = |l: &dyn Limit, f: &BTreeMap<String, (f64, f64)>| {
-        bound_curve_enclosed(l, &constraints, f, free, range, points).map_err(graphs::curve_error)
+        bound_curve_at(l, &constraints, f, free, &xs).map_err(graphs::curve_error)
     };
     let exact: BTreeMap<String, (f64, f64)> =
         fixed.iter().map(|(k, v)| (k.clone(), (*v, *v))).collect();
@@ -746,6 +789,7 @@ pub fn curve_with(state: &AppState, request: &CurveRequest) -> Result<CurveRespo
         lower,
         band,
         validity_zones: zones.into_iter().map(|(a, b)| [a, b]).collect(),
+        spacing: if log { "log" } else { "linear" },
     })
 }
 /// Name of the engine verdict, re-exported for the trace of other callers.

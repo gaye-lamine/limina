@@ -35,8 +35,54 @@ pub struct ModelClaim {
     pub evidence: String,
     /// Assumption id to option id.
     pub constraints: BTreeMap<String, String>,
-    /// Parameter name to its reading.
+    /// Parameter name to its reading. A list of readings that each carry
+    /// their `name` is accepted too, as some models write it that way; a
+    /// name given twice is a schema mismatch.
+    #[serde(deserialize_with = "parameters_map_or_list")]
     pub parameters: BTreeMap<String, ModelParameter>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct NamedParameter {
+    name: String,
+    value: f64,
+    unit: String,
+    evidence: String,
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum ParametersShape {
+    Map(BTreeMap<String, ModelParameter>),
+    List(Vec<NamedParameter>),
+}
+
+fn parameters_map_or_list<'de, D>(d: D) -> Result<BTreeMap<String, ModelParameter>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    match ParametersShape::deserialize(d)? {
+        ParametersShape::Map(m) => Ok(m),
+        ParametersShape::List(list) => {
+            let mut out = BTreeMap::new();
+            for p in list {
+                let name = p.name.clone();
+                let reading = ModelParameter {
+                    value: p.value,
+                    unit: p.unit,
+                    evidence: p.evidence,
+                };
+                if out.insert(name, reading).is_some() {
+                    return Err(serde::de::Error::custom(format!(
+                        "parameter {} given twice",
+                        p.name
+                    )));
+                }
+            }
+            Ok(out)
+        }
+    }
 }
 
 /// The whole model answer, in the strict schema: no field more, no field less.
@@ -119,6 +165,35 @@ mod tests {
     use super::*;
 
     const VALID: &str = r#"{"claims":[{"limit_id":"carnot","quantity":"efficiency","value":60,"unit":"%","evidence":"60% efficiency","constraints":{},"parameters":{"Th":{"value":600,"unit":"K","evidence":"600 K"}}}],"missing":[]}"#;
+
+    #[test]
+    fn parameters_written_as_a_list_of_named_readings_are_accepted() {
+        let list = r#"{"claims":[{"limit_id":"heisenberg","quantity":"position uncertainty","value":1e-10,"unit":"m","evidence":"1 × 10⁻¹⁰ meters","constraints":{},"parameters":[{"name":"dp","value":1e-24,"unit":"kg*m/s","evidence":"1 × 10⁻²⁴ kg·m/s"}]}],"missing":[]}"#;
+        let out = parse_model_output(list).expect("list form");
+        let dp = &out.claims[0].parameters["dp"];
+        assert!((dp.value / 1e-24 - 1.0).abs() < 1e-12, "{}", dp.value);
+        assert_eq!(dp.evidence, "1 × 10⁻²⁴ kg·m/s");
+        let empty = list.replace(
+            r#"[{"name":"dp","value":1e-24,"unit":"kg*m/s","evidence":"1 × 10⁻²⁴ kg·m/s"}]"#,
+            "[]",
+        );
+        assert!(parse_model_output(&empty).expect("empty list").claims[0]
+            .parameters
+            .is_empty());
+        let twice = list.replace(
+            r#"[{"name":"dp""#,
+            r#"[{"name":"dp","value":1,"unit":"x","evidence":"1"},{"name":"dp""#,
+        );
+        assert!(
+            parse_model_output(&twice).is_err(),
+            "a name given twice is refused"
+        );
+        let extra = list.replace(r#""name":"dp","#, r#""name":"dp","note":"x","#);
+        assert!(
+            parse_model_output(&extra).is_err(),
+            "unknown fields are still refused"
+        );
+    }
 
     fn reply(content: Option<&str>, finish: &str) -> ChatReply {
         ChatReply {

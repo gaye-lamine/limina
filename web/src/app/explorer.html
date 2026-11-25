@@ -335,6 +335,9 @@
         <figcaption class="fig-caption">
           {{ g.kind === 'equality' ? s.explorerToleranceCaption : s.explorerCaption }} {{ free() }};
           {{ g.kind === 'equality' ? s.explorerToleranceNote : s.explorerInconsistent }}.
+          @if (g.logX || g.logY) {
+            {{ g.logX && g.logY ? s.explorerLogBoth : g.logX ? s.explorerLogX : s.explorerLogY }}.
+          }
           @if (g.band) {
             {{ s.explorerBandNote }}.
           }

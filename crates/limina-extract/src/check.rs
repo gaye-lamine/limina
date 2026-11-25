@@ -108,11 +108,103 @@ impl CheckedClaim {
 
 /// Runs every check on the model answer, against the text it came from.
 pub fn check(output: &ModelOutput, text: &str, catalog: &Catalog) -> Vec<CheckedClaim> {
-    output
+    let claims = output
         .claims
         .iter()
         .map(|c| check_claim(c, text, catalog))
-        .collect()
+        .collect();
+    attach_parameter_claims(claims, catalog)
+}
+
+/// Whether two unit symbols are the same unit: written alike, or parsed by
+/// the core to the same dimension and the same factor (`kg·m/s` and
+/// `kg*m/s`). No conversion is ever made.
+pub fn same_unit(a: &str, b: &str) -> bool {
+    if a == b {
+        return true;
+    }
+    match (limina_core::parse_unit(a), limina_core::parse_unit(b)) {
+        (Ok(x), Ok(y)) => x == y,
+        _ => false,
+    }
+}
+
+/// Note added to a claim that received a parameter read as a separate claim.
+pub const ATTACHED_AS_PARAMETER: &str = "read as a separate claim, attached as parameter";
+
+/// A claim whose unit is that of a parameter of its own limit, not of the
+/// claimed quantity, is a parameter written by the model as a claim. When
+/// exactly one other claim of the same limit lacks that parameter, its
+/// reading becomes that parameter, with the same evidence rules; the
+/// separate claim is dropped and the host claim notes it. Nothing else
+/// changes: an ambiguous case (no host or several hosts) is left as it is.
+fn attach_parameter_claims(mut claims: Vec<CheckedClaim>, catalog: &Catalog) -> Vec<CheckedClaim> {
+    let mut drop = vec![false; claims.len()];
+    for i in 0..claims.len() {
+        let c = &claims[i];
+        let (Some(id), Some(evidence)) = (c.limit_id.clone(), c.evidence.clone()) else {
+            continue;
+        };
+        if !c.flags.iter().any(|f| f == UNIT_NOT_UNDERSTOOD)
+            || !number_in(&evidence.text, c.raw_value)
+        {
+            continue;
+        }
+        let Some(limit) = catalog.limit(&id) else {
+            continue;
+        };
+        let Some(param) = limit
+            .parameters
+            .iter()
+            .find(|p| p.units.iter().any(|u| same_unit(u, &c.raw_unit)))
+        else {
+            continue;
+        };
+        let hosts: Vec<usize> = (0..claims.len())
+            .filter(|&j| {
+                j != i
+                    && !drop[j]
+                    && claims[j].limit_id.as_deref() == Some(id.as_str())
+                    && claims[j]
+                        .parameters
+                        .get(&param.name)
+                        .is_none_or(|p| p.value.is_none())
+            })
+            .collect();
+        let [host] = hosts.as_slice() else {
+            continue;
+        };
+        let reading = CheckedParameter {
+            value: Some(c.raw_value),
+            raw_value: c.raw_value,
+            unit: c.raw_unit.clone(),
+            evidence: Some(evidence),
+            flags: Vec::new(),
+        };
+        let note = format!(
+            "{} ({}) {ATTACHED_AS_PARAMETER} {}",
+            c.quantity,
+            plain(c.raw_value),
+            param.name
+        );
+        let host = &mut claims[*host];
+        host.parameters.insert(param.name.clone(), reading);
+        host.notes.push(note);
+        if !host
+            .parameters
+            .values()
+            .any(|p| p.flags.iter().any(|f| f == UNIT_NOT_UNDERSTOOD))
+        {
+            host.flags.retain(|f| f != UNIT_NOT_UNDERSTOOD);
+        }
+        drop[i] = true;
+    }
+    let mut k = 0;
+    claims.retain(|_| {
+        k += 1;
+        !drop[k - 1]
+    });
+    claims
 }
 
 fn push_once(flags: &mut Vec<String>, flag: &str) {
@@ -195,14 +287,14 @@ fn check_parameter(
         push_once(&mut flags, NOT_TRACEABLE);
     }
     let declared = limit.and_then(|l| l.parameter(name));
+    let allowed =
+        |spec: &crate::catalog::CatalogParameter| spec.units.iter().any(|u| same_unit(u, &p.unit));
     match declared {
         None if limit.is_some() => push_once(&mut flags, PARAMETER_NOT_DECLARED),
-        Some(spec) if !spec.units.iter().any(|u| u == &p.unit) => {
-            push_once(&mut flags, UNIT_NOT_UNDERSTOOD)
-        }
+        Some(spec) if !allowed(spec) => push_once(&mut flags, UNIT_NOT_UNDERSTOOD),
         _ => {}
     }
-    let ok = traced && declared.is_some_and(|spec| spec.units.iter().any(|u| u == &p.unit));
+    let ok = traced && declared.is_some_and(allowed);
     CheckedParameter {
         value: ok.then_some(p.value),
         raw_value: p.value,
@@ -221,7 +313,10 @@ fn normalize_claim_unit(
 ) -> Option<(f64, String, Option<String>)> {
     let unit = unit.trim();
     let dimensionless = limit.claim_unit == "dimensionless";
-    if unit == limit.claim_unit || (dimensionless && unit.is_empty()) {
+    if unit == limit.claim_unit
+        || (dimensionless && unit.is_empty())
+        || (!dimensionless && same_unit(unit, &limit.claim_unit))
+    {
         return Some((value, limit.claim_unit.clone(), None));
     }
     if dimensionless && unit == "%" {
@@ -335,6 +430,24 @@ fn numbers(text: &str) -> Vec<f64> {
         }
         let token: String = chars[begin..i].iter().collect();
         let sign = if negative { -1.0 } else { 1.0 };
+        // "a × 10⁻¹⁰", "a x 10^-10", "a·10^(-10)", "a*10**-10", and a bare
+        // "10⁻¹⁰" or "10^-10": the whole number only. Its mantissa alone is
+        // not a number of the text, so a model that drops the power of ten
+        // is not traceable.
+        if let Some((times, end)) = power_of_ten(&chars, i) {
+            let mantissa = token.replace(',', ".").parse::<f64>().ok();
+            let bare = !times && token == "10";
+            if let (Some(m), Some(exp)) = (mantissa, ten_exponent(&chars, i, times)) {
+                let value = if bare {
+                    10f64.powi(exp)
+                } else {
+                    m * 10f64.powi(exp)
+                };
+                out.push(sign * value);
+                i = end;
+                continue;
+            }
+        }
         let mut candidates = vec![token.replace(',', ".")];
         if sep == Some(',') {
             let after = token.split(',').nth(1).map_or(0, str::len);
@@ -351,10 +464,252 @@ fn numbers(text: &str) -> Vec<f64> {
     out
 }
 
+fn superscript_digit(c: char) -> Option<u32> {
+    "⁰¹²³⁴⁵⁶⁷⁸⁹".chars().position(|s| s == c).map(|p| p as u32)
+}
+
+fn is_minus(c: char) -> bool {
+    c == '-' || c == '−' || c == '⁻' || c == '–'
+}
+
+/// After the mantissa ending at `i`: an optional multiplication sign and
+/// "10" followed by an exponent (when `times`), or directly an exponent
+/// after a bare "10". Returns whether a multiplication sign was seen and the
+/// index after the whole number.
+fn power_of_ten(chars: &[char], i: usize) -> Option<(bool, usize)> {
+    let mut j = i;
+    let skip = |j: &mut usize| {
+        while *j < chars.len()
+            && (chars[*j] == ' ' || chars[*j] == '\u{a0}' || chars[*j] == '\u{202f}')
+        {
+            *j += 1;
+        }
+    };
+    skip(&mut j);
+    let times = j < chars.len() && matches!(chars[j], '×' | 'x' | 'X' | '*' | '·' | '⋅' | '∙');
+    if times {
+        j += 1;
+        skip(&mut j);
+        if chars.get(j) != Some(&'1') || chars.get(j + 1) != Some(&'0') {
+            return None;
+        }
+        j += 2;
+        if chars.get(j).is_some_and(|c| c.is_ascii_digit()) {
+            return None;
+        }
+    } else if j != i {
+        return None;
+    } else {
+        // A bare "10": the exponent must follow immediately.
+        let before: String = chars[i.saturating_sub(2)..i].iter().collect();
+        if before != "10" || (i >= 3 && (chars[i - 3].is_ascii_digit() || chars[i - 3] == '.')) {
+            return None;
+        }
+    }
+    let end = exponent_end(chars, j)?;
+    Some((times, end))
+}
+
+/// The index after an exponent starting at `j`: `^n`, `^-n`, `^(-n)`,
+/// `**n`, or superscript digits with an optional superscript minus.
+fn exponent_end(chars: &[char], j: usize) -> Option<usize> {
+    let mut k = j;
+    if chars.get(k) == Some(&'^') || (chars.get(k) == Some(&'*') && chars.get(k + 1) == Some(&'*'))
+    {
+        k += if chars[k] == '^' { 1 } else { 2 };
+        let paren = chars.get(k) == Some(&'(');
+        if paren {
+            k += 1;
+        }
+        if chars.get(k).is_some_and(|c| is_minus(*c) || *c == '+') {
+            k += 1;
+        }
+        let digits = k;
+        while chars.get(k).is_some_and(|c| c.is_ascii_digit()) {
+            k += 1;
+        }
+        if k == digits {
+            return None;
+        }
+        if paren {
+            if chars.get(k) != Some(&')') {
+                return None;
+            }
+            k += 1;
+        }
+        return Some(k);
+    }
+    // A typographic minus (U+2212) right after "10", as in text pasted from
+    // a formula: "4 × 10−7". The ASCII hyphen is not accepted here, so a
+    // range such as "10-20" is never read as a power of ten.
+    if chars.get(k) == Some(&'−') && chars.get(k + 1).is_some_and(|c| c.is_ascii_digit()) {
+        k += 1;
+        while chars.get(k).is_some_and(|c| c.is_ascii_digit()) {
+            k += 1;
+        }
+        return Some(k);
+    }
+    if chars.get(k).is_some_and(|c| *c == '⁻' || *c == '⁺') {
+        k += 1;
+    }
+    let digits = k;
+    while chars
+        .get(k)
+        .is_some_and(|c| superscript_digit(*c).is_some())
+    {
+        k += 1;
+    }
+    (k > digits).then_some(k)
+}
+
+/// The exponent of the power of ten after the mantissa ending at `i`.
+fn ten_exponent(chars: &[char], i: usize, times: bool) -> Option<i32> {
+    let (_, end) = power_of_ten(chars, i)?;
+    let mut start = i;
+    if times {
+        // Skip to just after "10".
+        let mut j = i;
+        while j + 1 < end && !(chars[j] == '1' && chars[j + 1] == '0') {
+            j += 1;
+        }
+        start = j + 2;
+    }
+    let text: String = chars[start..end]
+        .iter()
+        .filter_map(|c| match c {
+            '^' | '(' | ')' | '+' | '⁺' | '*' => None,
+            c if is_minus(*c) => Some('-'),
+            c => Some(
+                superscript_digit(*c)
+                    .and_then(|d| char::from_digit(d, 10))
+                    .unwrap_or(*c),
+            ),
+        })
+        .collect();
+    let exp = text.parse::<i32>().ok()?;
+    (-400..=400).contains(&exp).then_some(exp)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::parse::parse_model_output;
+
+    fn heisenberg_catalog() -> Catalog {
+        Catalog {
+            limits: vec![CatalogLimit {
+                id: "heisenberg".into(),
+                title: "Heisenberg position-momentum relation".into(),
+                formula: "hbar/(2*dp)".into(),
+                claim_unit: "m".into(),
+                parameters: vec![crate::catalog::CatalogParameter {
+                    name: "dp".into(),
+                    units: vec!["kg*m/s".into()],
+                }],
+                assumptions: vec![],
+            }],
+        }
+    }
+
+    const HEISENBERG: &str = "A particle has a position uncertainty of 1 × 10⁻¹⁰ meters and a momentum uncertainty of 1 × 10⁻²⁴ kg·m/s.";
+
+    #[test]
+    fn a_parameter_written_as_its_own_claim_is_attached_to_the_claim_that_needs_it() {
+        let json = r#"{"claims":[
+            {"limit_id":"heisenberg","quantity":"position uncertainty","value":1e-10,"unit":"m","evidence":"1 × 10⁻¹⁰ meters","constraints":{},"parameters":{}},
+            {"limit_id":"heisenberg","quantity":"momentum uncertainty","value":1e-24,"unit":"kg·m/s","evidence":"1 × 10⁻²⁴ kg·m/s","constraints":{},"parameters":{}}
+        ],"missing":[]}"#;
+        let out = check(
+            &parse_model_output(json).expect("json"),
+            HEISENBERG,
+            &heisenberg_catalog(),
+        );
+        assert_eq!(out.len(), 1, "{out:?}");
+        let c = &out[0];
+        assert_eq!(c.value, Some(1e-10));
+        let dp = &c.parameters["dp"];
+        assert!(dp.value.is_some_and(|v| (v / 1e-24 - 1.0).abs() < 1e-12));
+        assert_eq!(
+            dp.evidence.as_ref().map(|e| e.text.as_str()),
+            Some("1 × 10⁻²⁴ kg·m/s")
+        );
+        assert!(c.evaluable());
+        assert!(
+            c.notes.iter().any(|n| n.contains(ATTACHED_AS_PARAMETER)),
+            "{:?}",
+            c.notes
+        );
+    }
+
+    #[test]
+    fn nothing_is_attached_when_the_host_is_ambiguous_or_the_value_untraceable() {
+        let two_hosts = r#"{"claims":[
+            {"limit_id":"heisenberg","quantity":"a","value":1e-10,"unit":"m","evidence":"1 × 10⁻¹⁰ meters","constraints":{},"parameters":{}},
+            {"limit_id":"heisenberg","quantity":"b","value":1e-10,"unit":"m","evidence":"position uncertainty of 1 × 10⁻¹⁰ meters","constraints":{},"parameters":{}},
+            {"limit_id":"heisenberg","quantity":"p","value":1e-24,"unit":"kg·m/s","evidence":"1 × 10⁻²⁴ kg·m/s","constraints":{},"parameters":{}}
+        ],"missing":[]}"#;
+        let out = check(
+            &parse_model_output(two_hosts).expect("json"),
+            HEISENBERG,
+            &heisenberg_catalog(),
+        );
+        assert_eq!(out.len(), 3);
+        let misread = r#"{"claims":[
+            {"limit_id":"heisenberg","quantity":"x","value":1e-10,"unit":"m","evidence":"1 × 10⁻¹⁰ meters","constraints":{},"parameters":{}},
+            {"limit_id":"heisenberg","quantity":"p","value":1,"unit":"kg·m/s","evidence":"1 × 10⁻²⁴ kg·m/s","constraints":{},"parameters":{}}
+        ],"missing":[]}"#;
+        let out = check(
+            &parse_model_output(misread).expect("json"),
+            HEISENBERG,
+            &heisenberg_catalog(),
+        );
+        assert_eq!(out.len(), 2, "a misread value is never attached");
+        assert!(out[0].parameters.is_empty());
+    }
+
+    #[test]
+    fn equivalent_unit_spellings_are_the_same_unit_but_nothing_is_converted() {
+        assert!(same_unit("kg·m/s", "kg*m/s"));
+        assert!(same_unit("kg m s^-1", "kg*m/s"));
+        assert!(
+            !same_unit("g*m/s", "kg*m/s"),
+            "another factor is another unit"
+        );
+        assert!(!same_unit("°C", "K"));
+        assert!(!same_unit("mK", "K"));
+    }
+
+    #[test]
+    fn powers_of_ten_are_read_whole_and_the_mantissa_alone_is_not_a_number() {
+        for (text, value) in [
+            ("position uncertainty of 1 × 10⁻¹⁰ meters", 1e-10),
+            ("of 1 x 10^-24 kg m/s", 1e-24),
+            ("6.6 · 10^(-34) J s", 6.6e-34),
+            ("2,5×10⁸ m/s", 2.5e8),
+            ("3 * 10^8", 3e8),
+            ("1.5 × 10¹¹ m", 1.5e11),
+            ("10⁻¹⁰ m", 1e-10),
+            ("10^-3 K", 1e-3),
+            ("4 × 10−7 H/m", 4e-7),
+        ] {
+            assert!(
+                !number_in("between 10-20 K", 1e-20),
+                "a range is not a power of ten"
+            );
+            assert!(
+                number_in(text, value),
+                "{text} gives {value:e}: {:?}",
+                numbers(text)
+            );
+        }
+        assert!(!number_in("position uncertainty of 1 × 10⁻¹⁰ meters", 1.0));
+        assert!(!number_in("position uncertainty of 1 × 10⁻¹⁰ meters", 10.0));
+        assert!(!number_in("of 1 x 10^-24 kg m/s", 24.0));
+        // Ordinary numbers are unchanged.
+        assert_eq!(numbers("between 10 and 300 K"), vec![10.0, 300.0]);
+        assert_eq!(numbers("COP of 14.5, 300 K x 2"), vec![14.5, 300.0, 2.0]);
+        assert_eq!(numbers("110^"), vec![110.0]);
+    }
     use crate::testing::catalog;
 
     fn checked(text: &str, json: &str) -> Vec<CheckedClaim> {

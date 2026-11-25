@@ -85,6 +85,66 @@ pub fn bound_curve_enclosed(
     if !(2..=MAX_CURVE_POINTS).contains(&points) {
         return Err(CurveError::Invalid(format!("{points} points")));
     }
+    let xs = sample_points(range, points, false);
+    bound_curve_at(limit, constraints, fixed, free, &xs)
+}
+
+/// Smallest ratio `hi / lo` for which [`sample_points`] in automatic mode
+/// spaces the samples logarithmically: three decades.
+pub const LOG_SPACING_RATIO: f64 = 1e3;
+
+/// Whether a range spans enough decades, with `lo > 0`, for logarithmic
+/// sampling and a logarithmic axis.
+pub fn wide_range(range: (f64, f64)) -> bool {
+    range.0 > 0.0 && range.1 / range.0 >= LOG_SPACING_RATIO
+}
+
+/// `points` values from `range.0` to `range.1`: evenly spaced, or evenly
+/// spaced in logarithm when `log` is true and `range.0 > 0`. The two ends
+/// are exact.
+pub fn sample_points(range: (f64, f64), points: usize, log: bool) -> Vec<f64> {
+    let (lo, hi) = range;
+    let n = points.max(2);
+    let logarithmic = log && lo > 0.0;
+    (0..n)
+        .map(|i| {
+            if !logarithmic {
+                // The same arithmetic as before D-25 phase 5, so linear
+                // curves are unchanged to the last bit.
+                return lo + (hi - lo) * i as f64 / (n - 1) as f64;
+            }
+            if i == 0 {
+                return lo;
+            }
+            if i == n - 1 {
+                return hi;
+            }
+            let t = i as f64 / (n - 1) as f64;
+            (lo.ln() + t * (hi.ln() - lo.ln())).exp()
+        })
+        .collect()
+}
+
+/// Like [`bound_curve_enclosed`], at the given values of the free
+/// parameter (finite, at most [`MAX_CURVE_POINTS`]).
+pub fn bound_curve_at(
+    limit: &dyn Limit,
+    constraints: &ConstraintsMap,
+    fixed: &BTreeMap<String, (f64, f64)>,
+    free: &str,
+    xs: &[f64],
+) -> Result<Vec<CurvePoint>, CurveError> {
+    if !limit.parameters().iter().any(|p| p.id.as_str() == free) {
+        return Err(CurveError::UnknownFreeParameter(free.to_string()));
+    }
+    for p in limit.parameters() {
+        if p.id.as_str() != free && p.required && !fixed.contains_key(p.id.as_str()) {
+            return Err(CurveError::MissingFixedParameter(p.id.as_str().to_string()));
+        }
+    }
+    if xs.len() < 2 || xs.len() > MAX_CURVE_POINTS || xs.iter().any(|x| !x.is_finite()) {
+        return Err(CurveError::Invalid(format!("{} points", xs.len())));
+    }
     let set = ConfigurationSet::build(limit, constraints, 1024)?;
     let mut base = BTreeMap::new();
     for (name, v) in fixed {
@@ -92,9 +152,8 @@ pub fn bound_curve_enclosed(
             base.insert(ParameterId::new(name.clone()), Interval::new(v.0, v.1)?);
         }
     }
-    let mut out = Vec::with_capacity(points);
-    for i in 0..points {
-        let x = lo + (hi - lo) * i as f64 / (points - 1) as f64;
+    let mut out = Vec::with_capacity(xs.len());
+    for &x in xs {
         let mut map = base.clone();
         map.insert(ParameterId::new(free), Interval::point(x)?);
         let (b_min, b_max) = bound_range(limit, &set, &ParameterEnclosure::new(map));

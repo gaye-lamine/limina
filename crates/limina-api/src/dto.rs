@@ -360,6 +360,11 @@ pub struct CurveRequest {
     /// value. When present the response carries an uncertainty and.
     #[serde(default)]
     pub uncertainties: BTreeMap<String, f64>,
+    /// Sampling of the free parameter: `linear` (default), `log`, or
+    /// `auto` (log when the range spans at least three decades with a
+    /// positive lower end).
+    #[serde(default)]
+    pub spacing: Option<String>,
 }
 
 /// One point of a curve: the bound range over the configurations, null
@@ -403,6 +408,9 @@ pub struct CurveResponse {
     /// Intervals of the free parameter where a validity condition of the
     /// law fails and the law says nothing.
     pub validity_zones: Vec<[f64; 2]>,
+    /// Sampling used: `linear` or `log`. A `log` curve is meant for a
+    /// logarithmic axis.
+    pub spacing: &'static str,
 }
 
 /// Body of `POST /v1/surface`. Values in the given units, ranges in SI.

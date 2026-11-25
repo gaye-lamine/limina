@@ -155,3 +155,44 @@ describe('comparisonScale', () => {
     expect(comparisonScale(1, -2, 'Max')).toBeNull();
   });
 });
+
+describe('logarithmic axes', () => {
+  // Heisenberg: dx >= hbar / (2 dp), sampled by the engine on dp in [1e-28, 1e-20].
+  const hbar2 = 1.054571817e-34 / 2;
+  const xs = [1e-28, 1e-26, 1e-24, 1e-22, 1e-20];
+  const heisenberg = (spacing: 'log' | 'linear'): CurveResponse => ({
+    limit_id: 'heisenberg',
+    direction: 'Min',
+    free_parameter: 'dp',
+    range: [1e-28, 1e-20],
+    points: xs.map((x) => pt(x, hbar2 / x, hbar2 / x, hbar2 / x)),
+    kind: 'bound',
+    validity_zones: [],
+    spacing,
+  });
+
+  it('uses log axes when the engine sampled logarithmically and the values span decades', () => {
+    const g = graphGeometry(heisenberg('log'), 1e-10);
+    expect(g?.logX).toBe(true);
+    expect(g?.logY).toBe(true);
+    // Evenly spaced decades are evenly spaced on the axis.
+    const step = (g?.xTicks[1].pos ?? 0) - (g?.xTicks[0].pos ?? 0);
+    expect((g?.xTicks[4].pos ?? 0) - (g?.xTicks[3].pos ?? 0)).toBeCloseTo(step, 6);
+    // The claim line lies inside the plot.
+    expect(g?.claimY).toBeGreaterThan(PLOT.top);
+    expect(g?.claimY).toBeLessThan(PLOT.height - PLOT.bottom);
+    expect(g?.yTicks[0].label).toMatch(/e/);
+  });
+
+  it('keeps linear axes for a linear curve over a narrow range', () => {
+    const g = graphGeometry(bound(), 0.15);
+    expect(g?.logX).toBe(false);
+    expect(g?.logY).toBe(false);
+  });
+
+  it('never uses a log axis with a non-positive value', () => {
+    const c = heisenberg('log');
+    c.points = [pt(1e-28, 0, 0, 0), ...c.points.slice(1)];
+    expect(graphGeometry(c, 1e-10)?.logY).toBe(false);
+  });
+});

@@ -20,6 +20,8 @@ export interface CurveRequest {
   range?: [number, number];
   points?: number;
   uncertainties?: Record<string, number>;
+  /** 'auto' samples a range of three decades or more logarithmically. */
+  spacing?: 'linear' | 'log' | 'auto';
 }
 
 export interface SurfaceRequest {

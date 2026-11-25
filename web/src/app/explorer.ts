@@ -225,6 +225,7 @@ export class Explorer implements OnDestroy {
         parameters,
         free_parameter: free,
         uncertainties,
+        spacing: 'auto',
       })
       .subscribe({
         next: (c) => {

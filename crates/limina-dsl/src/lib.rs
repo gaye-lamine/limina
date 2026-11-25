@@ -30,8 +30,8 @@ pub use compare::{
     COMPARISON_SEED,
 };
 pub use curve::{
-    bound_curve, bound_curve_enclosed, decisive, validity_zones, zones, CurveError, CurvePoint,
-    MAX_CURVE_POINTS,
+    bound_curve, bound_curve_at, bound_curve_enclosed, decisive, sample_points, validity_zones,
+    wide_range, zones, CurveError, CurvePoint, LOG_SPACING_RATIO, MAX_CURVE_POINTS,
 };
 pub use definition::{Classification, EpistemicStatus, LimitDefinition, Status};
 pub use equality::{combine_verdicts, EqualityDecision, EqualityLimit, EqualityOutcome};
