@@ -25,7 +25,9 @@ power     := primary ("^" exponent)?
 exponent  := integer | "-" integer | "(" "-"? integer ")"
 primary   := number | name | function "(" expr ("," expr)* ")" | "(" expr ")"
 function  := "sqrt" | "ln" | "exp" | "abs" | "min" | "max"
-name      := a parameter name, or one of the constants kB h c e NA pi ln2
+name      := a parameter name, or a constant: kB h c e NA pi ln2, or a CODATA 2022
+             constant of limina-core (hbar G eps0 mu0 m_e m_p m_n m_u alpha_fs
+             sigma_SB R_gas F_faraday b_wien Kcd a0 R_inf mu_B g_n)
 No assignment, no loop, no unit conversion function, no other name."#;
 
 /// An exact SI constant.
@@ -45,6 +47,10 @@ pub enum Constant {
     Pi,
     /// ln 2, dimensionless.
     Ln2,
+    /// A constant of the CODATA table of `limina-core`, by index into
+    /// `limina_core::CONSTANTS` (D-25). A measured constant is evaluated as
+    /// the interval of its standard uncertainty.
+    Physical(u8),
 }
 
 impl Constant {
@@ -59,12 +65,38 @@ impl Constant {
         ("ln2", Constant::Ln2),
     ];
 
+    /// Every constant: [`Constant::ALL`], then the CODATA constants of
+    /// `limina-core` that are not already in it.
+    pub fn all() -> Vec<(&'static str, Constant)> {
+        let mut out: Vec<(&'static str, Constant)> = Constant::ALL.to_vec();
+        for (i, c) in limina_core::CONSTANTS.iter().enumerate() {
+            if !out.iter().any(|(n, _)| *n == c.symbol) {
+                if let Ok(i) = u8::try_from(i) {
+                    out.push((c.symbol, Constant::Physical(i)));
+                }
+            }
+        }
+        out
+    }
+
     /// The constant with this name.
     pub fn from_name(name: &str) -> Option<Constant> {
-        Constant::ALL
-            .iter()
+        Constant::all()
+            .into_iter()
             .find(|(n, _)| *n == name)
-            .map(|(_, c)| *c)
+            .map(|(_, c)| c)
+    }
+
+    fn physical(i: u8) -> Option<&'static limina_core::PhysicalConstant> {
+        limina_core::CONSTANTS.get(usize::from(i))
+    }
+
+    /// Standard uncertainty in SI units; 0 for an exact constant.
+    pub fn uncertainty(self) -> f64 {
+        match self {
+            Constant::Physical(i) => Constant::physical(i).map_or(0.0, |c| c.uncertainty),
+            _ => 0.0,
+        }
     }
 
     /// Exact SI value.
@@ -77,6 +109,7 @@ impl Constant {
             Constant::NA => 6.02214076e23,
             Constant::Pi => std::f64::consts::PI,
             Constant::Ln2 => std::f64::consts::LN_2,
+            Constant::Physical(i) => Constant::physical(i).map_or(f64::NAN, |c| c.value),
         }
     }
 
@@ -89,6 +122,7 @@ impl Constant {
             Constant::E => [0, 0, 1, 1, 0, 0, 0],
             Constant::NA => [0, 0, 0, 0, 0, -1, 0],
             Constant::Pi | Constant::Ln2 => [0; 7],
+            Constant::Physical(i) => Constant::physical(i).map_or([0; 7], |c| c.exponents),
         }
     }
 }

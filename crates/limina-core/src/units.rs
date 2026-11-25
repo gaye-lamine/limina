@@ -1,7 +1,9 @@
 //! Unit table: the only unit symbols the engine accepts (design 3.4).
 //!
-//! Lookup is an exact symbol match. There is no prefix parsing, no compound
-//! unit and no other unit. Any other symbol is rejected with `UnknownUnit`.
+//! Lookup is an exact symbol match on this table. Since D-25, a symbol not
+//! in the table is parsed as a prefixed or compound SI unit by
+//! `units_parse`; anything else is rejected with `UnknownUnit`. The table
+//! itself and `units_for_dimension` are unchanged.
 
 use crate::dimension::Dimension;
 use crate::error::EngineError;
@@ -54,6 +56,18 @@ pub(crate) fn lookup_unit(symbol: &str) -> Result<UnitEntry, EngineError> {
         .find(|e| e.symbol == symbol)
         .copied()
         .ok_or_else(|| EngineError::UnknownUnit(symbol.to_string()))
+}
+
+/// The dimension and factor of `symbol`: the table row when there is one,
+/// else the parsed prefixed or compound SI unit (D-25).
+pub(crate) fn resolve_unit(symbol: &str) -> Result<crate::units_parse::UnitInfo, EngineError> {
+    match lookup_unit(symbol) {
+        Ok(e) => Ok(crate::units_parse::UnitInfo {
+            dimension: e.dimension,
+            factor_to_si: e.factor_to_si,
+        }),
+        Err(_) => crate::units_parse::parse_unit(symbol),
+    }
 }
 
 /// Unit symbols of the table whose dimension is `dimension`, in table order.
@@ -119,6 +133,8 @@ mod tests {
 
     #[test]
     fn unknown_symbols_are_rejected() {
+        // Table lookup only; since D-25 "W/m^2", "GW" and "Wh" are parsed by
+        // `resolve_unit` instead (see units_parse.rs).
         for symbol in ["kw", "w", "W/m^2", "°C", "degC", "GW", "Wh", "", " W"] {
             assert_eq!(
                 lookup_unit(symbol),

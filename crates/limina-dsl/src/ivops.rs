@@ -68,7 +68,14 @@ fn abs(x: Interval) -> Result<Interval, EngineError> {
 pub fn eval(expr: &Expr, values: &Values) -> Result<Interval, EngineError> {
     match expr {
         Expr::Num(v) => Interval::point(*v),
-        Expr::Const(c) => Interval::point(c.value()),
+        Expr::Const(c) => {
+            let (v, u) = (c.value(), c.uncertainty());
+            if u > 0.0 {
+                Interval::new(v - u, v + u)
+            } else {
+                Interval::point(v)
+            }
+        }
         Expr::Param(name) => values
             .get(name)
             .copied()

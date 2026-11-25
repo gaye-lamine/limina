@@ -81,21 +81,30 @@ fn unit_table() -> String {
         [0, 0, 0, 1, 0, 0, 0],
         [0, 0, 0, 0, 0, 0, 1],
     ];
-    dims.iter()
+    let table = dims
+        .iter()
         .filter_map(|d| {
             let units = units_for_dimension(Dimension::new(*d));
             (!units.is_empty()).then(|| format!("- {}: {:?}", units.join(", "), d))
         })
         .collect::<Vec<_>>()
-        .join("\n")
+        .join("\n");
+    format!(
+        "{table}\nAny other SI unit is also accepted: SI prefixes (k, M, G, m, µ or u, n, p, ...) on m, g, s, A, mol, cd, Hz, N, Pa, J, W, C, V, F, Ω, S, Wb, T, H, lm, lx, Bq, Gy, Sv, eV, Wh, L, bit; min, h, d, au, bar, atm, t, rad, sr; and compound units such as m/s^2, W/(m^2*K^4), kWh/kg, bit/s, J mol^-1 K^-1. Temperatures stay in K only."
+    )
 }
 
 fn constants() -> String {
-    Constant::ALL
+    Constant::all()
         .iter()
         .map(|(name, c)| {
+            let u = if c.uncertainty() > 0.0 {
+                format!(" (standard uncertainty {:e})", c.uncertainty())
+            } else {
+                String::new()
+            };
             format!(
-                "- {name} = {:e}, SI exponents {:?}",
+                "- {name} = {:e}{u}, SI exponents {:?}",
                 c.value(),
                 c.exponents()
             )

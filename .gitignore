@@ -21,3 +21,4 @@ Thumbs.db
 
 # Agent run artifacts
 .agents/
+target-check/

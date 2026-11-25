@@ -210,10 +210,19 @@ async fn unknown_unit_is_422() {
 
 #[tokio::test]
 async fn celsius_is_never_converted() {
+    // Since D-25 "C" is the coulomb, an SI unit: a temperature given in it
+    // is refused for its dimension instead of as an unknown symbol. It is
+    // never read as Celsius.
     let params = json!({"Th": {"value": 600.0, "unit": "C"}, "Tc": kelvin(300.0)});
     let (status, body) = post(carnot(0.10, params)).await;
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
-    assert_eq!(body["error"]["code"], "UnknownUnit");
+    assert_eq!(body["error"]["code"], "IncompatibleDimension");
+    for celsius in ["°C", "degC"] {
+        let params = json!({"Th": {"value": 600.0, "unit": celsius}, "Tc": kelvin(300.0)});
+        let (status, body) = post(carnot(0.10, params)).await;
+        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+        assert_eq!(body["error"]["code"], "UnknownUnit", "{celsius}");
+    }
 }
 
 #[tokio::test]

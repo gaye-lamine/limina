@@ -7,7 +7,7 @@
 
 use crate::dimension::Dimension;
 use crate::error::EngineError;
-use crate::units::lookup_unit;
+use crate::units::resolve_unit;
 
 /// Dimension Θ¹ (thermodynamic temperature). Never the dimension of a `Quantity`.
 const TEMPERATURE: Dimension = Dimension::new([0, 0, 0, 0, 1, 0, 0]);
@@ -25,11 +25,12 @@ pub struct Quantity {
 impl Quantity {
     /// Builds a quantity from a value in `unit`.
     ///
-    /// Errors: `UnknownUnit` if `unit` is not in the unit table,
+    /// Errors: `UnknownUnit` if `unit` is neither in the unit table nor a
+    /// prefixed or compound SI unit (D-25),
     /// `TemperatureKindRequired` for `K`, `NonFiniteValue` if `value` or its
     /// SI conversion is not finite.
     pub fn from_unit(value: f64, unit: &str) -> Result<Quantity, EngineError> {
-        let entry = lookup_unit(unit)?;
+        let entry = resolve_unit(unit)?;
         if entry.dimension == TEMPERATURE {
             return Err(EngineError::TemperatureKindRequired);
         }
@@ -57,11 +58,12 @@ impl Quantity {
 
     /// Returns the value expressed in `unit`.
     ///
-    /// Errors: `UnknownUnit` if `unit` is not in the unit table,
+    /// Errors: `UnknownUnit` if `unit` is neither in the unit table nor a
+    /// prefixed or compound SI unit (D-25),
     /// `IncompatibleDimension` if `unit` has another dimension. No conversion
     /// between dimensions is ever made.
     pub fn to_unit(&self, unit: &str) -> Result<f64, EngineError> {
-        let entry = lookup_unit(unit)?;
+        let entry = resolve_unit(unit)?;
         if entry.dimension != self.dimension {
             return Err(EngineError::IncompatibleDimension {
                 expected: self.dimension,

@@ -105,13 +105,31 @@ fn parameter(
             ))
         }
     };
-    let allowed = units_for_dimension(Dimension::new(ty.exponents()));
-    if p.units.is_empty() || p.units.iter().any(|u| !allowed.contains(&u.as_str())) {
+    let dimension = Dimension::new(ty.exponents());
+    let temperature = matches!(
+        kind,
+        MeasureKind::AbsoluteTemperature | MeasureKind::TemperatureDifference
+    );
+    let accepted = |u: &String| {
+        if temperature {
+            u == "K"
+        } else {
+            limina_core::parse_unit(u).is_ok_and(|i| i.dimension == dimension)
+        }
+    };
+    if p.units.is_empty() || !p.units.iter().all(accepted) {
+        let examples = units_for_dimension(dimension);
         return Err(invalid(
             def,
             format!(
-                "units of {} must be core units of its dimension: {allowed:?}",
-                p.name
+                "units of {} must be SI units of its dimension {:?} (temperatures: K only){}",
+                p.name,
+                dimension.exponents(),
+                if examples.is_empty() {
+                    String::new()
+                } else {
+                    format!(", for example {examples:?}")
+                }
             ),
         ));
     }

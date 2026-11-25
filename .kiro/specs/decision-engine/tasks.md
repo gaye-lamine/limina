@@ -100,3 +100,4 @@ Rules for every task:
 
 - Amended by api-limit-metadata, unit lookup: `units_for_dimension` added to `units.rs` (additive, no existing code changed).
 - Amended by limit-author, D-24: default `guard_abs` = 0 and optional `Limit::guard_abs` floor (see requirements.md D-24, design.md section 11).
+- Amended by si-units-constants, D-25: prefixed and compound SI units (units_parse.rs) and CODATA 2022 constants (constants.rs).
