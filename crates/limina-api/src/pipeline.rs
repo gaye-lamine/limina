@@ -18,8 +18,8 @@ use limina_core::{Direction, DomainRange, Limit};
 use limina_dsl::{bound_curve_enclosed, DeclarativeLimit, Registry};
 use limina_extract::check::{number_in, LIMIT_NOT_RECOGNIZED};
 use limina_extract::{
-    transcribe_image, AuthorError, ImageInput, LawAnswer, LawStatus, ModelAttempt, TwoModelLaw,
-    WantedParameter,
+    transcribe_image_routed, AuthorError, ImageInput, LawAnswer, LawStatus, ModelAttempt, Route,
+    TwoModelLaw, WantedParameter,
 };
 
 use crate::authoring::verdict_name;
@@ -93,7 +93,7 @@ fn parameters_detail(claim: &AnalyzedClaimDto, declared: &[String]) -> (bool, St
     (missing.is_empty(), parts.join("; "))
 }
 
-fn extraction_step(claim: &AnalyzedClaimDto, cached: bool) -> TraceStepDto {
+fn extraction_step(claim: &AnalyzedClaimDto, cached: bool, route: &Route) -> TraceStepDto {
     let at = claim
         .evidence
         .as_ref()
@@ -108,11 +108,12 @@ fn extraction_step(claim: &AnalyzedClaimDto, cached: bool) -> TraceStepDto {
         "extraction",
         DONE,
         format!(
-            "read {}: {} {}{at}{}{flags}",
+            "read {}: {} {}{at}{}{flags}; {}",
             claim.quantity,
             number(claim.raw_value),
             claim.raw_unit,
-            if cached { " (cached answer)" } else { "" }
+            if cached { " (cached answer)" } else { "" },
+            route.describe()
         ),
     )
 }
@@ -130,10 +131,11 @@ pub async fn complete_claims(
     text: &str,
     claims: &mut Vec<AnalyzedClaimDto>,
     cached: bool,
+    route: &Route,
 ) {
     merge_duplicates(claims);
     for claim in claims.iter_mut() {
-        let first = extraction_step(claim, cached);
+        let first = extraction_step(claim, cached, route);
         claim.trace.insert(0, first);
         if let Some(id) = built_in(claim) {
             claim
@@ -247,6 +249,14 @@ fn attempt_dto(a: &ModelAttempt) -> LawAttemptDto {
     }
 }
 
+fn skipped_note(skipped: &[String]) -> String {
+    if skipped.is_empty() {
+        String::new()
+    } else {
+        format!("; skipped: {}", skipped.join(", "))
+    }
+}
+
 fn attempt_step(a: &ModelAttempt) -> TraceStepDto {
     let name = format!("authoring by {}", a.model);
     match &a.result {
@@ -254,7 +264,7 @@ fn attempt_step(a: &ModelAttempt) -> TraceStepDto {
             &name,
             DONE,
             format!(
-                "valid definition after {} attempt(s){}; DSL checks passed; formula {}",
+                "valid definition after {} attempt(s){}; DSL checks passed; formula {}{}",
                 x.attempts,
                 if x.errors.is_empty() {
                     String::new()
@@ -264,7 +274,8 @@ fn attempt_step(a: &ModelAttempt) -> TraceStepDto {
                 x.definition
                     .formula
                     .clone()
-                    .unwrap_or_else(|| "per option".into())
+                    .unwrap_or_else(|| "per option".into()),
+                skipped_note(&a.skipped)
             ),
         ),
         Err(e) => step(&name, FAILED, e.to_string()),
@@ -287,6 +298,14 @@ fn comparison_step(law: &TwoModelLaw) -> TraceStepDto {
             format!(
                 "draft_disputed: {}",
                 c.reason.clone().unwrap_or_else(|| "the definitions differ".into())
+            ),
+        ),
+        (LawStatus::Disputed, None) if law.a.result.is_ok() && law.b.result.is_ok() => step(
+            "comparison",
+            FAILED,
+            format!(
+                "draft_disputed: both definitions were written by the same model {} (chain B fell back to it); one author only, not compared",
+                law.a.model
             ),
         ),
         (LawStatus::NotAuthored, None) => step(
@@ -338,19 +357,23 @@ async fn law_pipeline(state: &AppState, text: &str, claim: &mut AnalyzedClaimDto
         claim.raw_unit,
         evidence.text
     );
-    let sentence = match extractor.identify_law_in_library(&question).await {
-        Ok(LawAnswer::BuiltIn(id)) => {
-            built_in_path(extractor, text, claim, &id).await;
+    let sentence = match extractor.identify_law_in_library_routed(&question).await {
+        Ok((LawAnswer::BuiltIn(id), route)) => {
+            built_in_path(extractor, text, claim, &id, &route).await;
             return;
         }
-        Ok(LawAnswer::Sentence(s)) => {
-            claim.trace.push(step("law", DONE, s.clone()));
-            s
-        }
-        Ok(LawAnswer::NoLaw) => {
+        Ok((LawAnswer::Sentence(s), route)) => {
             claim
                 .trace
-                .push(step("law", FAILED, limina_extract::NO_LAW));
+                .push(step("law", DONE, format!("{s} ({})", route.describe())));
+            s
+        }
+        Ok((LawAnswer::NoLaw, route)) => {
+            claim.trace.push(step(
+                "law",
+                FAILED,
+                format!("{} ({})", limina_extract::NO_LAW, route.describe()),
+            ));
             claim.law = Some(LawDto {
                 source: "no_law_identified",
                 limit_id: None,
@@ -452,8 +475,8 @@ async fn read_parameters(
             .push(step("parameters", SKIPPED, "the law needs no parameter"));
         return;
     }
-    match extractor.extract_parameters(text, wanted).await {
-        Ok(found) => {
+    match extractor.extract_parameters_routed(text, wanted).await {
+        Ok((found, route)) => {
             for f in found {
                 claim.parameters.insert(
                     f.name.clone(),
@@ -472,9 +495,11 @@ async fn read_parameters(
             }
             let names: Vec<String> = wanted.iter().map(|w| w.name.clone()).collect();
             let (all, detail) = parameters_detail(claim, &names);
-            claim
-                .trace
-                .push(step("parameters", if all { DONE } else { FAILED }, detail));
+            claim.trace.push(step(
+                "parameters",
+                if all { DONE } else { FAILED },
+                format!("{detail}; {}", route.describe()),
+            ));
         }
         Err(e) => claim.trace.push(step(
             "parameters",
@@ -533,11 +558,15 @@ async fn built_in_path(
     text: &str,
     claim: &mut AnalyzedClaimDto,
     id: &str,
+    route: &Route,
 ) {
     claim.trace.push(step(
         "law",
         DONE,
-        format!("built-in limit {id} identified by law naming; no authoring"),
+        format!(
+            "built-in limit {id} identified by law naming; no authoring ({})",
+            route.describe()
+        ),
     ));
     claim.law = Some(LawDto {
         source: "built_in",
@@ -592,7 +621,7 @@ pub async fn transcribe(
     let request: TranscribeRequest =
         serde_json::from_slice(&body).map_err(|e| ApiError::InvalidJson(e.to_string()))?;
     let vision = state.vision().ok_or(ApiError::ExtractionUnavailable)?;
-    let text = transcribe_image(
+    let (text, route) = transcribe_image_routed(
         vision,
         ImageInput {
             mime: request.mime,
@@ -602,7 +631,7 @@ pub async fn transcribe(
     .await?;
     Ok(Json(TranscribeResponse {
         text,
-        model: vision.model().to_string(),
+        model: route.model,
     }))
 }
 

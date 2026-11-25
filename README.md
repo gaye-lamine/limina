@@ -65,6 +65,8 @@ cargo run -p limina-api
 
 The startup line says `extraction enabled (model ...)`. Optional settings: `LIMINA_LLM_MODEL` (default `nvidia/nemotron-3.5-lightning-30b-a3b`), `LIMINA_LLM_BASE_URL` (default `https://integrate.api.nvidia.com/v1`), `LIMINA_LLM_DISABLE_THINKING` (default `true`). `GET /v1/capabilities` returns `{"extraction": true}`; without a key it returns `false` and `POST /v1/analyze` answers 503 `ExtractionUnavailable`. Remove the key from the session with `Remove-Item Env:NVIDIA_API_KEY`.
 
+Every model call goes through a chain of models tried in order. A model that times out, cannot be reached, answers HTTP 404, 429 or 5xx, or gives an unusable answer is passed over, and the trace names the model that answered and the models skipped. A model that failed is skipped for 60 s. Chains, comma-separated: `LIMINA_LLM_MODELS` (extraction, law naming, parameters, authoring model A; default `nvidia/nemotron-3.5-lightning-30b-a3b, nvidia/nemotron-3.5-bolt-e4b, poolside/laguna-xs-2.1, nvidia/nemotron-3-ultra-550b-a55b`), `LIMINA_LLM_MODELS_B` (authoring model B; default `poolside/laguna-xs-2.1, nvidia/nemotron-3-ultra-550b-a55b`), `LIMINA_LLM_VISION_MODELS` (default `nvidia/nemotron-3.5-super-vl-120b-a12b, nvidia/nemotron-3-nano-omni-30b-a3b-reasoning`). `LIMINA_LLM_MODEL`, `LIMINA_LLM_MODEL_B` and `LIMINA_LLM_VISION_MODEL` are put first in their chain. `LIMINA_LLM_TIMEOUT_SECS` sets the time allowed to one model (default 15). If chain B falls back to the model that wrote A's definition, the law has one author only and is `draft_disputed`, never `draft_agreed`.
+
 ```
 curl.exe -X POST http://127.0.0.1:3000/v1/analyze -H "Content-Type: application/json" -d "@text.json"
 ```

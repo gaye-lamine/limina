@@ -38,6 +38,10 @@ pub enum ProviderError {
     /// The request could not be sent or the answer could not be read.
     #[error("the extraction provider could not be reached")]
     Transport,
+    /// The model answered, but the answer cannot be used (empty, cut, no
+    /// JSON object). The reason is fixed text, never the model output.
+    #[error("the extraction provider gave an unusable answer: {0}")]
+    Unusable(&'static str),
 }
 
 impl ProviderError {
@@ -47,6 +51,36 @@ impl ProviderError {
     }
 }
 
+/// Which model answered, and which models of a chain were passed over
+/// before it, with the reason of each.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Route {
+    /// Model id that answered.
+    pub model: String,
+    /// `model (reason)` for every model skipped or failed before it.
+    pub skipped: Vec<String>,
+}
+
+impl Route {
+    /// The model that answered, then the models passed over and why.
+    pub fn describe(&self) -> String {
+        if self.skipped.is_empty() {
+            format!("model {}", self.model)
+        } else {
+            format!("model {}; skipped: {}", self.model, self.skipped.join(", "))
+        }
+    }
+}
+
+/// An answer and the route that produced it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Routed {
+    /// The answer.
+    pub reply: ChatReply,
+    /// Who answered.
+    pub route: Route,
+}
+
 /// A language model that completes one chat.
 pub trait ExtractionProvider: Send + Sync {
     /// Model id, reported with every extraction.
@@ -54,6 +88,24 @@ pub trait ExtractionProvider: Send + Sync {
 
     /// Sends one chat completion request.
     fn complete(&self, request: ChatRequest) -> BoxFuture<'_, Result<ChatReply, ProviderError>>;
+
+    /// Like [`ExtractionProvider::complete`], with the model that answered.
+    /// A chain of models overrides it; the default is the model itself.
+    fn complete_routed(
+        &self,
+        request: ChatRequest,
+    ) -> BoxFuture<'_, Result<Routed, ProviderError>> {
+        Box::pin(async move {
+            let reply = self.complete(request).await?;
+            Ok(Routed {
+                reply,
+                route: Route {
+                    model: self.model().to_string(),
+                    skipped: Vec::new(),
+                },
+            })
+        })
+    }
 }
 
 /// An image sent to a vision-language model: its MIME type and its bytes
@@ -74,4 +126,17 @@ pub trait VisionProvider: Send + Sync {
     fn model(&self) -> &str;
     /// The text written in the image, exactly as written.
     fn transcribe(&self, image: ImageInput) -> BoxFuture<'_, Result<ChatReply, ProviderError>>;
+    /// Like [`VisionProvider::transcribe`], with the model that answered.
+    fn transcribe_routed(&self, image: ImageInput) -> BoxFuture<'_, Result<Routed, ProviderError>> {
+        Box::pin(async move {
+            let reply = self.transcribe(image).await?;
+            Ok(Routed {
+                reply,
+                route: Route {
+                    model: self.model().to_string(),
+                    skipped: Vec::new(),
+                },
+            })
+        })
+    }
 }

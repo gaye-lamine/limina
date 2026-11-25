@@ -51,7 +51,7 @@ impl OpenAiProvider {
     pub fn new(config: &ExtractConfig) -> Result<OpenAiProvider, ExtractError> {
         let key = config.api_key().cloned().ok_or(ExtractError::Unavailable)?;
         let client = reqwest::Client::builder()
-            .timeout(TIMEOUT)
+            .timeout(config.timeout())
             .build()
             .map_err(|_| ExtractError::Provider(ProviderError::Transport))?;
         Ok(OpenAiProvider {

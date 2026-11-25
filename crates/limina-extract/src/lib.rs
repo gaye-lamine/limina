@@ -15,6 +15,7 @@ pub mod check;
 pub mod config;
 pub mod error;
 pub mod extractor;
+pub mod fallback;
 pub mod law;
 pub mod openai;
 pub mod parse;
@@ -31,13 +32,16 @@ pub use check::{
 pub use config::{ExtractConfig, SecretKey};
 pub use error::ExtractError;
 pub use extractor::{Extraction, Extractor};
+pub use fallback::{extraction_problem, unusable, FallbackProvider, FallbackVision, ReplyKind};
 pub use law::{
-    author_two, extract_parameters, identify_law, identify_law_in_library, transcribe_image,
-    FoundParameter, LawAnswer, LawStatus, ModelAttempt, TwoModelLaw, WantedParameter, NO_LAW,
+    author_two, extract_parameters, extract_parameters_routed, identify_law,
+    identify_law_in_library, identify_law_in_library_routed, transcribe_image,
+    transcribe_image_routed, FoundParameter, LawAnswer, LawStatus, ModelAttempt, TwoModelLaw,
+    WantedParameter, NO_LAW,
 };
-pub use openai::OpenAiProvider;
+pub use openai::{OpenAiProvider, VISION_TIMEOUT};
 pub use parse::ModelOutput;
 pub use provider::{
-    BoxFuture, ChatReply, ChatRequest, ExtractionProvider, ImageInput, ProviderError,
-    VisionProvider,
+    BoxFuture, ChatReply, ChatRequest, ExtractionProvider, ImageInput, ProviderError, Route,
+    Routed, VisionProvider,
 };

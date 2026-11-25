@@ -12,7 +12,7 @@ use crate::check::{check, CheckedClaim};
 use crate::error::ExtractError;
 use crate::parse::{read_reply, ModelOutput};
 use crate::prompt;
-use crate::provider::ExtractionProvider;
+use crate::provider::{ExtractionProvider, Route};
 
 /// Requests allowed per window.
 pub const RATE_LIMIT: usize = 30;
@@ -30,8 +30,11 @@ pub struct Extraction {
     pub claims: Vec<CheckedClaim>,
     /// Values the model said the text does not give.
     pub missing: Vec<String>,
-    /// Model id.
+    /// Model id that answered (the first of the chain unless it fell back).
     pub model: String,
+    /// Models passed over before it, with the reason of each; empty when
+    /// the first model answered.
+    pub skipped: Vec<String>,
     /// Whether the model answer came from the cache.
     pub cached: bool,
     /// Time spent, in milliseconds.
@@ -41,9 +44,11 @@ pub struct Extraction {
 /// Reads claims out of texts through a provider.
 pub struct Extractor {
     provider: Arc<dyn ExtractionProvider>,
+    text_provider: Option<Arc<dyn ExtractionProvider>>,
+    json_provider: Option<Arc<dyn ExtractionProvider>>,
     catalog: Catalog,
     retry_backoff: Option<Duration>,
-    cache: Mutex<HashMap<[u8; 32], ModelOutput>>,
+    cache: Mutex<HashMap<[u8; 32], (ModelOutput, Route)>>,
     calls: Mutex<VecDeque<Instant>>,
 }
 
@@ -74,6 +79,8 @@ impl Extractor {
     pub fn new(provider: Arc<dyn ExtractionProvider>, catalog: Catalog) -> Extractor {
         Extractor {
             provider,
+            text_provider: None,
+            json_provider: None,
             catalog,
             retry_backoff: Some(DEFAULT_RETRY_BACKOFF),
             cache: Mutex::new(HashMap::new()),
@@ -87,13 +94,35 @@ impl Extractor {
         self
     }
 
+    /// Answers law naming with this provider (a chain that accepts a plain
+    /// sentence) instead of the JSON provider.
+    pub fn with_text_provider(mut self, provider: Arc<dyn ExtractionProvider>) -> Extractor {
+        self.text_provider = Some(provider);
+        self
+    }
     /// Model id.
     pub fn model(&self) -> &str {
         self.provider.model()
     }
+    /// Answers the other JSON questions (parameters, authoring model A) with
+    /// this provider, when the main provider checks the extraction schema.
+    pub fn with_json_provider(mut self, provider: Arc<dyn ExtractionProvider>) -> Extractor {
+        self.json_provider = Some(provider);
+        self
+    }
 
-    pub(crate) fn provider(&self) -> &dyn ExtractionProvider {
-        self.provider.as_ref()
+    /// The provider of JSON answers other than the extraction.
+    pub(crate) fn json_provider(&self) -> &dyn ExtractionProvider {
+        self.json_provider
+            .as_deref()
+            .unwrap_or_else(|| self.provider.as_ref())
+    }
+
+    /// The provider of free-text answers (law naming).
+    pub(crate) fn text_provider(&self) -> &dyn ExtractionProvider {
+        self.text_provider
+            .as_deref()
+            .unwrap_or_else(|| self.provider.as_ref())
     }
 
     pub(crate) fn retry_backoff(&self) -> Option<Duration> {
@@ -122,17 +151,17 @@ impl Extractor {
         Ok(())
     }
 
-    async fn ask(&self, text: &str) -> Result<ModelOutput, ExtractError> {
+    async fn ask(&self, text: &str) -> Result<(ModelOutput, Route), ExtractError> {
         let request = prompt::request(&self.catalog, text);
-        let first = self.provider.complete(request.clone()).await;
-        let reply = match (first, self.retry_backoff) {
+        let first = self.provider.complete_routed(request.clone()).await;
+        let routed = match (first, self.retry_backoff) {
             (Err(e), Some(backoff)) if e.is_retryable() => {
                 tokio::time::sleep(backoff).await;
-                self.provider.complete(request).await?
+                self.provider.complete_routed(request).await?
             }
             (other, _) => other?,
         };
-        read_reply(&reply)
+        Ok((read_reply(&routed.reply)?, routed.route))
     }
 
     /// Extracts and checks the claims of `text`. A cached model answer is
@@ -142,8 +171,8 @@ impl Extractor {
         let started = Instant::now();
         let key = cache_key(text);
         let hit = lock(&self.cache).get(&key).cloned();
-        let (output, cached) = match hit {
-            Some(output) => (output, true),
+        let ((output, route), cached) = match hit {
+            Some(entry) => (entry, true),
             None => {
                 self.acquire()?;
                 let output = self.ask(text).await?;
@@ -158,7 +187,8 @@ impl Extractor {
         Ok(Extraction {
             claims: check(&output, text, &self.catalog),
             missing: output.missing.clone(),
-            model: self.provider.model().to_string(),
+            model: route.model,
+            skipped: route.skipped,
             cached,
             elapsed_ms: u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
         })

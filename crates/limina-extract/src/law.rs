@@ -20,7 +20,9 @@ use crate::error::ExtractError;
 use crate::extractor::Extractor;
 use crate::parse::{first_json_object, strip_fences};
 use crate::prompt::{user_message, CLOSE, OPEN};
-use crate::provider::{ChatReply, ChatRequest, ExtractionProvider, ImageInput, VisionProvider};
+use crate::provider::{
+    ChatReply, ChatRequest, ExtractionProvider, ImageInput, Route, Routed, VisionProvider,
+};
 
 /// The answer that means the model cannot name an established law.
 pub const NO_LAW: &str = "no law identified";
@@ -53,8 +55,11 @@ impl LawStatus {
 /// One model's attempt at writing the law.
 #[derive(Debug, Clone)]
 pub struct ModelAttempt {
-    /// Model id.
+    /// Model id that wrote the definition (the first model of the chain
+    /// unless it fell back); the first model of the chain when none did.
     pub model: String,
+    /// Models passed over before it, with the reason of each.
+    pub skipped: Vec<String>,
     /// The definition, or why there is none.
     pub result: Result<AuthoredLimit, AuthorError>,
 }
@@ -94,21 +99,29 @@ pub async fn author_two(
         author_limit(a, text, backoff),
         author_limit(b, text, backoff)
     );
-    combine(
-        ModelAttempt {
-            model: a.model().to_string(),
-            result: ra,
-        },
-        ModelAttempt {
-            model: b.model().to_string(),
-            result: rb,
-        },
-    )
+    combine(attempt(a, ra), attempt(b, rb))
+}
+fn attempt(
+    provider: &dyn ExtractionProvider,
+    result: Result<AuthoredLimit, AuthorError>,
+) -> ModelAttempt {
+    let (model, skipped) = match &result {
+        Ok(x) => (x.model.clone(), x.skipped.clone()),
+        Err(_) => (provider.model().to_string(), Vec::new()),
+    };
+    ModelAttempt {
+        model,
+        skipped,
+        result,
+    }
 }
 
 /// The status of two attempts: compared when both passed.
 pub fn combine(a: ModelAttempt, b: ModelAttempt) -> TwoModelLaw {
     let (comparison, status) = match (&a.result, &b.result) {
+        // One model that answered both sides is one author, not two: the
+        // law is never recorded as agreed.
+        (Ok(_), Ok(_)) if a.model == b.model => (None, LawStatus::Disputed),
         (Ok(x), Ok(y)) => {
             let c = compare_limits(&x.limit, &y.limit, COMPARISON_SAMPLES, COMPARISON_SEED);
             let s = if c.agreed {
@@ -170,11 +183,11 @@ async fn complete(
     provider: &dyn ExtractionProvider,
     request: ChatRequest,
     backoff: Option<Duration>,
-) -> Result<ChatReply, ExtractError> {
-    match (provider.complete(request.clone()).await, backoff) {
+) -> Result<Routed, ExtractError> {
+    match (provider.complete_routed(request.clone()).await, backoff) {
         (Err(e), Some(pause)) if e.is_retryable() => {
             tokio::time::sleep(pause).await;
-            Ok(provider.complete(request).await?)
+            Ok(provider.complete_routed(request).await?)
         }
         (other, _) => Ok(other?),
     }
@@ -192,7 +205,7 @@ pub async fn identify_law(
         user: user_message(claim),
     };
     let reply = complete(provider, request, backoff).await?;
-    Ok(law_sentence(&reply_text(&reply)?))
+    Ok(law_sentence(&reply_text(&reply.reply)?))
 }
 
 /// Prefix of the answer that names a law of the built-in library.
@@ -258,12 +271,26 @@ pub async fn identify_law_in_library(
     catalog: &Catalog,
     backoff: Option<Duration>,
 ) -> Result<LawAnswer, ExtractError> {
+    Ok(
+        identify_law_in_library_routed(provider, claim, catalog, backoff)
+            .await?
+            .0,
+    )
+}
+/// [`identify_law_in_library`] with the model that answered.
+pub async fn identify_law_in_library_routed(
+    provider: &dyn ExtractionProvider,
+    claim: &str,
+    catalog: &Catalog,
+    backoff: Option<Duration>,
+) -> Result<(LawAnswer, Route), ExtractError> {
     let request = ChatRequest {
         system: library_law_system_prompt(catalog),
         user: user_message(claim),
     };
-    let reply = complete(provider, request, backoff).await?;
-    library_answer(&reply_text(&reply)?, catalog)
+    let routed = complete(provider, request, backoff).await?;
+    let answer = library_answer(&reply_text(&routed.reply)?, catalog)?;
+    Ok((answer, routed.route))
 }
 
 /// A parameter the authored law needs, as the prompt lists it.
@@ -392,12 +419,24 @@ pub async fn extract_parameters(
     wanted: &[WantedParameter],
     backoff: Option<Duration>,
 ) -> Result<Vec<FoundParameter>, ExtractError> {
+    Ok(extract_parameters_routed(provider, text, wanted, backoff)
+        .await?
+        .0)
+}
+/// [`extract_parameters`] with the model that answered.
+pub async fn extract_parameters_routed(
+    provider: &dyn ExtractionProvider,
+    text: &str,
+    wanted: &[WantedParameter],
+    backoff: Option<Duration>,
+) -> Result<(Vec<FoundParameter>, Route), ExtractError> {
     let request = ChatRequest {
         system: parameters_system_prompt(wanted),
         user: user_message(text),
     };
-    let reply = complete(provider, request, backoff).await?;
-    check_parameters(&reply_text(&reply)?, text, wanted)
+    let routed = complete(provider, request, backoff).await?;
+    let found = check_parameters(&reply_text(&routed.reply)?, text, wanted)?;
+    Ok((found, routed.route))
 }
 
 /// Largest image accepted, in base64 characters (about 4 MB of bytes).
@@ -409,6 +448,13 @@ pub async fn transcribe_image(
     vision: &dyn VisionProvider,
     image: ImageInput,
 ) -> Result<String, ExtractError> {
+    Ok(transcribe_image_routed(vision, image).await?.0)
+}
+/// [`transcribe_image`] with the model that answered.
+pub async fn transcribe_image_routed(
+    vision: &dyn VisionProvider,
+    image: ImageInput,
+) -> Result<(String, Route), ExtractError> {
     if !["image/png", "image/jpeg", "image/webp"].contains(&image.mime.as_str()) {
         return Err(ExtractError::ExtractionFailed("unsupported image type"));
     }
@@ -417,22 +463,36 @@ pub async fn transcribe_image(
             "the image is empty or too large",
         ));
     }
-    let reply = vision.transcribe(image).await?;
-    reply_text(&reply)
+    let routed = vision.transcribe_routed(image).await?;
+    Ok((reply_text(&routed.reply)?, routed.route))
 }
 
 impl Extractor {
     /// [`identify_law_in_library`] with this extractor's catalog, taking one
     /// rate-limit slot.
     pub async fn identify_law_in_library(&self, claim: &str) -> Result<LawAnswer, ExtractError> {
+        Ok(self.identify_law_in_library_routed(claim).await?.0)
+    }
+    /// [`Extractor::identify_law_in_library`] with the model that answered.
+    /// The question is answered by the text provider.
+    pub async fn identify_law_in_library_routed(
+        &self,
+        claim: &str,
+    ) -> Result<(LawAnswer, Route), ExtractError> {
         self.acquire()?;
-        identify_law_in_library(self.provider(), claim, self.catalog(), self.retry_backoff()).await
+        identify_law_in_library_routed(
+            self.text_provider(),
+            claim,
+            self.catalog(),
+            self.retry_backoff(),
+        )
+        .await
     }
     /// [`identify_law`] through this extractor's provider, taking one
     /// rate-limit slot.
     pub async fn identify_law(&self, claim: &str) -> Result<Option<String>, ExtractError> {
         self.acquire()?;
-        identify_law(self.provider(), claim, self.retry_backoff()).await
+        identify_law(self.text_provider(), claim, self.retry_backoff()).await
     }
 
     /// [`extract_parameters`] through this extractor's provider, taking one
@@ -442,8 +502,16 @@ impl Extractor {
         text: &str,
         wanted: &[WantedParameter],
     ) -> Result<Vec<FoundParameter>, ExtractError> {
+        Ok(self.extract_parameters_routed(text, wanted).await?.0)
+    }
+    /// [`Extractor::extract_parameters`] with the model that answered.
+    pub async fn extract_parameters_routed(
+        &self,
+        text: &str,
+        wanted: &[WantedParameter],
+    ) -> Result<(Vec<FoundParameter>, Route), ExtractError> {
         self.acquire()?;
-        extract_parameters(self.provider(), text, wanted, self.retry_backoff()).await
+        extract_parameters_routed(self.json_provider(), text, wanted, self.retry_backoff()).await
     }
 
     /// [`author_two`] with this extractor's provider as model A, taking two
@@ -452,10 +520,11 @@ impl Extractor {
         if let Err(e) = self.acquire().and_then(|_| self.acquire()) {
             let fail = |model: &str| ModelAttempt {
                 model: model.to_string(),
+                skipped: Vec::new(),
                 result: Err(AuthorError::Extract(e.clone())),
             };
             return combine(fail(self.model()), fail(second.model()));
         }
-        author_two(self.provider(), second, text, self.retry_backoff()).await
+        author_two(self.json_provider(), second, text, self.retry_backoff()).await
     }
 }

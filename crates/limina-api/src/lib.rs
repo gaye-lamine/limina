@@ -27,7 +27,8 @@ use limina_dsl::DeclarativeLimit;
 use axum::routing::{get, post};
 use axum::Router;
 use limina_extract::{
-    ExtractConfig, ExtractError, ExtractionProvider, Extractor, OpenAiProvider, VisionProvider,
+    extraction_problem, ExtractConfig, ExtractError, ExtractionProvider, Extractor,
+    FallbackProvider, FallbackVision, OpenAiProvider, ReplyKind, VisionProvider, VISION_TIMEOUT,
 };
 use std::collections::BTreeMap;
 
@@ -40,6 +41,30 @@ pub struct AppState {
     second: Option<Arc<dyn ExtractionProvider>>,
     vision: Option<Arc<dyn VisionProvider>>,
     agreements: Arc<RwLock<BTreeMap<String, String>>>,
+    chains: Option<dto::ChainsDto>,
+}
+
+/// One OpenAI-compatible provider per model id of `models`.
+fn links(
+    config: &ExtractConfig,
+    models: &[String],
+) -> Result<Vec<Arc<OpenAiProvider>>, ExtractError> {
+    models
+        .iter()
+        .map(|m| OpenAiProvider::new(&config.with_model(m)).map(Arc::new))
+        .collect()
+}
+
+fn chat_chain(
+    config: &ExtractConfig,
+    models: &[String],
+    kind: ReplyKind,
+) -> Result<FallbackProvider, ExtractError> {
+    let links: Vec<Arc<dyn ExtractionProvider>> = links(config, models)?
+        .into_iter()
+        .map(|l| l as Arc<dyn ExtractionProvider>)
+        .collect();
+    Ok(FallbackProvider::new(links, kind, config.timeout()))
 }
 
 impl fmt::Debug for AppState {
@@ -61,13 +86,32 @@ impl AppState {
         if !config.has_key() {
             return Ok(AppState::default());
         }
-        let second = OpenAiProvider::new(&config.with_model(config.second_model()))?;
-        let vision = OpenAiProvider::new(&config.with_model(config.vision_model()))?;
-        Ok(
-            AppState::with_provider(Arc::new(OpenAiProvider::new(config)?))
-                .with_second_model(Arc::new(second))
-                .with_vision(Arc::new(vision)),
-        )
+        let json = chat_chain(
+            config,
+            config.models(),
+            ReplyKind::Checked(extraction_problem),
+        )?;
+        let parameters = chat_chain(config, config.models(), ReplyKind::Json)?;
+        let text = chat_chain(config, config.models(), ReplyKind::Text)?;
+        let second = chat_chain(config, config.models_b(), ReplyKind::Json)?;
+        let vision_links: Vec<Arc<dyn VisionProvider>> = links(config, config.vision_models())?
+            .into_iter()
+            .map(|l| l as Arc<dyn VisionProvider>)
+            .collect();
+        let vision = FallbackVision::new(vision_links, VISION_TIMEOUT);
+        let chains = dto::ChainsDto {
+            extraction: json.models(),
+            authoring_b: second.models(),
+            vision: vision.models(),
+        };
+        let extractor = Extractor::new(Arc::new(json), registry::catalog())
+            .with_text_provider(Arc::new(text))
+            .with_json_provider(Arc::new(parameters));
+        let mut state = AppState::with_extractor(extractor)
+            .with_second_model(Arc::new(second))
+            .with_vision(Arc::new(vision));
+        state.chains = Some(chains);
+        Ok(state)
     }
 
     /// Enables two-model law authoring in `POST /v1/analyze`, with this
@@ -126,6 +170,7 @@ impl AppState {
             law_authoring: self.extraction_available() && self.second.is_some(),
             vision: self.vision.is_some(),
             models,
+            chains: self.chains.clone(),
         }
     }
 

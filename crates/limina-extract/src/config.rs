@@ -13,6 +13,29 @@ pub const DEFAULT_SECOND_MODEL: &str = "nvidia/nemotron-3-ultra-550b-a55b";
 /// Default vision-language model for image input (`LIMINA_LLM_VISION_MODEL`).
 pub const DEFAULT_VISION_MODEL: &str = "nvidia/nemotron-3.5-super-vl-120b-a12b";
 
+/// Default chain for extraction, law naming and parameters
+/// (`LIMINA_LLM_MODELS`), fastest first.
+pub const DEFAULT_MODELS: [&str; 4] = [
+    "nvidia/nemotron-3.5-lightning-30b-a3b",
+    "nvidia/nemotron-3.5-bolt-e4b",
+    "poolside/laguna-xs-2.1",
+    "nvidia/nemotron-3-ultra-550b-a55b",
+];
+/// Default chain of authoring model B (`LIMINA_LLM_MODELS_B`): another
+/// family first, so the two authors differ whenever it answers.
+pub const DEFAULT_MODELS_B: [&str; 2] = [
+    "poolside/laguna-xs-2.1",
+    "nvidia/nemotron-3-ultra-550b-a55b",
+];
+/// Default chain of vision models (`LIMINA_LLM_VISION_MODELS`).
+pub const DEFAULT_VISION_MODELS: [&str; 2] = [
+    "nvidia/nemotron-3.5-super-vl-120b-a12b",
+    "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+];
+/// Default time allowed to one model, in seconds (`LIMINA_LLM_TIMEOUT_SECS`).
+pub const DEFAULT_TIMEOUT_SECS: u64 = 15;
+/// Seconds a failed model is skipped (circuit breaker).
+pub const COOL_DOWN_SECS: u64 = 60;
 /// The provider key. It has no `Display` and no `Serialize`; its `Debug`
 /// prints `[redacted]`. Only the provider implementation reads it.
 #[derive(Clone)]
@@ -51,6 +74,35 @@ pub struct ExtractConfig {
     api_key: Option<SecretKey>,
     second_model: String,
     vision_model: String,
+    models: Vec<String>,
+    models_b: Vec<String>,
+    vision_models: Vec<String>,
+    timeout_secs: u64,
+}
+/// A comma-separated list, trimmed, without blanks or duplicates.
+fn list(value: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for item in value.split(',').map(str::trim).filter(|s| !s.is_empty()) {
+        if !out.iter().any(|o| o == item) {
+            out.push(item.to_string());
+        }
+    }
+    out
+}
+/// `first` (the single-model variable, when set) followed by the chain
+/// read from `chain` or `default`, without duplicates.
+fn chain(first: Option<String>, chain: Option<String>, default: &[&str]) -> Vec<String> {
+    let mut out: Vec<String> = first.into_iter().collect();
+    let rest = chain.map_or_else(
+        || default.iter().map(|s| s.to_string()).collect(),
+        |c| list(&c),
+    );
+    for m in rest {
+        if !out.contains(&m) {
+            out.push(m);
+        }
+    }
+    out
 }
 
 impl ExtractConfig {
@@ -65,7 +117,30 @@ impl ExtractConfig {
         let disable_thinking = get("LIMINA_LLM_DISABLE_THINKING")
             .map(|v| !matches!(v.to_ascii_lowercase().as_str(), "false" | "0" | "no"))
             .unwrap_or(true);
+        let models = chain(
+            get("LIMINA_LLM_MODEL"),
+            get("LIMINA_LLM_MODELS"),
+            &DEFAULT_MODELS,
+        );
+        let models_b = chain(
+            get("LIMINA_LLM_MODEL_B"),
+            get("LIMINA_LLM_MODELS_B"),
+            &DEFAULT_MODELS_B,
+        );
+        let vision_models = chain(
+            get("LIMINA_LLM_VISION_MODEL"),
+            get("LIMINA_LLM_VISION_MODELS"),
+            &DEFAULT_VISION_MODELS,
+        );
+        let timeout_secs = get("LIMINA_LLM_TIMEOUT_SECS")
+            .and_then(|v| v.parse::<u64>().ok())
+            .filter(|s| *s > 0)
+            .unwrap_or(DEFAULT_TIMEOUT_SECS);
         ExtractConfig {
+            models,
+            models_b,
+            vision_models,
+            timeout_secs,
             model: get("LIMINA_LLM_MODEL").unwrap_or_else(|| DEFAULT_MODEL.to_string()),
             base_url: get("LIMINA_LLM_BASE_URL")
                 .unwrap_or_else(|| DEFAULT_BASE_URL.to_string())
@@ -119,6 +194,23 @@ impl ExtractConfig {
         &self.vision_model
     }
 
+    /// Chain for extraction, law naming and parameters: `LIMINA_LLM_MODEL`
+    /// first when set, then `LIMINA_LLM_MODELS` or [`DEFAULT_MODELS`].
+    pub fn models(&self) -> &[String] {
+        &self.models
+    }
+    /// Chain of authoring model B (`LIMINA_LLM_MODELS_B`).
+    pub fn models_b(&self) -> &[String] {
+        &self.models_b
+    }
+    /// Chain of vision models (`LIMINA_LLM_VISION_MODELS`).
+    pub fn vision_models(&self) -> &[String] {
+        &self.vision_models
+    }
+    /// Time allowed to one model.
+    pub fn timeout(&self) -> std::time::Duration {
+        std::time::Duration::from_secs(self.timeout_secs)
+    }
     /// The same settings with another model id.
     pub fn with_model(&self, model: &str) -> ExtractConfig {
         let mut c = self.clone();
@@ -164,6 +256,23 @@ mod tests {
         assert!(c.has_key());
     }
 
+    #[test]
+    fn chains_default_and_the_single_model_variable_comes_first() {
+        let c = config(&[]);
+        assert_eq!(c.models(), DEFAULT_MODELS.map(String::from));
+        assert_eq!(c.models_b()[0], "poolside/laguna-xs-2.1");
+        assert_eq!(c.vision_models().len(), 2);
+        assert_eq!(c.timeout(), std::time::Duration::from_secs(15));
+        let c = config(&[
+            ("LIMINA_LLM_MODEL", "m"),
+            ("LIMINA_LLM_MODELS", "a, b ,,a,m"),
+            ("LIMINA_LLM_TIMEOUT_SECS", "5"),
+        ]);
+        assert_eq!(c.models(), ["m", "a", "b"]);
+        assert_eq!(c.timeout(), std::time::Duration::from_secs(5));
+        let bad = config(&[("LIMINA_LLM_TIMEOUT_SECS", "0")]);
+        assert_eq!(bad.timeout(), std::time::Duration::from_secs(15));
+    }
     #[test]
     fn a_blank_key_is_no_key() {
         assert!(!config(&[("NVIDIA_API_KEY", "  ")]).has_key());

@@ -124,3 +124,76 @@ Items are appended below in order.
 - Open decision for the author: whether to add true vector quantities (components, cross product) to the DSL, which would allow a tight equality F = q (E + v x B) instead of a bound.
 - Tests: cargo fmt --check, clippy -D warnings, cargo test --workspace pass (new: 4 in crates/limina-dsl/tests/lorentz.rs incl. 1 proptest with fixed ChaCha seed, 256 cases, 1024 with CI). Registry and API list tests updated for the 13th max/min law. Web untouched, not rerun.
 - Deferred laws: none.
+## P7-model-fallback
+- limina-extract: `FallbackProvider` (implements `ExtractionProvider`) and `FallbackVision` (implements `VisionProvider`) over an ordered list of models (crates/limina-extract/src/fallback.rs). The next model is tried on a provider error (timeout, transport, HTTP 404, 429, 5xx) or an unusable answer (empty content, finish_reason length, no balanced JSON object, a JSON object that does not parse). Any other HTTP status (401, 403, 400) stops the chain with its typed error, since the next model would get the same answer. Every model has its own timeout (`LIMINA_LLM_TIMEOUT_SECS`, default 15 s; vision keeps 60 s). A model that failed on the provider side is skipped for 60 s (circuit breaker). An unusable answer does not open the breaker. When every model of a chain is cooling down, they are all tried anyway.
+- Trait growth only: `ExtractionProvider::complete_routed` and `VisionProvider::transcribe_routed` with default implementations; new `Route` and `Routed` types; new `ProviderError::Unusable` variant (limina-extract, not limina-core; no other crate matches on ProviderError exhaustively).
+- Chains of the deployed server (AppState::from_config): extraction checks the extraction schema too (`ReplyKind::Checked(extraction_problem)`), so a JSON object that does not fit the schema also falls through. Deviation from the item text: the item lists "a JSON object that does not parse"; the extraction chain goes one step further because the live failures before this change were schema mismatches (HTTP 502 "the answer does not match the schema"). Parameters and authoring model A use the same models with the plain JSON check, law naming with a text check (a sentence is a valid answer). Authoring model B has its own chain.
+- Configuration, from the environment only: `LIMINA_LLM_MODELS` (default lightning, bolt, laguna, ultra), `LIMINA_LLM_MODELS_B` (default laguna, ultra), `LIMINA_LLM_VISION_MODELS` (default super-vl, nano-omni). `LIMINA_LLM_MODEL`, `LIMINA_LLM_MODEL_B` and `LIMINA_LLM_VISION_MODEL` still work and are put first in their chain. Blank items and duplicates are dropped.
+- Trace: the extraction, law naming and parameters steps end with "model M" or "model M; skipped: X (reason), ...". Authoring steps are named after the model that wrote the definition and list the skipped models. GET /v1/pipeline gains an optional `chains` field {extraction, authoring_b, vision}; `models` is unchanged.
+- Two-model comparison: when chain B falls back to the model that wrote A's definition, the law is `draft_disputed` (one author only, not compared), with the trace detail "both definitions were written by the same model M (chain B fell back to it); one author only, not compared". It is never `draft_agreed`.
+- Tests: cargo fmt --check, clippy -D warnings, cargo test --workspace pass (590 Rust tests; new: 12 in crates/limina-extract/tests/fallback.rs covering first fails then second answers, 404/429/5xx fall through and 401 does not, all fail gives the typed error, each kind of unusable answer, schema mismatch on the checked chain, circuit breaker skip, close after cool-down, all cooling down, chain B falling back to A's model never agrees, two distinct models still agree; 1 config test; 3 in crates/limina-api/tests/pipeline.rs for the model named in each trace step, same-model disputed through the API, and the chains in GET /v1/pipeline). The extract-claims tests and the key-never-printed tests (limina-extract/tests/security.rs, limina-api/tests/security.rs, limina-cli/tests/check.rs) pass unchanged. Web untouched (the new `chains` field is optional), not rerun.
+- Live smoke on the six-paragraph illustrative text (pipeline_live::the_multi_discipline_text_is_identified_from_the_library_first, chains from the defaults, one request per paragraph). Paragraphs that failed (HTTP 502, no claim): before this change 3 of 6 on the last P4 run (Lumen, Aurora, Quanta; 2 of 6 on the first P4 run), after it 0 of 6 on the run below. A first run after the change, with only the JSON check on the extraction chain, still failed 2 of 6 (Lumen, Aurora, schema mismatches), which led to the schema check above.
+- Reading of the run below: every verdict comes from the engine. speed_limit and landauer IMPOSSIBLE; the COP claim is now read as 14.5 dimensionless and gets CONDITIONAL (no heating/cooling constraint stated). Model misreadings remain and are recorded as is: the Q-Scope paragraph was read as a claim of "1 dimensionless" with no evidence and stopped at needs_input; the Lumen 100 nm resolution was flagged "unit not understood" (needs_input), and the 500 nm wavelength was mapped by law naming to abbe_limit and compared as if it were the resolved size (COMPATIBLE, a meaningless comparison but not a false IMPOSSIBLE). The battery claim stays NO LAW IDENTIFIED with no verdict. The models that answered vary per paragraph (lightning, laguna, ultra); the skipped models and reasons are in the trace.
+- Raw output:
+    TEXT The Helios probe cruises at a speed of 3.6e8 m/s relative to the Sun.
+    HTTP 200 OK
+    claim "m/s" limit "speed_limit" status "evaluated" verdict "IMPOSSIBLE" source "built_in"
+      ["done"] "extraction": "read m/s: 3.6e8 m/s, evidence \"The Helios probe cruises at a speed of 3.6e8 m/s relative to the Sun.\"; model nvidia/nemotron-3.5-lightning-30b-a3b"
+      ["done"] "limit": "built-in limit speed_limit"
+      ["done"] "parameters": "the limit needs no parameter"
+      ["done"] "evaluation": "engine verdict IMPOSSIBLE"
+    TEXT The Q-Scope locates an electron within 1e-12 m while its momentum is known to within 1e-24 kg*m/s.
+    HTTP 200 OK
+    claim "dimensionless" limit "heisenberg" status "needs_input" verdict null source "built_in"
+      ["done"] "extraction": "read dimensionless: 1 dimensionless, no evidence found in the text; flags: not traceable to the text, unit not understood; model poolside/laguna-xs-2.1; skipped: nvidia/nemotron-3.5-lightning-30b-a3b (the answer does not match the schema), nvidia/nemotron-3.5-bolt-e4b (no JSON object in the answer)"
+      ["done"] "limit": "built-in limit heisenberg"
+      ["failed"] "parameters": "missing dp (not stated in the text)"
+      ["failed"] "evaluation": "not evaluated: unit not understood"
+    TEXT The Lumen microscope resolves details of 100 nm using light of 500 nm wavelength and a numerical aperture of 1.4.
+    HTTP 200 OK
+    claim "resolution" limit "abbe_limit" status "needs_input" verdict null source "built_in"
+      ["done"] "extraction": "read resolution: 100 nm, evidence \"The Lumen microscope resolves details of 100 nm using light of 500 nm wavelength and a numerical aperture of 1.4.\"; flags: unit not understood; model nvidia/nemotron-3-ultra-550b-a55b; skipped: nvidia/nemotron-3.5-lightning-30b-a3b (the answer does not match the schema), nvidia/nemotron-3.5-bolt-e4b (no JSON object in the answer), poolside/laguna-xs-2.1 (the answer does not match the schema)"
+      ["done"] "limit": "built-in limit abbe_limit"
+      ["done"] "parameters": "found wavelength = 500 nm, aperture = 1.4 dimensionless"
+      ["failed"] "evaluation": "not evaluated: unit not understood"
+    claim "wavelength" limit "abbe_limit" status "evaluated" verdict "COMPATIBLE" source "built_in"
+      ["done"] "extraction": "read wavelength: 500 nm, evidence \"The Lumen microscope resolves details of 100 nm using light of 500 nm wavelength and a numerical aperture of 1.4.\"; flags: limit not recognized; model nvidia/nemotron-3-ultra-550b-a55b; skipped: nvidia/nemotron-3.5-lightning-30b-a3b (the answer does not match the schema), nvidia/nemotron-3.5-bolt-e4b (no JSON object in the answer), poolside/laguna-xs-2.1 (the answer does not match the schema)"
+      ["failed"] "limit": "no built-in limit matches this claim"
+      ["done"] "law": "built-in limit abbe_limit identified by law naming; no authoring (model nvidia/nemotron-3.5-lightning-30b-a3b)"
+      ["done"] "parameters": "found wavelength = 500 nm, aperture = 1.4 dimensionless; model nvidia/nemotron-3.5-lightning-30b-a3b"
+      ["done"] "evaluation": "engine verdict COMPATIBLE"
+    claim "numerical aperture" limit null status "needs_input" verdict null source "not_authored"
+      ["done"] "extraction": "read numerical aperture: 1.4 dimensionless, evidence \"The Lumen microscope resolves details of 100 nm using light of 500 nm wavelength and a numerical aperture of 1.4.\"; flags: limit not recognized; model nvidia/nemotron-3-ultra-550b-a55b; skipped: nvidia/nemotron-3.5-lightning-30b-a3b (the answer does not match the schema), nvidia/nemotron-3.5-bolt-e4b (no JSON object in the answer), poolside/laguna-xs-2.1 (the answer does not match the schema)"
+      ["failed"] "limit": "no built-in limit matches this claim"
+      ["done"] "law": "abbe_limit: wavelength/(2*aperture) (model nvidia/nemotron-3.5-lightning-30b-a3b)"
+      ["failed"] "authoring by nvidia/nemotron-3.5-lightning-30b-a3b": "no valid definition after 3 attempts; last error: the definition does not match the schema: unknown field `test`, expected one of `name`, `dimension`, `kind`, `units`, `required`, `plausible`, `test_range`"
+      ["failed"] "authoring by poolside/laguna-xs-2.1": "no valid definition after 3 attempts; last error: the definition does not match the schema: unknown variant `dimension`, expected `absolute_temperature` or `temperature_difference`"
+      ["skipped"] "comparison": "not_authored: neither model wrote a valid definition"
+      ["skipped"] "parameters": "no agreed law"
+      ["skipped"] "evaluation": "not evaluated: no valid definition of the law could be written"
+    TEXT The Aurora heat pump delivers heat with a COP of 14.5, hot reservoir at 300 K, cold reservoir at 280 K.
+    HTTP 200 OK
+    claim "COP" limit "cop" status "evaluated" verdict "CONDITIONAL" source "built_in"
+      ["done"] "extraction": "read COP: 14.5 dimensionless, evidence \"The Aurora heat pump delivers heat with a COP of 14.5\"; model poolside/laguna-xs-2.1; skipped: nvidia/nemotron-3.5-lightning-30b-a3b (the answer does not match the schema), nvidia/nemotron-3.5-bolt-e4b (the JSON object does not parse)"
+      ["done"] "limit": "built-in limit cop"
+      ["done"] "parameters": "found Th = 300 K, Tc = 280 K"
+      ["done"] "evaluation": "engine verdict CONDITIONAL"
+    TEXT The Quanta logic chip erases one bit at 300 K while dissipating 1e-22 J.
+    HTTP 200 OK
+    claim "energy" limit "landauer" status "evaluated" verdict "IMPOSSIBLE" source "built_in"
+      ["done"] "extraction": "read energy: 1e-22 J, evidence \"dissipating 1e-22 J\"; model poolside/laguna-xs-2.1; skipped: nvidia/nemotron-3.5-lightning-30b-a3b (the JSON object does not parse), nvidia/nemotron-3.5-bolt-e4b (no JSON object in the answer)"
+      ["done"] "limit": "built-in limit landauer"
+      ["done"] "parameters": "found T = 300 K"
+      ["done"] "evaluation": "engine verdict IMPOSSIBLE"
+    TEXT The Volta cell stores 5 kWh of energy in a mass of 1 kg.
+    HTTP 200 OK
+    claim "energy" limit null status "needs_input" verdict null source "no_law_identified"
+      ["done"] "extraction": "read energy: 5 kWh, evidence \"The Volta cell stores 5 kWh of energy in a mass of 1 kg.\"; flags: limit not recognized; model nvidia/nemotron-3.5-lightning-30b-a3b"
+      ["failed"] "limit": "no built-in limit matches this claim"
+      ["failed"] "law": "no law identified (model nvidia/nemotron-3.5-lightning-30b-a3b)"
+    claim "mass" limit null status "needs_input" verdict null source "no_law_identified"
+      ["done"] "extraction": "read mass: 1 kg, evidence \"The Volta cell stores 5 kWh of energy in a mass of 1 kg.\"; flags: limit not recognized; model nvidia/nemotron-3.5-lightning-30b-a3b"
+      ["failed"] "limit": "no built-in limit matches this claim"
+      ["failed"] "law": "no law identified (model nvidia/nemotron-3.5-lightning-30b-a3b)"
+    test the_multi_discipline_text_is_identified_from_the_library_first ... ok
+- Deferred laws: none.

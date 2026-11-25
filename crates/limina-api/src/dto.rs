@@ -463,6 +463,21 @@ pub struct PipelineInfoDto {
     pub vision: bool,
     /// Model ids: extraction and model A, model B, vision.
     pub models: Vec<String>,
+    /// The model chains tried in order, when configured from the
+    /// environment.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub chains: Option<ChainsDto>,
+}
+
+/// The model chains of the pipeline, each tried in order.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct ChainsDto {
+    /// Extraction, law naming, parameters and authoring model A.
+    pub extraction: Vec<String>,
+    /// Authoring model B.
+    pub authoring_b: Vec<String>,
+    /// Image transcription.
+    pub vision: Vec<String>,
 }
 
 /// How the extraction ran.

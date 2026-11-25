@@ -57,7 +57,11 @@ pub async fn analyze_text(state: &AppState, text: &str) -> Result<AnalyzeRespons
     let extractor = state.extractor().ok_or(ApiError::ExtractionUnavailable)?;
     let extraction = extractor.extract(text).await?;
     let mut claims: Vec<AnalyzedClaimDto> = extraction.claims.iter().map(analyze_claim).collect();
-    crate::pipeline::complete_claims(state, text, &mut claims, extraction.cached).await;
+    let route = limina_extract::Route {
+        model: extraction.model.clone(),
+        skipped: extraction.skipped.clone(),
+    };
+    crate::pipeline::complete_claims(state, text, &mut claims, extraction.cached, &route).await;
     Ok(AnalyzeResponse {
         claims,
         missing: extraction.missing,

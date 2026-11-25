@@ -47,6 +47,11 @@ pub struct AuthoredLimit {
     pub overrides: Vec<String>,
     /// The check report of the final definition.
     pub report: CheckReport,
+    /// Model that wrote the final answer (the first model of the chain
+    /// unless it fell back).
+    pub model: String,
+    /// Models passed over before it, with the reason of each.
+    pub skipped: Vec<String>,
 }
 
 /// Why no limit was authored.
@@ -269,16 +274,18 @@ async fn run(
             system: system.clone(),
             user,
         };
-        let reply = match (provider.complete(request.clone()).await, backoff) {
+        let routed = match (provider.complete_routed(request.clone()).await, backoff) {
             (Err(e), Some(pause)) if e.is_retryable() => {
                 tokio::time::sleep(pause).await;
                 provider
-                    .complete(request)
+                    .complete_routed(request)
                     .await
                     .map_err(ExtractError::from)?
             }
             (other, _) => other.map_err(ExtractError::from)?,
         };
+        let reply = routed.reply;
+        let route = routed.route;
         match check_answer(reply.content.as_deref(), reply.finish_reason.as_deref()) {
             Ok((definition, limit, overrides, report)) => {
                 return Ok(AuthoredLimit {
@@ -288,6 +295,8 @@ async fn run(
                     errors,
                     overrides,
                     report,
+                    model: route.model,
+                    skipped: route.skipped,
                 });
             }
             Err(e) => {
@@ -318,7 +327,7 @@ impl Extractor {
     /// call takes a slot of its rate limit.
     pub async fn author_limit(&self, text: &str) -> Result<AuthoredLimit, AuthorError> {
         run(
-            self.provider(),
+            self.json_provider(),
             text,
             &|| self.acquire(),
             self.retry_backoff(),
