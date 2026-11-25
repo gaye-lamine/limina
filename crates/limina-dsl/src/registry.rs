@@ -61,6 +61,18 @@ impl Registry {
             ),
             ("cop.json", include_str!("../../../data/limits/cop.json")),
             (
+                "landauer.json",
+                include_str!("../../../data/limits/landauer.json"),
+            ),
+            (
+                "shannon_hartley.json",
+                include_str!("../../../data/limits/shannon_hartley.json"),
+            ),
+            (
+                "stefan_boltzmann.json",
+                include_str!("../../../data/limits/stefan_boltzmann.json"),
+            ),
+            (
                 "energy_momentum.json",
                 include_str!("../../../data/limits/energy_momentum.json"),
             ),

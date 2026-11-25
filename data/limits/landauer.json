@@ -1,0 +1,24 @@
+{
+  "id": "landauer",
+  "title": "Landauer limit",
+  "direction": "min",
+  "bounded_dimension": "J",
+  "parameters": [
+    { "name": "T", "kind": "absolute_temperature", "units": ["K"], "required": true, "test_range": [1, 1000] }
+  ],
+  "formula": "kB*T*ln2",
+  "validity": ["T > 0"],
+  "references": [
+    "Landauer, R., Irreversibility and Heat Generation in the Computing Process, IBM Journal of Research and Development 5(3), 183-191 (1961), doi:10.1147/rd.53.0183"
+  ],
+  "status": "draft",
+  "epistemic_status": "theorem",
+  "classification": "theoretical_bound",
+  "validity_domain": "Heat dissipated into a thermal environment at absolute temperature T by the logically irreversible erasure of one bit of information.",
+  "limitations": [
+    "Applies to the erasure of a bit (a logically irreversible operation), not to the energy a whole computer draws",
+    "Logically reversible computation has no such lower bound",
+    "A lower bound on the heat per erased bit: real hardware dissipates many orders of magnitude more, and the bound says nothing about the energy per operation of a circuit"
+  ],
+  "variables": { "T": "Absolute temperature of the environment receiving the heat" }
+}

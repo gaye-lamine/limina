@@ -1,0 +1,25 @@
+{
+  "id": "stefan_boltzmann",
+  "title": "Stefan-Boltzmann limit",
+  "direction": "max",
+  "bounded_dimension": "W/m^2",
+  "parameters": [
+    { "name": "T", "kind": "absolute_temperature", "units": ["K"], "required": true, "test_range": [100, 6000] }
+  ],
+  "formula": "sigma_SB*T^4",
+  "validity": ["T > 0"],
+  "references": [
+    "Kittel, C. and Kroemer, H., Thermal Physics, 2nd ed., W. H. Freeman (1980)",
+    "Planck, M., The Theory of Heat Radiation, P. Blakiston's Son & Co. (1914)"
+  ],
+  "status": "draft",
+  "epistemic_status": "theorem",
+  "classification": "theorem",
+  "validity_domain": "Power per unit area emitted into the half space by the surface of a body at uniform absolute temperature T, in vacuum or a non-absorbing medium.",
+  "limitations": [
+    "The bound is reached by a black body; a real surface has emissivity at most 1 (Kirchhoff's law at thermal equilibrium), so its flux is lower",
+    "Total emitted flux over all wavelengths; absorbed or reflected ambient radiation is not counted",
+    "Far-field, macroscopic surfaces: not valid at distances or sizes comparable to the thermal wavelength"
+  ],
+  "variables": { "T": "Absolute temperature of the emitting surface" }
+}

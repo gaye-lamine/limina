@@ -1,0 +1,28 @@
+{
+  "id": "shannon_hartley",
+  "title": "Shannon-Hartley limit",
+  "direction": "max",
+  "bounded_dimension": "bit/s",
+  "parameters": [
+    { "name": "B", "dimension": "Hz", "units": ["Hz", "kHz", "MHz", "GHz"], "test_range": [1e3, 1e9] },
+    { "name": "snr", "dimension": "dimensionless", "units": ["dimensionless"], "test_range": [0.01, 1e4] }
+  ],
+  "formula": "B*ln(1 + snr)/ln2",
+  "validity": [],
+  "references": [
+    "Shannon, C. E., A Mathematical Theory of Communication, Bell System Technical Journal 27(3), 379-423 (1948), doi:10.1002/j.1538-7305.1948.tb01338.x",
+    "Cover, T. M. and Thomas, J. A., Elements of Information Theory, 2nd ed., Wiley (2006)"
+  ],
+  "status": "draft",
+  "epistemic_status": "theorem",
+  "classification": "theorem",
+  "validity_domain": "Error-free information rate over a band-limited channel of bandwidth B with additive white Gaussian noise and a signal-to-noise power ratio snr (a plain ratio, not decibels).",
+  "limitations": [
+    "Additive white Gaussian noise channel; other noise or fading channels have other capacities",
+    "snr is the linear power ratio over the bandwidth B; a value in dB must be converted first",
+    "Capacity of the channel, reached only with ideal coding: a link does not reach it",
+    "Defined for a positive bandwidth and a non-negative ratio snr; the core checks no condition on them here",
+    "Multiple antennas or users (MIMO) are not covered"
+  ],
+  "variables": { "B": "Channel bandwidth", "snr": "Signal-to-noise power ratio, linear (not dB)" }
+}
