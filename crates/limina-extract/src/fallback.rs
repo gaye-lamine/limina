@@ -154,9 +154,20 @@ impl FallbackProvider {
     }
 
     async fn run(&self, request: ChatRequest) -> Result<Routed, ProviderError> {
+        self.run_checked(request, &|_| None).await
+    }
+
+    async fn run_checked(
+        &self,
+        request: ChatRequest,
+        check: &(dyn Fn(&ChatReply) -> Option<String> + Sync),
+    ) -> Result<Routed, ProviderError> {
         let all_open = (0..self.links.len()).all(|i| self.breaker.is_open(i));
         let mut skipped: Vec<String> = Vec::new();
         let mut last: Option<ProviderError> = None;
+        // The first well-formed answer that failed `check`, returned when no
+        // model passes it, so its readings are still reported.
+        let mut kept: Option<(ChatReply, String, usize)> = None;
         for (i, link) in self.links.iter().enumerate() {
             let model = link.model().to_string();
             if !all_open && self.breaker.is_open(i) {
@@ -168,12 +179,20 @@ impl FallbackProvider {
                 .unwrap_or(Err(ProviderError::Timeout));
             match answer {
                 Ok(reply) => match unusable(self.kind, &reply) {
-                    None => {
-                        return Ok(Routed {
-                            reply,
-                            route: Route { model, skipped },
-                        })
-                    }
+                    None => match check(&reply) {
+                        None => {
+                            return Ok(Routed {
+                                reply,
+                                route: Route { model, skipped },
+                            })
+                        }
+                        Some(reason) => {
+                            skipped.push(format!("{model} ({reason})"));
+                            if kept.is_none() {
+                                kept = Some((reply, model, skipped.len() - 1));
+                            }
+                        }
+                    },
                     Some(reason) => {
                         skipped.push(format!("{model} ({reason})"));
                         last = Some(ProviderError::Unusable(reason));
@@ -186,6 +205,15 @@ impl FallbackProvider {
                 }
                 Err(e) => return Err(e),
             }
+        }
+        if let Some((reply, model, at)) = kept {
+            // The kept model is the one reported; every other model passed
+            // over stays listed with its reason.
+            skipped.remove(at);
+            return Ok(Routed {
+                reply,
+                route: Route { model, skipped },
+            });
         }
         Err(last.unwrap_or(ProviderError::Unusable("no model configured")))
     }
@@ -203,6 +231,13 @@ impl ExtractionProvider for FallbackProvider {
         request: ChatRequest,
     ) -> BoxFuture<'_, Result<Routed, ProviderError>> {
         Box::pin(self.run(request))
+    }
+    fn complete_routed_checked<'a>(
+        &'a self,
+        request: ChatRequest,
+        check: &'a (dyn Fn(&ChatReply) -> Option<String> + Sync),
+    ) -> BoxFuture<'a, Result<Routed, ProviderError>> {
+        Box::pin(self.run_checked(request, check))
     }
 }
 

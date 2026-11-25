@@ -12,7 +12,7 @@ use crate::check::{check, CheckedClaim};
 use crate::error::ExtractError;
 use crate::parse::{read_reply, ModelOutput};
 use crate::prompt;
-use crate::provider::{ExtractionProvider, Route};
+use crate::provider::{ChatReply, ExtractionProvider, Route};
 
 /// Requests allowed per window.
 pub const RATE_LIMIT: usize = 30;
@@ -62,6 +62,17 @@ impl std::fmt::Debug for Extractor {
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+/// Reason given when a model answer quotes none of its values from the text.
+pub const UNTRACEABLE_ANSWER: &str = "no value of the answer is written in the text";
+
+/// Whether the answer reads at least one claim and none of its claim values
+/// is traceable to the text (evidence not found, or the number not in it).
+/// An answer with no claim is not untraceable: the text may state none.
+pub fn untraceable(output: &ModelOutput, text: &str, catalog: &Catalog) -> bool {
+    let claims = check(output, text, catalog);
+    !claims.is_empty() && claims.iter().all(|c| c.evidence.is_none())
 }
 
 /// The text with its outer whitespace trimmed and every run of whitespace
@@ -153,11 +164,20 @@ impl Extractor {
 
     async fn ask(&self, text: &str) -> Result<(ModelOutput, Route), ExtractError> {
         let request = prompt::request(&self.catalog, text);
-        let first = self.provider.complete_routed(request.clone()).await;
+        let quotes = |reply: &ChatReply| -> Option<String> {
+            let output = read_reply(reply).ok()?;
+            untraceable(&output, text, &self.catalog).then(|| UNTRACEABLE_ANSWER.to_string())
+        };
+        let first = self
+            .provider
+            .complete_routed_checked(request.clone(), &quotes)
+            .await;
         let routed = match (first, self.retry_backoff) {
             (Err(e), Some(backoff)) if e.is_retryable() => {
                 tokio::time::sleep(backoff).await;
-                self.provider.complete_routed(request).await?
+                self.provider
+                    .complete_routed_checked(request, &quotes)
+                    .await?
             }
             (other, _) => other?,
         };
@@ -176,11 +196,15 @@ impl Extractor {
             None => {
                 self.acquire()?;
                 let output = self.ask(text).await?;
-                let mut cache = lock(&self.cache);
-                if cache.len() >= CACHE_CAPACITY {
-                    cache.clear();
+                // An answer none of whose values is written in the text is
+                // not kept: the next request asks the models again.
+                if !untraceable(&output.0, text, &self.catalog) {
+                    let mut cache = lock(&self.cache);
+                    if cache.len() >= CACHE_CAPACITY {
+                        cache.clear();
+                    }
+                    cache.insert(key, output.clone());
                 }
-                cache.insert(key, output.clone());
                 (output, false)
             }
         };
@@ -212,6 +236,69 @@ mod tests {
 
     fn extractor(mock: &Arc<MockProvider>) -> Extractor {
         Extractor::new(mock.clone(), catalog()).with_retry_backoff(Some(Duration::ZERO))
+    }
+
+    const BETZ_TEXT: &str = "With an unshrouded rotor, a power coefficient of 0.45.";
+
+    fn betz_answer(evidence: &str) -> String {
+        format!(
+            r#"{{"claims":[{{"limit_id":"betz","quantity":"power coefficient","value":0.45,"unit":"dimensionless","evidence":"{evidence}","constraints":{{}},"parameters":{{}}}}],"missing":[]}}"#
+        )
+    }
+
+    fn chain(a: &Arc<crate::testing::NamedMock>, b: &Arc<crate::testing::NamedMock>) -> Extractor {
+        let links: Vec<Arc<dyn ExtractionProvider>> = vec![a.clone(), b.clone()];
+        let chain = crate::fallback::FallbackProvider::new(
+            links,
+            crate::fallback::ReplyKind::Checked(crate::fallback::extraction_problem),
+            Duration::from_secs(5),
+        );
+        Extractor::new(Arc::new(chain), catalog()).with_retry_backoff(Some(Duration::ZERO))
+    }
+
+    #[tokio::test]
+    async fn an_answer_that_quotes_nothing_of_the_text_moves_to_the_next_model() {
+        let a = Arc::new(crate::testing::NamedMock::new("model-a"));
+        let b = Arc::new(crate::testing::NamedMock::new("model-b"));
+        a.inner
+            .push_content(&betz_answer("a power coefficient of 0,4 5"));
+        b.inner
+            .push_content(&betz_answer("a power coefficient of 0.45"));
+        let e = chain(&a, &b).extract(BETZ_TEXT).await.expect("extracted");
+        assert_eq!(e.model, "model-b");
+        assert!(e.claims[0].evidence.is_some());
+        assert_eq!(e.skipped.len(), 1);
+        assert!(e.skipped[0].contains(UNTRACEABLE_ANSWER), "{:?}", e.skipped);
+    }
+
+    #[tokio::test]
+    async fn when_no_model_quotes_the_text_the_first_reading_is_reported_and_not_cached() {
+        let a = Arc::new(crate::testing::NamedMock::new("model-a"));
+        let b = Arc::new(crate::testing::NamedMock::new("model-b"));
+        a.inner.push_content(&betz_answer("not in the text 0.45"));
+        b.inner
+            .push_content(&betz_answer("also not in the text 0.45"));
+        let x = chain(&a, &b);
+        let e = x.extract(BETZ_TEXT).await.expect("reported");
+        assert_eq!(e.model, "model-a", "the first well-formed reading is kept");
+        assert!(e.claims[0].evidence.is_none(), "and shown as not traceable");
+        assert!(!e.cached);
+        // Not cached: the next request asks the models again.
+        a.inner
+            .push_content(&betz_answer("a power coefficient of 0.45"));
+        let again = x.extract(BETZ_TEXT).await.expect("asked again");
+        assert!(!again.cached);
+        assert!(again.claims[0].evidence.is_some());
+        // A good answer is cached.
+        assert!(x.extract(BETZ_TEXT).await.expect("cached").cached);
+        assert_eq!(a.inner.calls(), 2);
+        assert_eq!(b.inner.calls(), 1);
+    }
+
+    #[test]
+    fn an_answer_without_claims_is_not_untraceable() {
+        let none = crate::parse::parse_model_output(r#"{"claims":[],"missing":[]}"#).expect("json");
+        assert!(!untraceable(&none, BETZ_TEXT, &catalog()));
     }
 
     #[tokio::test]

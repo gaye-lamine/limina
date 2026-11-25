@@ -1577,3 +1577,86 @@ app-root {
   color: var(--paper, #fff);
 }
 
+
+/* The selected claim fills the panel; the explorer figure takes the height left, so the
+   parameters stay visible on smaller windows (no page scroll, no nested scroll). */
+@media (min-width: 960px) {
+  .wb-claims {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .wb-panel {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .wb-visual {
+    flex: 1 1 auto;
+    min-height: 0;
+    grid-template-rows: minmax(0, 1fr);
+  }
+  .wb-visual > app-explorer,
+  .wb-visual > app-explorer > .explorer {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    height: 100%;
+  }
+  .explorer-figure {
+    flex: 1 1 auto;
+    min-height: 90px;
+    display: flex;
+    flex-direction: column;
+  }
+  .explorer-figure svg {
+    flex: 1 1 auto;
+    min-height: 0;
+    height: 100%;
+    max-height: none;
+  }
+  .explorer-sliders {
+    flex: 0 0 auto;
+  }
+}
+
+/* Short windows (under 800 px of height, for example a laptop with the browser bars):
+   the one-screen layout cannot hold the figure and the parameters, so the page
+   scrolls instead of clipping them. The 1920x1080 layout is unchanged. */
+@media (min-width: 960px) and (max-height: 799px) {
+  html,
+  body {
+    height: auto;
+    overflow: auto;
+  }
+  app-root {
+    height: auto;
+    min-height: 100vh;
+  }
+  .wb,
+  .wb-columns,
+  .wb-trace,
+  .wb-claims,
+  .wb-panel {
+    overflow: visible;
+  }
+  .wb-text {
+    min-height: 6rem;
+    height: 6rem;
+  }
+  .explorer-figure svg {
+    height: auto;
+    min-height: 220px;
+    max-height: 50vh;
+  }
+}
+@media (min-width: 960px) {
+  .wb-tabs,
+  .wb-head,
+  .wb-panel > .wording,
+  .wb-figures,
+  .wb-explain {
+    flex: 0 0 auto;
+  }
+}

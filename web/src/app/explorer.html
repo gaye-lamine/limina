@@ -355,11 +355,12 @@
           <input
             type="range"
             [id]="'slider-' + sl.id"
-            [min]="sl.min"
-            [max]="sl.max"
-            [step]="sl.step"
-            [value]="valueOr(sl.id, sl.min)"
-            (input)="slide(sl.id, $any($event.target).value)"
+            [min]="sl.log ? log10(sl.min) : sl.min"
+            [max]="sl.log ? log10(sl.max) : sl.max"
+            [step]="sl.log ? (log10(sl.max) - log10(sl.min)) / 200 : sl.step"
+            [value]="sl.log ? log10(valueOr(sl.id, sl.min)) : valueOr(sl.id, sl.min)"
+            [attr.aria-valuetext]="label(valueOr(sl.id, sl.min)) + ' ' + sl.unit"
+            (input)="slide(sl.id, $any($event.target).value, sl.log)"
           />
           <span class="num"
             >{{ values()[sl.id] !== undefined ? label(values()[sl.id]) : '-' }} {{ sl.unit }}</span

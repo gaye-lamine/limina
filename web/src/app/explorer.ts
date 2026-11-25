@@ -23,6 +23,8 @@ interface Slider {
   min: number;
   max: number;
   step: number;
+  /** True when the slider moves in powers of ten (range of three decades or more). */
+  log: boolean;
 }
 
 /**
@@ -74,7 +76,9 @@ export class Explorer implements OnDestroy {
         min = Math.min(min, value);
         max = Math.max(max, value);
       }
-      return { id: p.id, unit, min, max, step: (max - min) / 200 || 1 };
+      // A range of three decades or more, all positive, moves in powers of ten.
+      const log = min > 0 && max / min >= 1e3;
+      return { id: p.id, unit, min, max, step: (max - min) / 200 || 1, log };
     });
   });
 
@@ -173,8 +177,14 @@ export class Explorer implements OnDestroy {
     this.request(0);
   }
 
-  protected slide(id: string, raw: string): void {
-    const v = Number(raw);
+  protected log10(v: number): number {
+    return Math.log10(v);
+  }
+
+  /** A slider value: the value itself, or its base-10 logarithm on a log slider. */
+  protected slide(id: string, raw: string, log = false): void {
+    const r = Number(raw);
+    const v = log ? 10 ** r : r;
     if (!Number.isFinite(v)) return;
     this.values.update((m) => ({ ...m, [id]: v }));
     if (id !== this.free() && !(this.view() === 'map' && id === this.yParam())) this.request(150);

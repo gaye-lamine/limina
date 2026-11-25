@@ -307,3 +307,12 @@ Reported: "1 × 10⁻¹⁰ m" and "1 × 10⁻²⁴ kg·m/s" were read as 1 m and
 - Tests: Rust 590 to 598 (check: powers of ten, attachment, unit spellings; parse: list form; pipeline: the author's text end to end, a dropped power of ten is not traceable, log sampling). Web 237 to 252.
 - Live, the author's text without its last sentence: one claim, COMPATIBLE from the engine, bound dx >= hbar/(2 dp) = 5.27e-11 m, claim 1.90 times the minimum, dp = 1e-24 kg·m/s read as the parameter (model nemotron-3.5-lightning).
 - Live, the full text with its last sentence: lightning answers a computed product 1e-34 that is not written in the text (dropped as not traceable) or broken JSON, and bolt garbles the superscripts in the evidence (not traceable), so the claim gets no verdict. No false verdict; the remaining limit is the models' reading, listed under open decisions.
+
+
+## Second fix after the author's test (25/11, evening)
+Reported: the same text gave NEEDS INPUT. The answer in the cache came from a model that garbled the superscripts in its quotation, the chain had not tried the next model, and the parameters were cut off at the bottom of the panel.
+- Model chain: an answer that parses but quotes none of its values from the text ("no value of the answer is written in the text") now moves to the next model. When no model quotes the text, the first well-formed reading is still reported, as not traceable, with every model passed over listed in the trace. A new trait method with a default implementation, `ExtractionProvider::complete_routed_checked`, carries the text-aware check; the existing method is unchanged.
+- Cache: an answer none of whose values is traceable is not cached, so the next request asks the models again.
+- Web: the selected claim fills the panel and the figure takes the height left, so the parameters stay visible at 1920x1080 (document height 1080, measured in headless Edge). Under 800 px of window height the page scrolls instead of clipping. A slider over a range of three decades or more moves in powers of ten. The tab bar no longer shrinks.
+- Tests: Rust 598 to 601 (next model on an untraceable answer; first reading kept and not cached; an answer without claims is not untraceable). Web 252.
+- Live, the author's full text: lightning gave a JSON object that does not parse, bolt gave one too, and laguna answered with the two uncertainties as separate claims. The momentum was attached as parameter dp, and the engine gave COMPATIBLE: bound dx >= hbar/(2 dp) = 5.27e-11 m, the claim 1.90 times the minimum.

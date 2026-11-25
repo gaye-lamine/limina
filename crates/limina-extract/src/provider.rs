@@ -106,6 +106,21 @@ pub trait ExtractionProvider: Send + Sync {
             })
         })
     }
+
+    /// Like [`ExtractionProvider::complete_routed`], with a check of the
+    /// content that needs more than the answer itself (for example the text
+    /// the answer must quote). A chain of models tries the next model when
+    /// `check` gives a reason; when no model passes, the first answer that
+    /// was well formed is returned, so its readings are still reported. The
+    /// default (one model) ignores the check.
+    fn complete_routed_checked<'a>(
+        &'a self,
+        request: ChatRequest,
+        check: &'a (dyn Fn(&ChatReply) -> Option<String> + Sync),
+    ) -> BoxFuture<'a, Result<Routed, ProviderError>> {
+        let _ = check;
+        self.complete_routed(request)
+    }
 }
 
 /// An image sent to a vision-language model: its MIME type and its bytes
