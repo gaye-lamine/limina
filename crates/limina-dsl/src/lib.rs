@@ -28,7 +28,7 @@ pub use compare::{
     COMPARISON_SEED,
 };
 pub use curve::{bound_curve, decisive, CurveError, CurvePoint, MAX_CURVE_POINTS};
-pub use definition::{EpistemicStatus, LimitDefinition, Status};
+pub use definition::{Classification, EpistemicStatus, LimitDefinition, Status};
 pub use error::DslError;
 pub use limit::{CompiledFormula, DeclarativeLimit};
 pub use registry::{default_dir, Registry};

@@ -1,5 +1,7 @@
 //! The JSON format of a declarative limit.
 
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 
 /// Upper or lower bound.
@@ -123,6 +125,26 @@ pub enum EpistemicStatus {
     Contested,
 }
 
+/// What kind of statement a law is. A model or an empirical law is never
+/// presented as fundamental, and a theoretical bound is never presented as
+/// technologically achievable.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Classification {
+    /// A fundamental law of physics.
+    FundamentalLaw,
+    /// A statement proved from other accepted statements.
+    Theorem,
+    /// A relation that describes a class of materials or systems.
+    ConstitutiveRelation,
+    /// A bound that holds in theory under stated assumptions.
+    TheoreticalBound,
+    /// A simplified model, valid only in its stated domain.
+    Model,
+    /// A relation fitted to observations.
+    EmpiricalLaw,
+}
+
 /// A declarative limit.
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -158,9 +180,26 @@ pub struct LimitDefinition {
     pub validated_by: Option<String>,
     /// How firm the limit is.
     pub epistemic_status: EpistemicStatus,
+    /// What kind of statement the law is; absent in older definitions.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub classification: Option<Classification>,
+    /// Where the law applies, in plain text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub validity_domain: Option<String>,
+    /// Limits of application, in plain text.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub limitations: Vec<String>,
+    /// Meaning of each variable name.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub variables: BTreeMap<String, String>,
 }
 
 impl LimitDefinition {
+    /// True when a reference is present and none is a placeholder.
+    pub fn has_real_reference(&self) -> bool {
+        !self.references.is_empty() && self.references.iter().all(|r| !r.starts_with("TODO"))
+    }
+
     /// Validated only when the status says so and a person is named.
     pub fn is_validated(&self) -> bool {
         self.status == Status::Validated

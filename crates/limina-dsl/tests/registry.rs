@@ -25,12 +25,48 @@ fn the_registry_loads_betz_carnot_and_cop_as_drafts() {
     for l in r.limits() {
         assert_eq!(l.definition().status, Status::Draft);
         assert!(!l.is_validated());
-        assert_eq!(
-            l.definition().references,
-            vec!["TODO(reference): to be supplied by the author"]
-        );
+        assert!(l.definition().has_real_reference(), "{}", l.id());
+        assert!(l.definition().classification.is_some(), "{}", l.id());
     }
     assert_eq!(r.as_limits().len(), 3);
+}
+
+#[test]
+fn every_builtin_has_a_classification_and_a_real_reference() {
+    let r = Registry::builtin().expect("builtin loads");
+    for l in r.limits() {
+        let d = l.definition();
+        assert!(d.classification.is_some(), "{} has no classification", d.id);
+        assert!(d.has_real_reference(), "{} has no real reference", d.id);
+        assert!(
+            d.validity_domain.is_some(),
+            "{} has no validity domain",
+            d.id
+        );
+    }
+}
+
+#[test]
+fn a_definition_without_the_new_fields_still_loads() {
+    let old = json!({
+        "id": "old", "title": "Old", "direction": "max",
+        "bounded_dimension": "dimensionless", "formula": "0.5",
+        "references": ["x"], "epistemic_status": "model_bound"
+    });
+    let d: limina_dsl::LimitDefinition = serde_json::from_value(old).expect("old json");
+    assert!(d.classification.is_none() && d.limitations.is_empty() && d.variables.is_empty());
+    let text = serde_json::to_string(&d).expect("serializes");
+    assert!(!text.contains("classification") && !text.contains("variables"));
+}
+
+#[test]
+fn an_unknown_classification_is_refused() {
+    let bad = json!({
+        "id": "bad", "title": "Bad", "direction": "max",
+        "bounded_dimension": "dimensionless", "formula": "0.5",
+        "epistemic_status": "theorem", "classification": "law_of_nature"
+    });
+    assert!(serde_json::from_value::<limina_dsl::LimitDefinition>(bad).is_err());
 }
 
 fn trend(report: &FormulaReport, parameter: &str) -> Monotonicity {

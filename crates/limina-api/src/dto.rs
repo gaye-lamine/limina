@@ -150,6 +150,19 @@ pub struct LimitDto {
     /// otherwise.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub agreement: Option<String>,
+    /// Kind of law (`theorem`, `theoretical_bound`, ...); absent when the
+    /// definition does not say.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub classification: Option<String>,
+    /// References of the law; absent when there are none.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub references: Vec<String>,
+    /// Where the law applies, in plain text.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub validity_domain: Option<String>,
+    /// Limits of application, in plain text.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub limitations: Vec<String>,
 }
 
 /// An assumption and its options.

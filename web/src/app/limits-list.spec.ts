@@ -47,10 +47,25 @@ describe('Library', () => {
     ]);
   });
 
-  it('says the reference is to be added, on every card', async () => {
+  it('says the reference is to be added on a card whose limit has none', async () => {
     const el = await render([...LIMITS, COP_LIMIT]);
     const refs = Array.from(el.querySelectorAll('.library-reference')).map((r) => r.textContent?.trim());
-    expect(refs).toEqual(['Reference: to be added', 'Reference: to be added', 'Reference: to be added']);
+    expect(refs[0]).toContain('Betz, A.');
+    expect(refs.slice(1)).toEqual(['Reference: to be added', 'Reference: to be added']);
+  });
+
+  it('shows the kind of law, its validity domain and its limits when the API gives them', async () => {
+    const el = await render(LIMITS);
+    const betz = el.querySelectorAll('.library-card')[0];
+    expect(betz.querySelector('.library-classification')?.textContent?.trim()).toBe('theoretical bound');
+    expect(betz.querySelector('.library-validity')?.textContent).toContain('Actuator disk');
+    expect(betz.querySelectorAll('.library-limitations li')).toHaveLength(1);
+  });
+
+  it('keeps the old card when the new fields are absent', async () => {
+    const el = await render([...LIMITS, COP_LIMIT]);
+    const cop = el.querySelectorAll('.library-card')[2];
+    expect(cop.querySelector('.library-classification')).toBeNull();
   });
 
   it('shows no raw id in the visible text', async () => {
@@ -76,3 +91,4 @@ describe('Library', () => {
     expect(el.querySelector('.error-block')?.textContent).toContain('NetworkError');
   });
 });
+

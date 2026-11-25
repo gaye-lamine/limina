@@ -273,3 +273,30 @@ async fn every_listed_unit_is_accepted_by_evaluate() {
         }
     }
 }
+
+#[tokio::test]
+async fn built_in_limits_carry_classification_references_and_validity() {
+    let (_, body) = get_limits().await;
+    let expected = [
+        ("betz", "theoretical_bound"),
+        ("carnot", "theorem"),
+        ("cop", "theorem"),
+    ];
+    for (i, (id, classification)) in expected.iter().enumerate() {
+        let limit = &body["limits"][i];
+        assert_eq!(limit["id"], *id);
+        assert_eq!(limit["classification"], *classification);
+        let references = limit["references"].as_array().expect("references");
+        assert!(!references.is_empty());
+        for r in references {
+            assert!(!r.as_str().expect("reference").starts_with("TODO"));
+        }
+        assert!(limit["validity_domain"]
+            .as_str()
+            .is_some_and(|v| !v.is_empty()));
+        assert!(!limit["limitations"]
+            .as_array()
+            .expect("limitations")
+            .is_empty());
+    }
+}

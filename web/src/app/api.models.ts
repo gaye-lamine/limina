@@ -36,6 +36,14 @@ export interface LimitInfo {
   option_labels: Record<string, string>;
   /** Display label of each parameter id. */
   parameter_labels: Record<string, string>;
+  /** Kind of law, for example 	heorem or 	heoretical_bound; absent when unknown. */
+  classification?: string;
+  /** References of the law. */
+  references?: string[];
+  /** Where the law applies, in plain text. */
+  validity_domain?: string;
+  /** Limits of application, in plain text. */
+  limitations?: string[];
 }
 
 export interface LimitsResponse {

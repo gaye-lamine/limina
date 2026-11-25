@@ -15,7 +15,16 @@
     }
   ],
   "validity": [],
-  "references": ["TODO(reference): to be supplied by the author"],
+  "references": [
+    "Betz, A., Das Maximum der theoretisch moeglichen Ausnuetzung des Windes durch Windmotoren, Zeitschrift fuer das gesamte Turbinenwesen 26, 307-309 (1920)"
+  ],
   "status": "draft",
-  "epistemic_status": "model_bound"
+  "epistemic_status": "model_bound",
+  "classification": "theoretical_bound",
+  "validity_domain": "Actuator disk in steady, incompressible, unconfined axial flow; power taken from the wind through the stated reference area.",
+  "limitations": [
+    "Ideal rotor without wake rotation, drag or tip losses",
+    "Does not hold for a shrouded rotor if the power is divided by the rotor area only",
+    "A bound of the model, not a figure that real turbines reach"
+  ]
 }

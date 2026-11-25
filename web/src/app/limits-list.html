@@ -20,6 +20,24 @@
           <p class="library-formula mono">{{ l.formula }}</p>
           <p class="library-statement">{{ l.statement }}</p>
           <dl class="facts">
+            @if (l.classification) {
+              <dt>{{ s.libraryClassification }}</dt>
+              <dd class="library-classification">{{ classificationLabel(l.classification) }}</dd>
+            }
+            @if (l.validity_domain) {
+              <dt>{{ s.libraryValidity }}</dt>
+              <dd class="library-validity">{{ l.validity_domain }}</dd>
+            }
+            @if (l.limitations?.length) {
+              <dt>{{ s.libraryLimitations }}</dt>
+              <dd>
+                <ul class="library-limitations">
+                  @for (t of l.limitations; track t) {
+                    <li>{{ t }}</li>
+                  }
+                </ul>
+              </dd>
+            }
             <dt>{{ s.limitsAssumptions }}</dt>
             <dd>
               @if (l.assumptions.length === 0) {
@@ -52,7 +70,7 @@
               }
             </dd>
           </dl>
-          <p class="library-reference muted">{{ s.whyReference }}</p>
+          @if (l.references?.length) { <ul class="library-reference muted"> @for (r of l.references; track r) { <li>{{ r }}</li> } </ul> } @else { <p class="library-reference muted">{{ s.whyReference }}</p> }
         </li>
       }
     </ul>

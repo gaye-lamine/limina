@@ -12,6 +12,11 @@ export class LimitsList {
   readonly failure = input<ApiFailure | null>(null);
   protected readonly s = STRINGS;
 
+  /** Display label of a law classification. */
+  protected classificationLabel(id: string): string {
+    return this.s.classification[id] ?? id;
+  }
+
   /** Display label of an id from the metadata; the id itself when the API gives none. */
   protected label(labels: Record<string, string>, id: string): string {
     return labels[id] ?? id;

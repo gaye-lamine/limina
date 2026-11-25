@@ -77,6 +77,7 @@ describe('Workbench', () => {
     expect(steps[2]).toContain('engine verdict IMPOSSIBLE');
     expect(el.querySelector('.verdict--impossible')?.textContent).toContain('IMPOSSIBLE');
     expect(el.querySelector('.wb-badge')?.textContent).toContain('built-in law');
+    expect(el.querySelector('.wb-badge')?.textContent).toContain('theorem');
     expect(el.querySelector('.wording')?.textContent).toContain('inconsistent with limit carnot');
     expect(el.querySelector('.wb-explain')?.textContent).toContain('1.20 times what the law allows');
     // Offsets are shifted to the whole text: paragraph 2 starts at character 7.

@@ -17,7 +17,17 @@
     }
   ],
   "validity": ["Tc > 0", "Th > Tc"],
-  "references": ["TODO(reference): to be supplied by the author"],
+  "references": [
+    "Cengel, Y. A. and Boles, M. A., Thermodynamics: An Engineering Approach, 9th ed., McGraw-Hill Education (2019)",
+    "Callen, H. B., Thermodynamics and an Introduction to Thermostatistics, 2nd ed., Wiley (1985)"
+  ],
   "status": "draft",
-  "epistemic_status": "theorem"
+  "epistemic_status": "theorem",
+  "classification": "theorem",
+  "validity_domain": "Heat pump or refrigerator exchanging heat with two reservoirs at constant absolute temperatures Th > Tc > 0.",
+  "limitations": [
+    "Applies to a device exchanging heat with two reservoirs only",
+    "Reached only by a reversible cycle, so a theoretical bound that real devices do not reach"
+  ],
+  "variables": { "Th": "Absolute temperature of the hot reservoir", "Tc": "Absolute temperature of the cold reservoir" }
 }

@@ -8,7 +8,7 @@ import { CarnotApparatus } from './carnot-apparatus';
 import { formatValue } from './chart-geometry';
 import { CopApparatus, TwinVerdicts } from './cop-apparatus';
 import { Explorer } from './explorer';
-import { WB } from './strings';
+import { STRINGS, WB } from './strings';
 import {
   badge,
   explain,
@@ -119,6 +119,12 @@ export class Workbench {
 
   protected badgeOf(c: AnalyzedClaim): string {
     return badge(c);
+  }
+
+  /** The classification of the law of the claim, from GET /v1/limits; empty when unknown. */
+  protected classOf(c: AnalyzedClaim): string {
+    const id = this.limits().find((l) => l.id === c.limit_id)?.classification;
+    return id ? (STRINGS.classification[id] ?? id) : '';
   }
 
   protected number(v: number | null | undefined): string {

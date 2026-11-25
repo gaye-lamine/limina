@@ -83,7 +83,7 @@
         @if (claim(); as c) {
           <div class="wb-head">
             <p class="verdict {{ verdictClass(c) }}">{{ c.result?.verdict?.replace('_', ' ') ?? s.needsInput }}</p>
-            <p class="wb-badge">{{ badgeOf(c) }}</p>
+            <p class="wb-badge">{{ badgeOf(c) }}@if (classOf(c)) {, {{ classOf(c) }}}</p>
             <p class="mono wb-limit">{{ c.limit_id ?? '' }}</p>
           </div>
           @if (c.result) {

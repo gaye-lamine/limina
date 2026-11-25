@@ -1,4 +1,4 @@
-﻿/** Every user-visible string of the app, so that other languages can be added later. */
+/** Every user-visible string of the app, so that other languages can be added later. */
 export const STRINGS = {
   appName: 'Limina',
   skipLink: 'Skip to content',
@@ -66,6 +66,18 @@ export const STRINGS = {
   recoverUnshrouded: 'Evaluate as unshrouded rotor',
   recoverShrouded: 'Evaluate as shrouded, total capture area',
   libraryTitle: 'Library',
+  libraryClassification: 'Kind of law',
+  libraryReferences: 'References',
+  libraryValidity: 'Validity domain',
+  libraryLimitations: 'Limits of application',
+  classification: {
+    fundamental_law: 'fundamental law',
+    theorem: 'theorem',
+    constitutive_relation: 'constitutive relation',
+    theoretical_bound: 'theoretical bound',
+    model: 'model',
+    empirical_law: 'empirical law',
+  } as Record<string, string>,
   caseLabel: 'Open a case',
   casePlaceholder: 'Choose a case',
   benchTitle: 'Bench',

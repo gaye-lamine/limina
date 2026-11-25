@@ -12,7 +12,17 @@
   ],
   "formula": "1 - Tc/Th",
   "validity": ["Tc > 0", "Th > Tc"],
-  "references": ["TODO(reference): to be supplied by the author"],
+  "references": [
+    "Carnot, S., Reflexions sur la puissance motrice du feu, Bachelier, Paris (1824)",
+    "Callen, H. B., Thermodynamics and an Introduction to Thermostatistics, 2nd ed., Wiley (1985)"
+  ],
   "status": "draft",
-  "epistemic_status": "theorem"
+  "epistemic_status": "theorem",
+  "classification": "theorem",
+  "validity_domain": "Heat engine cycle exchanging heat with two reservoirs at constant absolute temperatures Th > Tc > 0.",
+  "limitations": [
+    "Applies to an engine exchanging heat with two reservoirs only",
+    "Reached only by a reversible cycle, so a theoretical bound that real engines do not reach"
+  ],
+  "variables": { "Th": "Absolute temperature of the hot reservoir", "Tc": "Absolute temperature of the cold reservoir" }
 }

@@ -6,7 +6,7 @@ use limina_core::{
 
 use crate::dto::{AssumptionDto, LimitDto, LimitsResponse, ParameterSpecDto};
 use crate::labels::{assumption_label, option_label, parameter_label};
-use limina_dsl::DeclarativeLimit;
+use limina_dsl::{DeclarativeLimit, LimitDefinition, Registry};
 use limina_extract::{Catalog, CatalogAssumption, CatalogLimit, CatalogOption, CatalogParameter};
 
 /// Looks up a served limit by id.
@@ -156,7 +156,23 @@ pub fn describe(limit: &dyn Limit) -> LimitDto {
             .collect(),
         status: None,
         agreement: None,
+        classification: None,
+        references: Vec::new(),
+        validity_domain: None,
+        limitations: Vec::new(),
     }
+}
+
+/// Copies the law metadata of a definition into a description.
+fn apply_definition(dto: &mut LimitDto, def: &LimitDefinition) {
+    dto.classification = def.classification.and_then(|c| {
+        serde_json::to_value(c)
+            .ok()
+            .and_then(|v| v.as_str().map(str::to_string))
+    });
+    dto.references = def.references.clone();
+    dto.validity_domain = def.validity_domain.clone();
+    dto.limitations = def.limitations.clone();
 }
 
 /// Describes a limit authored from a text: same fields as the built-in
@@ -176,6 +192,7 @@ pub fn describe_authored(limit: &DeclarativeLimit) -> LimitDto {
     };
     dto.statement = AUTHORED_STATEMENT.to_string();
     dto.status = Some("draft".to_string());
+    apply_definition(&mut dto, def);
     dto
 }
 
@@ -225,7 +242,21 @@ pub fn catalog() -> Catalog {
 
 /// Content of `GET /v1/limits`.
 pub fn list() -> LimitsResponse {
+    let definitions = Registry::builtin().ok();
     LimitsResponse {
-        limits: all_limits().iter().map(|l| describe(l.as_ref())).collect(),
+        limits: all_limits()
+            .iter()
+            .map(|l| {
+                let mut dto = describe(l.as_ref());
+                let def = definitions
+                    .as_ref()
+                    .and_then(|r| r.get(&dto.id))
+                    .map(|d| d.definition());
+                if let Some(def) = def {
+                    apply_definition(&mut dto, def);
+                }
+                dto
+            })
+            .collect(),
     }
 }

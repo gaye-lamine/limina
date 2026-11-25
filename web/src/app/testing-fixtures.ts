@@ -22,6 +22,10 @@ export const LIMITS: LimitInfo[] = [
       shrouded_rotor_area_only: 'shrouded, rotor area only',
     },
     parameter_labels: {},
+    classification: 'theoretical_bound',
+    references: ['Betz, A., Zeitschrift fuer das gesamte Turbinenwesen 26, 307-309 (1920)'],
+    validity_domain: 'Actuator disk in steady, incompressible, unconfined axial flow.',
+    limitations: ['A bound of the model, not a figure that real turbines reach'],
   },
   {
     id: 'carnot',
@@ -38,6 +42,7 @@ export const LIMITS: LimitInfo[] = [
     assumption_labels: { cycle_model: 'cycle model' },
     option_labels: { ideal_reversible_two_reservoirs: 'ideal reversible cycle between two reservoirs' },
     parameter_labels: TEMPERATURE_LABELS,
+    classification: 'theorem',
   },
 ];
 
