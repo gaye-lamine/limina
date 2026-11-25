@@ -176,6 +176,20 @@ npm start
 
 Open http://localhost:4200 and pick a case in "Open a case". Carnot and COP open on a bench with an apparatus (thermometers for Th and Tc, the claim, and for COP the mode); the instrument panel on the right shows the engine verdict, the wording and the gauge. The Library below lists every limit. The dev server forwards `/v1` and `/healthz` to `http://127.0.0.1:3000`, so the API must be running. Web checks: `npm run lint` and `npm test` (headless, no browser needed).
 
+## Physics coverage
+
+The verdict always comes from the deterministic engine. Each built-in law has a classification (fundamental law, theorem, theoretical bound, model, empirical law) and at least one reference; a model or an empirical law is never presented as fundamental, and a theoretical bound is not a claim that the figure is technologically reachable. "Bound" laws give IMPOSSIBLE only above (or below) the bound in every configuration the text allows; "equality" laws compare the claim with the predicted value and a stated tolerance band, and answer OUTSIDE MODEL DOMAIN when a validity condition fails. All 30 laws are drafts (`status: draft`, not validated by an external reviewer). Details, assumptions and references: `GET /v1/limits`, data/limits/<id>.json and .kiro/specs/law-<id>/.
+
+| Discipline | Law (kind, classification) |
+| --- | --- |
+| Mechanics and relativity | speed_limit (bound, theoretical bound); tsiolkovsky (bound, theoretical bound); energy_momentum, relativistic_kinetic_energy, time_dilation, length_contraction (equality, theorem); newton_gravity, kepler_third, escape_velocity (equality, model); betz (bound, theoretical bound) |
+| Thermodynamics and information | carnot, cop, stefan_boltzmann, shannon_hartley (bound, theorem); landauer (bound, theoretical bound) |
+| Electromagnetism and optics | coulomb, faraday_emf, photon_energy, photon_energy_wavelength (equality, fundamental law); lorentz_force (magnitude bound, theorem); abbe_limit, luminous_efficacy (bound, theoretical bound) |
+| Quantum, atomic and nuclear | heisenberg (bound, theorem); de_broglie, nuclear_q (equality, fundamental law); hydrogen_levels (equality, model); radioactive_decay (equality, empirical law) |
+| Astrophysics and cosmology | eddington_luminosity (bound, theoretical bound, needs the accretion geometry); schwarzschild_radius, friedmann_flat (equality, model) |
+
+Not covered: the Bekenstein and Margolus-Levitin bounds and the maximum luminous efficacy of white light (no verified reference yet), vector forms of the laws (only magnitudes), and field plots. Claims with no fundamental bound, such as battery energy density, get NO LAW IDENTIFIED and no verdict. Prior art: ONTO Limits. The full report is at the top of docs/evolution-log.md.
+
 ## License
 
 MIT, see [LICENSE](LICENSE).

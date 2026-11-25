@@ -1,5 +1,103 @@
 # Evolution log
 
+## Final report (physics evolution, items P2 to P7)
+
+### Items
+
+| Item | Status | Commit |
+| --- | --- | --- |
+| P2-classification | done | law model: classification, validity and references |
+| P2-equality | done | law model: equality laws and outside-model-domain status |
+| P3-mechanics-relativity | done | library: mechanics and relativity (b3c5a0c) |
+| P3-thermo-stat-info | done | library: thermodynamics, statistical physics and information (4d96f31) |
+| P3-em-optics | done | library: electromagnetism and optics |
+| P3-quantum-nuclear | done | library: quantum, atomic and nuclear physics (ffe1cf7, plus 329db02 for the plots) |
+| P3-astro-cosmo | done | library: astrophysics and cosmology (9589540) |
+| P4-identification | done | pipeline: identify laws from the library first (c4fabfd) |
+| P5-graphs | done, with stated limitations (no field plots; map and curve views not measured at 1920x1080) | graphs: surfaces, uncertainty bands, validity zones and comparison scales (c5cc749) |
+| P6-vectors | done in its scoped form (magnitude-only Lorentz bound); true vectors left as an open decision | dsl: vector quantities (scoped) (1b9a1a5) |
+| P7-model-fallback | done | extract: model fallback chain (a9e85a9) |
+
+No item is blocked.
+
+### Built-in laws (30), by discipline
+
+Every law below is a JSON definition in data/limits/, embedded by `Registry::builtin`, served by `GET /v1/limits`, with a spec in .kiro/specs/law-<id>/ (or the core limit specs for betz, carnot and cop). "max" and "min" are bounds; "equal" is an equality law compared with a tolerance band. The first reference is listed; the definitions hold all of them.
+
+Classical mechanics and relativity
+- speed_limit (max, theoretical_bound): Einstein, Ann. Phys. 322(10), 891-921 (1905), doi:10.1002/andp.19053221004
+- tsiolkovsky (max, theoretical_bound): Sutton and Biblarz, Rocket Propulsion Elements, 9th ed., Wiley (2016)
+- energy_momentum (equal, theorem): Rindler, Relativity, 2nd ed., OUP (2006)
+- relativistic_kinetic_energy (equal, theorem): Rindler (2006)
+- time_dilation (equal, theorem): Einstein (1905)
+- length_contraction (equal, theorem): Einstein (1905)
+- newton_gravity (equal, model): Goldstein, Poole and Safko, Classical Mechanics, 3rd ed., Addison-Wesley (2002)
+- kepler_third (equal, model): Goldstein, Poole and Safko (2002)
+- escape_velocity (equal, model): Kleppner and Kolenkow, An Introduction to Mechanics, 2nd ed., CUP (2014)
+- betz (max, theoretical_bound): Betz, Z. ges. Turbinenwesen 26, 307-309 (1920)
+
+Thermodynamics, statistical physics, information
+- carnot (max, theorem): Carnot, Reflexions sur la puissance motrice du feu (1824)
+- cop (max, theorem): Cengel and Boles, Thermodynamics, 9th ed., McGraw-Hill (2019)
+- landauer (min, theoretical_bound): Landauer, IBM J. Res. Dev. 5(3), 183-191 (1961), doi:10.1147/rd.53.0183
+- stefan_boltzmann (max, theorem): Kittel and Kroemer, Thermal Physics, 2nd ed., Freeman (1980)
+- shannon_hartley (max, theorem): Shannon, Bell Syst. Tech. J. 27(3), 379-423 (1948), doi:10.1002/j.1538-7305.1948.tb01338.x
+
+Electromagnetism and optics
+- coulomb (equal, fundamental_law): Jackson, Classical Electrodynamics, 3rd ed., Wiley (1999)
+- faraday_emf (equal, fundamental_law): Griffiths, Introduction to Electrodynamics, 4th ed., CUP (2017)
+- lorentz_force (max, theorem): Jackson (1999)
+- photon_energy (equal, fundamental_law): Griffiths and Schroeter, Introduction to Quantum Mechanics, 3rd ed., CUP (2018)
+- photon_energy_wavelength (equal, fundamental_law): Griffiths and Schroeter (2018)
+- abbe_limit (min, theoretical_bound): Abbe, Arch. mikrosk. Anat. 9(1), 413-468 (1873), doi:10.1007/BF02956173
+- luminous_efficacy (max, theoretical_bound): BIPM, SI Brochure, 9th ed. (2019), definition of the candela
+
+Quantum, atomic and nuclear physics
+- heisenberg (min, theorem): Heisenberg, Z. Phys. 43(3-4), 172-198 (1927), doi:10.1007/BF01397280
+- de_broglie (equal, fundamental_law): de Broglie, Ann. Phys. 10(3), 22-128 (1925), doi:10.1051/anphys/192510030022
+- hydrogen_levels (equal, model): Bohr, Phil. Mag. 26(151), 1-25 (1913), doi:10.1080/14786441308634955
+- radioactive_decay (equal, empirical_law): Rutherford and Soddy, Phil. Mag. 4(21), 370-396 (1902), doi:10.1080/14786440209462856
+- nuclear_q (equal, fundamental_law): Einstein, Ann. Phys. 323(13), 639-641 (1905), doi:10.1002/andp.19053231314
+
+Astrophysics and cosmology
+- eddington_luminosity (max, theoretical_bound): Rybicki and Lightman, Radiative Processes in Astrophysics, Wiley (1979)
+- schwarzschild_radius (equal, model): Schwarzschild 1916, English translation arXiv:physics/9905030
+- friedmann_flat (equal, model): Friedmann, Z. Phys. 10, 377-386 (1922), doi:10.1007/BF01332580
+
+The DOIs were checked on api.crossref.org or api.datacite.org where the item entries say so. Textbooks are cited from knowledge with author, title, edition and publisher; they were not opened and no section numbers are given.
+
+### Deferred laws
+
+- Bekenstein bound and Margolus-Levitin bound (optional in P3-thermo-stat-info): reference not verified.
+- Maximum luminous efficacy of white light (P3-em-optics): reference not verified; only the monochromatic definition bound Kcd = 683 lm/W is included.
+- Field plots (Coulomb field lines, gravity potential) in P5-graphs: not drawn, because no engine endpoint computes a field from a law.
+
+### Tests
+
+- Rust: 590 tests pass on the P7 commit (cargo test --workspace), with cargo fmt --check and cargo clippy --workspace --all-targets -D warnings clean. The P2-equality entry reported 501; the library batches, the pipeline, the graphs and the model chain added the rest.
+- Web: 237 tests pass on the last run that touched the web app (P4); P5 added 13 geometry tests (see the P5 entry). P6 and P7 did not touch the web app.
+- Every new bound law has a property test "never IMPOSSIBLE at or below the bound" and every equality law "never IMPOSSIBLE at its own prediction" (fixed seed, 256 cases, 1024 with CI set).
+
+### Live smoke
+
+The latest raw trace on the six-paragraph illustrative text is in the P7-model-fallback entry below, with the model that answered each step. Failed paragraphs (HTTP 502, no claim): 3 of 6 on the last P4 run, 0 of 6 after the model chain. Model misreadings that remain are listed there as recorded.
+
+### CI
+
+GitHub Actions concluded success for every pushed item commit; the last one before this report is a9e85a9 (extract: model fallback chain, run 45660768190). The CI result of the commit carrying this report is checked after the push and reported in the step output, since a commit cannot record its own CI run.
+
+### Decisions recorded
+
+D-25 (SI units and constants), D-26 (built-in references), D-27 (library laws in the served list), in .kiro/specs/decision-engine/requirements.md.
+
+### Open decisions for the author
+
+- Vector quantities (P6): add a real vector type to the DSL (components, cross product), which would allow the equality F = q (E + v x B) instead of the magnitude bound. Today the directions are not modelled.
+- Field plots (P5): add an engine endpoint that computes a field from a law, if field views are wanted.
+- Identification quality (P4, P7): the models still misread some claims on the illustrative text (a wavelength compared with the Abbe limit as if it were a resolved size, a Q-Scope claim read without evidence). No false IMPOSSIBLE came out of it, but a stricter mapping between the claimed quantity and the law's bounded quantity would need a product choice.
+
+---
+
 Items are appended below in order.
 
 ## P2-classification
