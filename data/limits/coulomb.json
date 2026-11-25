@@ -1,0 +1,31 @@
+{
+  "id": "coulomb",
+  "title": "Coulomb force",
+  "direction": "equal",
+  "bounded_dimension": "N",
+  "parameters": [
+    { "name": "q1", "dimension": "C", "units": ["C", "mC", "uC", "nC"], "test_range": [1e-9, 1e-3] },
+    { "name": "q2", "dimension": "C", "units": ["C", "mC", "uC", "nC"], "test_range": [1e-9, 1e-3] },
+    { "name": "r", "dimension": "m", "units": ["m", "cm", "mm"], "test_range": [1e-3, 10] }
+  ],
+  "formula": "abs(q1*q2)/(4*pi*eps0*r^2)",
+  "tolerance": 0.005,
+  "validity": ["r > 0"],
+  "references": [
+    "Jackson, J. D., Classical Electrodynamics, 3rd ed., Wiley (1999)",
+    "Griffiths, D. J., Introduction to Electrodynamics, 4th ed., Cambridge University Press (2017)",
+    "CODATA 2022 recommended value of the vacuum electric permittivity, https://physics.nist.gov/cgi-bin/cuu/Value?ep0"
+  ],
+  "status": "draft",
+  "epistemic_status": "model_bound",
+  "classification": "fundamental_law",
+  "validity_domain": "Magnitude of the electrostatic force between two point charges at rest in vacuum, separated by r.",
+  "limitations": [
+    "Point charges at rest in vacuum; moving charges need the full Maxwell equations",
+    "In a dielectric medium the force is divided by the relative permittivity, which is not included",
+    "Charges are given as magnitudes: the sign (attraction or repulsion) is not decided",
+    "Extended charge distributions are approximated by their centres, which is only valid when r is much larger than their size",
+    "The uncertainty of eps0 (CODATA 2022) is propagated by the engine, apart from the tolerance"
+  ],
+  "variables": { "q1": "Magnitude of the first charge", "q2": "Magnitude of the second charge", "r": "Distance between the charges" }
+}

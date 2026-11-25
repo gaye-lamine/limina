@@ -1,0 +1,30 @@
+{
+  "id": "faraday_emf",
+  "title": "Faraday induced EMF",
+  "direction": "equal",
+  "bounded_dimension": "V",
+  "parameters": [
+    { "name": "n_turns", "dimension": "dimensionless", "units": ["dimensionless"], "test_range": [1, 1000] },
+    { "name": "area", "dimension": "m^2", "units": ["m^2", "cm^2"], "test_range": [1e-4, 1] },
+    { "name": "dB", "dimension": "T", "units": ["T", "mT"], "test_range": [1e-3, 1] },
+    { "name": "dt", "dimension": "s", "units": ["s", "ms"], "test_range": [1e-3, 10] }
+  ],
+  "formula": "n_turns*area*abs(dB)/dt",
+  "tolerance": 0.005,
+  "validity": ["dt > 0"],
+  "references": [
+    "Griffiths, D. J., Introduction to Electrodynamics, 4th ed., Cambridge University Press (2017)",
+    "Jackson, J. D., Classical Electrodynamics, 3rd ed., Wiley (1999)"
+  ],
+  "status": "draft",
+  "epistemic_status": "model_bound",
+  "classification": "fundamental_law",
+  "validity_domain": "Magnitude of the EMF induced in a coil of n_turns turns of area `area`, fixed and perpendicular to a uniform field whose magnitude changes by dB at a constant rate over a time dt.",
+  "limitations": [
+    "Fixed loop, uniform field perpendicular to the loop, constant rate of change: an average EMF over dt otherwise",
+    "Magnitude only: the sign (Lenz's law) is not decided",
+    "A moving or rotating loop, or a field not perpendicular to the loop, needs the flux derivative in general",
+    "The 0.5 % tolerance covers the rounding of a stated figure, it is not a physical uncertainty"
+  ],
+  "variables": { "n_turns": "Number of turns of the coil", "area": "Area of one turn", "dB": "Change of the field magnitude", "dt": "Duration of the change" }
+}

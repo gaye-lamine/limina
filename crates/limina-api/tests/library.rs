@@ -122,3 +122,65 @@ async fn a_probe_at_1_2_c_is_impossible_against_the_built_in_law() {
     assert_eq!(claim["law"]["source"], "built_in", "{claim}");
     assert_eq!(claim["result"]["verdict"], "IMPOSSIBLE", "{claim}");
 }
+
+#[tokio::test]
+async fn coulomb_force_against_distance_is_computed_by_the_engine() {
+    let (status, c) = call(
+        plain_state(),
+        "POST",
+        "/v1/curve",
+        Some(json!({
+            "limit_id": "coulomb",
+            "free_parameter": "r",
+            "parameters": {"q1": {"value": 1.0e-6, "unit": "C"}, "q2": {"value": 2.0e-6, "unit": "C"}},
+            "range": [0.05, 0.5],
+            "points": 10
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{c}");
+    let points = c["points"].as_array().expect("points");
+    assert_eq!(points.len(), 10);
+    let eps0 = 8.854_187_818_8e-12;
+    for p in points {
+        let r = p["x"].as_f64().expect("x");
+        let expected = 1.0e-6 * 2.0e-6 / (4.0 * std::f64::consts::PI * eps0 * r * r);
+        let hi = p["b_max"].as_f64().expect("b_max");
+        // The served curve is the upper edge of the band: prediction times (1 + tolerance).
+        assert!(
+            hi >= expected && hi <= expected * 1.006,
+            "r = {r}: {hi} vs {expected}"
+        );
+    }
+    let first = points[0]["b_max"].as_f64().expect("first");
+    let last = points[9]["b_max"].as_f64().expect("last");
+    assert!(first > last * 99.0, "inverse square: {first} vs {last}");
+}
+
+#[tokio::test]
+async fn abbe_limit_against_wavelength_is_computed_by_the_engine() {
+    let (status, c) = call(
+        plain_state(),
+        "POST",
+        "/v1/curve",
+        Some(json!({
+            "limit_id": "abbe_limit",
+            "free_parameter": "wavelength",
+            "parameters": {"aperture": {"value": 1.4, "unit": "dimensionless"}},
+            "range": [4.0e-7, 7.0e-7],
+            "points": 7
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{c}");
+    assert_eq!(c["direction"], "Min");
+    for p in c["points"].as_array().expect("points") {
+        let wavelength = p["x"].as_f64().expect("x");
+        let expected = wavelength / (2.0 * 1.4);
+        let lo = p["b_min"].as_f64().expect("b_min");
+        assert!(
+            (lo - expected).abs() / expected < 1e-9,
+            "{lo} vs {expected}"
+        );
+    }
+}

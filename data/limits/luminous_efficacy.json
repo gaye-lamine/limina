@@ -1,0 +1,24 @@
+{
+  "id": "luminous_efficacy",
+  "title": "Luminous efficacy of radiation",
+  "direction": "max",
+  "bounded_dimension": "lm/W",
+  "parameters": [],
+  "formula": "Kcd",
+  "validity": [],
+  "references": [
+    "BIPM, The International System of Units (SI), 9th edition (2019), definition of the candela, Kcd = 683 lm/W at 540e12 Hz",
+    "CODATA 2022 value of the luminous efficacy Kcd (exact in the 2019 SI), https://physics.nist.gov/cgi-bin/cuu/Value?kcd"
+  ],
+  "status": "draft",
+  "epistemic_status": "theorem",
+  "classification": "theoretical_bound",
+  "validity_domain": "Luminous efficacy of radiation (lumens per watt of optical power) of any light, for a standard photopic observer.",
+  "limitations": [
+    "Efficacy of the radiation itself, not of a lamp: the electrical efficacy of a source is lower because of conversion losses",
+    "The bound Kcd is reached only by monochromatic light at 540 THz; white light has a lower maximum, which is not checked here because no verified reference is included",
+    "Standard photopic observer (CIE): scotopic and mesopic vision have other efficacies",
+    "The bound is the definitional value 683 lm/W; the photopic maximum differs from it by a few parts per million, so a decision within that margin is not meaningful"
+  ],
+  "variables": {}
+}

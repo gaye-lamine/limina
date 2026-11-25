@@ -1,0 +1,26 @@
+{
+  "id": "photon_energy_wavelength",
+  "title": "Photon energy from wavelength",
+  "direction": "equal",
+  "bounded_dimension": "J",
+  "parameters": [
+    { "name": "wavelength", "dimension": "m", "units": ["m", "mm", "um", "nm", "pm"], "test_range": [1e-9, 1e-3] }
+  ],
+  "formula": "h*c/wavelength",
+  "tolerance": 0.005,
+  "validity": ["wavelength > 0"],
+  "references": [
+    "Griffiths, D. J. and Schroeter, D. F., Introduction to Quantum Mechanics, 3rd ed., Cambridge University Press (2018)",
+    "CODATA 2022 values of the Planck constant and the speed of light in vacuum (both exact in the 2019 SI), https://physics.nist.gov/cgi-bin/cuu/Value?h"
+  ],
+  "status": "draft",
+  "epistemic_status": "model_bound",
+  "classification": "fundamental_law",
+  "validity_domain": "Energy E = h c / lambda of one photon of vacuum wavelength lambda.",
+  "limitations": [
+    "Vacuum wavelength: in a medium the wavelength is shorter but the photon energy is unchanged",
+    "Energy of a single photon, not of a beam",
+    "The 0.5 % tolerance covers the rounding of a stated figure, it is not a physical uncertainty"
+  ],
+  "variables": { "wavelength": "Vacuum wavelength of the photon" }
+}

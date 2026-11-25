@@ -24,14 +24,16 @@ fn the_registry_loads_betz_carnot_and_cop_as_drafts() {
     assert_eq!(
         ids,
         [
+            "abbe_limit",
             "betz",
             "carnot",
             "cop",
             "landauer",
+            "luminous_efficacy",
             "shannon_hartley",
             "speed_limit",
             "stefan_boltzmann",
-            "tsiolkovsky"
+            "tsiolkovsky",
         ]
     );
     for l in r.limits() {
@@ -40,7 +42,7 @@ fn the_registry_loads_betz_carnot_and_cop_as_drafts() {
         assert!(l.definition().has_real_reference(), "{}", l.id());
         assert!(l.definition().classification.is_some(), "{}", l.id());
     }
-    assert_eq!(r.as_limits().len(), 8);
+    assert_eq!(r.as_limits().len(), 10);
 }
 
 #[test]

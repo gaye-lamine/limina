@@ -20,3 +20,23 @@ Items are appended below in order.
 - Not done here (belongs to P3, when the first built-in equality law exists): serving equality laws in GET /v1/limits and in the extraction catalog. No built-in equality law is added in this item; tests use inline definitions (photon energy h f, relativistic kinetic energy with v < c) with expected values written out from the textbook formulas.
 - Tests: fmt, clippy -D warnings, cargo test --workspace pass (501 Rust tests; new: 10 in dsl equality incl. 2 proptests with fixed seed 42, 5 in api tests/equality.rs). Web: lint, build pass, 237 tests pass (new: 1).
 - Deferred laws: none.
+## P3-mechanics-relativity
+- Entry written after the fact (the item's commit b3c5a0c did not update this log); content taken from that commit.
+- Nine built-in laws: speed_limit, tsiolkovsky, energy_momentum, relativistic_kinetic_energy, time_dilation, length_contraction, newton_gravity, kepler_third, escape_velocity. Decision D-27 recorded in .kiro/specs/decision-engine/requirements.md.
+- Tests: cargo test --workspace 514 pass; web 237 pass.
+## P3-thermo-stat-info
+- Entry written after the fact (commit 4d96f31 did not update this log); content taken from that commit.
+- Built-in laws: landauer (theoretical_bound, Landauer 1961, doi:10.1147/rd.53.0183), stefan_boltzmann (theorem), shannon_hartley (theorem, Shannon 1948, doi:10.1002/j.1538-7305.1948.tb01338.x).
+- Tests: cargo test --workspace 524 pass; web 237 pass.
+- Deferred laws: Bekenstein bound and Margolus-Levitin bound (optional in the item; not added, reference not verified).
+## P3-em-optics
+- Built-in laws (data/limits, embedded by Registry::builtin, specs in .kiro/specs/law-<id>/):
+  - coulomb: equality, fundamental_law, |q1 q2| / (4 pi eps0 r^2), tolerance 0.5 %, eps0 uncertainty (CODATA 2022) propagated. Refs: Jackson 3rd ed. (Wiley 1999), Griffiths 4th ed. (CUP 2017), NIST CODATA eps0.
+  - photon_energy (h f) and photon_energy_wavelength (h c / lambda): equality, fundamental_law. Refs: Griffiths and Schroeter 3rd ed. (CUP 2018), NIST CODATA h.
+  - abbe_limit: min bound, theoretical_bound, lambda / (2 NA) for far-field linear imaging; the limitations name STED, PALM/STORM, SIM and near-field microscopy as outside the assumptions. Refs: Abbe 1873, Archiv fuer mikroskopische Anatomie 9(1), 413-468, doi:10.1007/BF02956173 (title, volume and pages checked on api.crossref.org), and Born and Wolf 7th ed. (CUP 1999).
+  - luminous_efficacy: max bound, theoretical_bound, Kcd = 683 lm/W (SI definition of the candela, monochromatic 540 THz). Refs: SI Brochure 9th ed. (2019), NIST CODATA Kcd.
+  - faraday_emf: equality, fundamental_law, N A |dB| / dt for a fixed loop perpendicular to a uniform field changing at a constant rate. Refs: Griffiths 4th ed., Jackson 3rd ed.
+- Deviations: the numerical aperture parameter is named `aperture` because `NA` is reserved (Avogadro constant). abbe_limit has no validity condition `aperture > 0`: a max/min law accepts only temperature-order conditions in the core (UnsupportedCondition), so the condition is stated in the limitations instead. The textbooks are cited from knowledge, not opened; no section numbers given.
+- Explorer plots: the explorer is generic over POST /v1/curve, so the new laws are plotted without web changes. API tests check that the Coulomb curve against r and the Abbe curve against wavelength are the engine values of the textbook formulas.
+- Deferred laws: maximum luminous efficacy of white light (no verified reference; only the monochromatic definition bound Kcd is included, as the item allows).
+- Tests: cargo fmt --check, clippy -D warnings, cargo test --workspace pass (538 Rust tests; new: 11 in crates/limina-dsl/tests/em_optics.rs incl. 3 proptests with fixed seed 42, 2 in crates/limina-api/tests/library.rs). Web: lint, build pass, 237 tests pass (one transient "No test suite found in workbench-logic.spec.ts" on the first run, not reproduced on the rerun).

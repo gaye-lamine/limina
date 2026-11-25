@@ -1,0 +1,26 @@
+{
+  "id": "photon_energy",
+  "title": "Photon energy from frequency",
+  "direction": "equal",
+  "bounded_dimension": "J",
+  "parameters": [
+    { "name": "f", "dimension": "Hz", "units": ["Hz", "kHz", "MHz", "GHz", "THz", "PHz"], "test_range": [1e9, 1e18] }
+  ],
+  "formula": "h*f",
+  "tolerance": 0.005,
+  "validity": ["f > 0"],
+  "references": [
+    "Griffiths, D. J. and Schroeter, D. F., Introduction to Quantum Mechanics, 3rd ed., Cambridge University Press (2018)",
+    "CODATA 2022 value of the Planck constant (exact in the 2019 SI), https://physics.nist.gov/cgi-bin/cuu/Value?h"
+  ],
+  "status": "draft",
+  "epistemic_status": "model_bound",
+  "classification": "fundamental_law",
+  "validity_domain": "Energy E = h f of one photon of frequency f in vacuum (Planck-Einstein relation).",
+  "limitations": [
+    "Energy of a single photon, not of a beam: a beam carries N times this energy",
+    "The frequency is the one of the photon in the frame of the observer",
+    "The 0.5 % tolerance covers the rounding of a stated figure, it is not a physical uncertainty"
+  ],
+  "variables": { "f": "Frequency of the photon" }
+}

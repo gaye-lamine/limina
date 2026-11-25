@@ -105,6 +105,30 @@ impl Registry {
                 include_str!("../../../data/limits/time_dilation.json"),
             ),
             (
+                "abbe_limit.json",
+                include_str!("../../../data/limits/abbe_limit.json"),
+            ),
+            (
+                "coulomb.json",
+                include_str!("../../../data/limits/coulomb.json"),
+            ),
+            (
+                "faraday_emf.json",
+                include_str!("../../../data/limits/faraday_emf.json"),
+            ),
+            (
+                "luminous_efficacy.json",
+                include_str!("../../../data/limits/luminous_efficacy.json"),
+            ),
+            (
+                "photon_energy.json",
+                include_str!("../../../data/limits/photon_energy.json"),
+            ),
+            (
+                "photon_energy_wavelength.json",
+                include_str!("../../../data/limits/photon_energy_wavelength.json"),
+            ),
+            (
                 "tsiolkovsky.json",
                 include_str!("../../../data/limits/tsiolkovsky.json"),
             ),
