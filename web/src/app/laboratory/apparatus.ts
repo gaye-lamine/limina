@@ -95,6 +95,61 @@ export function apertureParameter(limit: LawMeta): string | null {
   return limit.parameters.find((p) => /aperture|diameter/i.test(`${p.id} ${limit.parameter_labels?.[p.id] ?? ''}`))?.id ?? null;
 }
 
+/** Units of a time, as `GET /v1/limits` declares them. */
+const TIME_UNITS = ['s', 'ms', 'us', 'µs', 'ns', 'min', 'h', 'd', 'yr'];
+
+/** Whether the law describes a population decaying over time: a time parameter, or a decay, half-life or initial-count label. */
+export function isDecay(limit: LawMeta): boolean {
+  return limit.parameters.some(
+    (p) => p.units.some((u) => TIME_UNITS.includes(u)) || /decay|half-life|initial/i.test(`${p.id} ${limit.parameter_labels?.[p.id] ?? ''}`),
+  );
+}
+
+/** The parameter of the initial count of a decaying population, if any. */
+export function initialParameter(limit: LawMeta): string | null {
+  return limit.parameters.find((p) => p.units.includes('dimensionless') && /initial/i.test(`${p.id} ${limit.parameter_labels?.[p.id] ?? ''}`))?.id ?? null;
+}
+
+/**
+ * Fractions of the decaying population to draw, from 0 to 1: the claimed
+ * remaining over the initial count, and the one the law expects (the
+ * engine's value over the same count). Without an initial count the two
+ * values are read as fractions.
+ */
+export function decayFractions(claim: number, bound: number | null, initial: number | null): { shown: number; expected: number | null } {
+  const clamp = (v: number) => Math.min(1, Math.max(0, v));
+  const of = (v: number) => (initial !== null && initial > 0 ? v / initial : v);
+  return {
+    shown: Number.isFinite(claim) ? clamp(of(claim)) : 0,
+    expected: bound !== null && Number.isFinite(bound) ? clamp(of(bound)) : null,
+  };
+}
+
+/** Which of `count` nuclei are still undecayed for a fraction: a fixed scattered order, so the cloud changes smoothly. */
+export function undecayed(count: number, fraction: number): boolean[] {
+  const keep = Math.round(count * Math.min(1, Math.max(0, fraction)));
+  const order = Array.from({ length: count }, (_, i) => i).sort((a, b) => scatter(a) - scatter(b));
+  const lit = new Array<boolean>(count).fill(false);
+  for (const i of order.slice(0, keep)) lit[i] = true;
+  return lit;
+}
+
+function scatter(i: number): number {
+  const x = Math.sin(i * 12.9898 + 78.233) * 43758.5453;
+  return x - Math.floor(x);
+}
+
+/** Whether the claimed quantity is a length (a radius, a distance, an orbit). */
+export function isLength(unit: string): boolean {
+  return ['m', 'km', 'cm', 'mm', 'au', 'ly', 'pc'].includes(unit);
+}
+
+/** Drawn radii of the measured orbit and of the reference sphere: the claimed over the limit, kept visible. */
+export function orbitRadii(claim: number, bound: number | null, reference = 2.5): { measured: number; reference: number } {
+  const r = bound !== null && bound > 0 && Number.isFinite(claim) && claim > 0 ? claim / bound : 1;
+  return { measured: reference * Math.min(3, Math.max(0.3, r)), reference };
+}
+
 /** Speed of light, m/s (exact, SI). */
 export const C = 299_792_458;
 

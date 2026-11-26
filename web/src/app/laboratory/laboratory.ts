@@ -48,7 +48,7 @@ import { skinFor } from './skin';
 import { readTheme } from './theme';
 import { canSolve, topologyFor } from './topology';
 import { Drawn, LawView, ViewData } from './views';
-import { apertureParameter, apparatusFor, discreteParameter, massParameter, spectralParameter, toNanometres } from './apparatus';
+import { apertureParameter, apparatusFor, discreteParameter, initialParameter, isDecay, massParameter, spectralParameter, toNanometres } from './apparatus';
 import { ApparatusData, ApparatusView, BenchState } from './apparatus-view';
 
 /** What one live update brings back. */
@@ -444,6 +444,8 @@ export class Laboratory implements AfterViewInit, OnDestroy {
       strength: place(byId(massParameter(limit))),
       level: byId(discreteParameter(limit))?.value ?? null,
       nanometres: sp && spectral ? toNanometres(sp.value, spectral.as) : null,
+      decay: isDecay(limit),
+      initial: byId(initialParameter(limit))?.value ?? null,
       pinned: pin && pin.limitId === limit.id ? { ratio: pin.result?.ratio ?? null, impossible: pin.result?.kind === 'impossible' } : null,
     };
   }

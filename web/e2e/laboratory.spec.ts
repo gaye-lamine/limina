@@ -217,7 +217,9 @@ test('each kind of law gets its bench, in both views', async ({ page }) => {
   const verdict = page.locator('.lab-verdict');
   const stage = page.locator('.lab-stage');
   const cases = [
-    { id: 'escape_speed_min', bench: 'trajectory', states: /^(escapes|falls)$/ },
+    { id: 'escape_speed_min', bench: 'trajectory', states: /^(escapes|captured)$/ },
+    { id: 'schwarzschild_radius', bench: 'trajectory', states: /^radius$/ },
+    { id: 'radioactive_decay', bench: 'quantum', states: /^population$/ },
     { id: 'rayleigh_criterion', bench: 'wave', states: /^(resolved|merged)$/ },
     { id: 'hydrogen_levels', bench: 'quantum', states: /^shells$/ },
     { id: 'heisenberg', bench: 'quantum', states: /^packet$/ },

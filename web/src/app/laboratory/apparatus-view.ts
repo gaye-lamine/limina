@@ -12,6 +12,7 @@ import {
   Color,
   CylinderGeometry,
   DoubleSide,
+  EdgesGeometry,
   Float32BufferAttribute,
   Group,
   Line,
@@ -37,12 +38,16 @@ import {
   boxHalfWidth,
   contraction,
   converterSpeed,
+  decayFractions,
   flowShares,
+  isLength,
   levelOf,
+  orbitRadii,
   peakSeparation,
   shellRadii,
   spectrumRgb,
   trajectory,
+  undecayed,
   wellDepth,
 } from './apparatus';
 import { LabResult } from './lab-model';
@@ -65,12 +70,15 @@ export interface ApparatusData {
   level: number | null;
   /** Wavelength in nm of the beam; null when the law gives none. */
   nanometres: number | null;
+  /** Whether the law describes a population decaying over time, and its initial count when stated. */
+  decay: boolean;
+  initial: number | null;
   /** The pinned probe: its claimed over limit and whether the engine found it past the limit; null when none. */
   pinned: { ratio: number | null; impossible: boolean } | null;
 }
 
 /** What a bench shows, for the page and its tests. */
-export type BenchState = 'flowing' | 'collapsed' | 'escapes' | 'falls' | 'resolved' | 'merged' | 'shells' | 'packet';
+export type BenchState = 'flowing' | 'collapsed' | 'escapes' | 'captured' | 'radius' | 'resolved' | 'merged' | 'shells' | 'population' | 'packet';
 
 type Tick = (seconds: number) => void;
 
@@ -247,6 +255,7 @@ export class ApparatusView {
     const body = new Mesh(new SphereGeometry(bodyR, 40, 24), new MeshStandardMaterial({ color: this.theme.surface3, emissive: this.theme.conditional, emissiveIntensity: 0.25 }));
     body.position.set(0, y(0, 0) + bodyR * 0.2, 0);
     this.root.add(body);
+    if (isLength(d.claimUnit)) return this.radius(d, body.position, past);
     if (d.strength !== null) {
       // The horizon sphere: where nothing climbs out of the well.
       const horizon = new Mesh(new SphereGeometry(bodyR * 1.6, 32, 16), new MeshBasicMaterial({ color: this.theme.textSecondary, wireframe: true, transparent: true, opacity: 0.35 }));
@@ -255,7 +264,7 @@ export class ApparatusView {
     }
     this.label(LAB.apparatus.body, new Vector3(0, body.position.y + bodyR * 2 + 0.6, 0));
 
-    // The probe and its path: it escapes within the limit, falls back past it.
+    // The probe and its path: it escapes within the limit, is captured past it.
     const escapes = !past;
     const path = trajectory(escapes).map(([px, pz]) => new Vector3(px, y(px, pz) + 0.35, pz));
     this.root.add(
@@ -280,7 +289,45 @@ export class ApparatusView {
       const ghost = trajectory(!d.pinned.impossible).map(([px, pz]) => new Vector3(px, y(px, pz) + 0.2, pz));
       this.root.add(new Line(new BufferGeometry().setFromPoints(ghost), new LineBasicMaterial({ color: this.theme.textSecondary, transparent: true, opacity: 0.5 })));
     }
-    return escapes ? 'escapes' : 'falls';
+    return escapes ? 'escapes' : 'captured';
+  }
+
+  /**
+   * A claimed length (a radius, an orbit): a ring at the measured radius
+   * around a sphere at the reference radius the engine gives, both scaled
+   * by the claimed over the limit.
+   */
+  private radius(d: ApparatusData, centre: Vector3, past: boolean): BenchState {
+    const { measured, reference } = orbitRadii(d.claim, d.result?.bound ?? null);
+    const sphere = new Mesh(new SphereGeometry(reference, 40, 20), new MeshBasicMaterial({ color: this.theme.textSecondary, wireframe: true, transparent: true, opacity: 0.4 }));
+    sphere.position.copy(centre);
+    this.root.add(sphere);
+    const color = past ? this.theme.impossible : this.theme.compatible;
+    const ring = new Mesh(new TorusGeometry(measured, 0.07, 12, 128), new MeshBasicMaterial({ color }));
+    ring.rotation.x = Math.PI / 2;
+    ring.position.copy(centre);
+    this.root.add(ring);
+    // A body on the orbit, and the measured radius as a spoke from the centre.
+    const moon = new Mesh(new SphereGeometry(0.22, 20, 12), new MeshStandardMaterial({ color: this.theme.accent, emissive: this.theme.accent, emissiveIntensity: 0.9 }));
+    const place = (t: number) => moon.position.set(centre.x + measured * Math.cos(t * 0.6), centre.y, centre.z + measured * Math.sin(t * 0.6));
+    place(0);
+    this.root.add(moon);
+    this.ticks.push(place);
+    this.root.add(
+      new Line(
+        new BufferGeometry().setFromPoints([centre.clone(), centre.clone().add(new Vector3(measured, 0, 0))]),
+        new LineBasicMaterial({ color, transparent: true, opacity: 0.9 }),
+      ),
+    );
+    this.label(LAB.apparatus.measuredRadius, centre.clone().add(new Vector3(measured + 0.4, 0.7, 0)), color);
+    this.label(LAB.apparatus.referenceRadius, centre.clone().add(new Vector3(0, reference + 0.7, 0)));
+    if (d.pinned) {
+      const ghost = new Mesh(new TorusGeometry(orbitRadii((d.pinned.ratio ?? 1) * (d.result?.bound ?? 1), d.result?.bound ?? 1).measured, 0.03, 8, 96), new MeshBasicMaterial({ color: this.theme.textSecondary, wireframe: true }));
+      ghost.rotation.x = Math.PI / 2;
+      ghost.position.copy(centre);
+      this.root.add(ghost);
+    }
+    return 'radius';
   }
 
   // ---------- waves, beams and optics ----------
@@ -382,12 +429,17 @@ export class ApparatusView {
       }
       return 'shells';
     }
+    if (d.decay) return this.population(d, past);
     // A wave packet between two walls, more agitated in a tighter box.
     const half = boxHalfWidth(d.position);
     for (const x of [-half, half]) {
-      const wall = new Mesh(new BoxGeometry(0.25, 5, 4), new MeshStandardMaterial({ color: this.theme.surface3, transparent: true, opacity: 0.85 }));
+      const box = new BoxGeometry(0.25, 5, 4);
+      const wall = new Mesh(box, new MeshStandardMaterial({ color: this.theme.surface3, transparent: true, opacity: 0.85 }));
       wall.position.set(x, 2.5, 0);
-      this.root.add(wall);
+      // A bright outline so the plates stand out on the dark floor.
+      const edges = new LineSegments(new EdgesGeometry(box), new LineBasicMaterial({ color: this.theme.accent }));
+      edges.position.copy(wall.position);
+      this.root.add(wall, edges);
     }
     this.label(LAB.apparatus.box, new Vector3(0, 5.6, 0));
     const amp = agitation(half);
@@ -413,5 +465,70 @@ export class ApparatusView {
       this.root.add(ghost);
     }
     return 'packet';
+  }
+
+  /**
+   * A decaying population: a lattice of nuclei, the lit share being the
+   * claimed remaining over the initial count; around it, a ring whose arc
+   * is the fraction the law expects and an inner arc for the claim.
+   */
+  private population(d: ApparatusData, past: boolean): BenchState {
+    const side = 7;
+    const count = side ** 3;
+    const { shown, expected } = decayFractions(d.claim, d.result?.bound ?? null, d.initial);
+    const lit = undecayed(count, shown);
+    const centre = new Vector3(0, 3.2, 0);
+    const on: number[] = [];
+    const off: number[] = [];
+    for (let i = 0; i < count; i++) {
+      const x = (i % side) - (side - 1) / 2;
+      const y = (Math.floor(i / side) % side) - (side - 1) / 2;
+      const z = Math.floor(i / side ** 2) - (side - 1) / 2;
+      (lit[i] ? on : off).push(centre.x + x * 0.55, centre.y + y * 0.55, centre.z + z * 0.55);
+    }
+    const glow = past ? this.theme.impossible : this.theme.conditional;
+    const cloud = (pts: number[], color: Color, size: number, opacity: number, additive: boolean) => {
+      if (pts.length === 0) return null;
+      const p = new Points(
+        new BufferGeometry().setAttribute('position', new Float32BufferAttribute(pts, 3)),
+        new PointsMaterial({ color, size, transparent: true, opacity, depthWrite: false, blending: additive ? AdditiveBlending : undefined }),
+      );
+      this.root.add(p);
+      return p;
+    };
+    const bright = cloud(on, glow, 0.32, 1, true);
+    cloud(off, this.theme.textSecondary, 0.16, 0.45, false);
+    if (bright) this.ticks.push((t) => ((bright.material as PointsMaterial).opacity = 0.8 + 0.2 * Math.sin(t * 3)));
+    this.label(`${LAB.apparatus.remaining} ${Math.round(shown * 100)} %`, centre.clone().add(new Vector3(0, 2.8, 0)), glow);
+
+    // The rings: a faint full circle, the expected fraction as an arc, the claimed one inside it.
+    const ringY = 0.08;
+    const full = new Mesh(new TorusGeometry(4.2, 0.03, 8, 128), new MeshBasicMaterial({ color: this.theme.textSecondary, transparent: true, opacity: 0.35 }));
+    full.rotation.x = Math.PI / 2;
+    full.position.set(0, ringY, 0);
+    this.root.add(full);
+    if (expected !== null && expected > 0) {
+      const arc = new Mesh(new TorusGeometry(4.2, 0.09, 8, 128, Math.PI * 2 * expected), new MeshBasicMaterial({ color: this.theme.textPrimary }));
+      arc.rotation.x = Math.PI / 2;
+      arc.position.set(0, ringY, 0);
+      this.root.add(arc);
+      this.label(LAB.apparatus.expected, new Vector3(0, ringY + 0.6, 4.9));
+    }
+    if (shown > 0) {
+      const claimed = new Mesh(new TorusGeometry(3.7, 0.09, 8, 128, Math.PI * 2 * shown), new MeshBasicMaterial({ color: glow }));
+      claimed.rotation.x = Math.PI / 2;
+      claimed.position.set(0, ringY, 0);
+      this.root.add(claimed);
+    }
+    if (d.pinned) {
+      const pinnedShown = decayFractions((d.pinned.ratio ?? 1) * (d.result?.bound ?? 0), d.result?.bound ?? null, d.initial).shown;
+      if (pinnedShown > 0) {
+        const ghost = new Mesh(new TorusGeometry(3.3, 0.04, 8, 128, Math.PI * 2 * pinnedShown), new MeshBasicMaterial({ color: this.theme.textSecondary }));
+        ghost.rotation.x = Math.PI / 2;
+        ghost.position.set(0, ringY, 0);
+        this.root.add(ghost);
+      }
+    }
+    return 'population';
   }
 }

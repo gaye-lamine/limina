@@ -10,16 +10,22 @@ import {
   boxHalfWidth,
   contraction,
   converterSpeed,
+  decayFractions,
   discreteParameter,
   flowShares,
+  initialParameter,
+  isDecay,
+  isLength,
   levelOf,
   massParameter,
+  orbitRadii,
   peakSeparation,
   shellRadii,
   spectralParameter,
   spectrumRgb,
   toNanometres,
   trajectory,
+  undecayed,
   wellDepth,
 } from './apparatus';
 
@@ -74,6 +80,37 @@ describe('laboratory: the physical apparatus from the metadata only', () => {
     expect(spectralParameter(law('m', [{ id: 'wavelength', units: ['m', 'nm'], label: 'wavelength' }]))).toEqual({ id: 'wavelength', as: 'wavelength' });
     expect(spectralParameter(law('J', [{ id: 'f', units: ['Hz'], label: 'frequency' }]))).toEqual({ id: 'f', as: 'frequency' });
     expect(apertureParameter(law('rad', [{ id: 'wavelength', units: ['m'], label: 'wavelength' }, { id: 'D', units: ['m'], label: 'aperture diameter' }]))).toBe('D');
+  });
+});
+
+describe('laboratory: decaying populations and claimed lengths', () => {
+  const decay = law('dimensionless', [
+    { id: 'n0', units: ['dimensionless'], label: 'initial number' },
+    { id: 't', units: ['s', 'min'], label: 'elapsed time' },
+    { id: 't_half', units: ['s'], label: 'half-life' },
+  ]);
+  it('recognises a decay from a time parameter or its labels, not an uncertainty', () => {
+    expect(isDecay(decay)).toBe(true);
+    expect(isDecay(law('dimensionless', [{ units: ['dimensionless'], label: 'activity after decay' }]))).toBe(true);
+    expect(isDecay(law('m', [{ units: ['kg*m/s'], label: 'momentum uncertainty' }]))).toBe(false);
+    expect(initialParameter(decay)).toBe('n0');
+  });
+  it('draws the claimed remaining and the expected fractions of the initial count', () => {
+    expect(decayFractions(250, 500, 1000)).toEqual({ shown: 0.25, expected: 0.5 });
+    expect(decayFractions(2000, null, 1000)).toEqual({ shown: 1, expected: null });
+    expect(decayFractions(0.3, 0.4, null)).toEqual({ shown: 0.3, expected: 0.4 });
+    const lit = undecayed(343, 0.25);
+    expect(lit.filter(Boolean).length).toBe(86);
+    // A larger fraction keeps every nucleus a smaller one kept lit.
+    const more = undecayed(343, 0.5);
+    expect(lit.every((on, i) => !on || more[i])).toBe(true);
+  });
+  it('rings a claimed length around the reference sphere', () => {
+    expect(isLength('m')).toBe(true);
+    expect(isLength('m/s')).toBe(false);
+    expect(orbitRadii(2, 1)).toEqual({ measured: 5, reference: 2.5 });
+    expect(orbitRadii(100, 1).measured).toBe(7.5);
+    expect(orbitRadii(1, null).measured).toBe(2.5);
   });
 });
 
