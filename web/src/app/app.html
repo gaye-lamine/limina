@@ -1,6 +1,6 @@
 <a class="skip" href="#main">{{ s.skipLink }}</a>
 <header class="topbar">
-  <span class="wordmark">{{ u.wordmark }}</span>
+  <span class="wordmark"><svg class="wordmark-mark" viewBox="0 0 20 20" width="20" height="20" aria-hidden="true" focusable="false"><path class="wm-arc" d="M3 16 A 13 13 0 0 1 17 4" /><path class="wm-limit" d="M3 4 H17" /><circle class="wm-dot" cx="12.5" cy="7.2" r="1.8" /></svg><span>{{ u.wordmark }}</span></span>
   <span class="status status--{{ status.state() }}" [class.status--degraded]="status.state() === 'online' && !status.extraction()" role="status">
     <span class="status-dot" aria-hidden="true"></span><span class="status-text">{{ statusText() }}</span>
   </span>

@@ -4,7 +4,7 @@
  * the Markdown report. Every verdict and number comes from the API; nothing
  * here decides a verdict.
  */
-import { AnalyzedClaim } from './analysis.models';
+import { AnalyzedClaim, LawAttempt } from './analysis.models';
 import { ApiFailure, LimitInfo } from './api.models';
 import { formatValue } from './chart-geometry';
 import { UI, WB } from './strings';
@@ -132,6 +132,205 @@ export function segments(text: string, claims: { index: number; claim: AnalyzedC
   }
   if (at < text.length) out.push({ text: text.slice(at), claim: null });
   return out;
+}
+
+/** A short readable label of a claim: the law's short quantity name (or the first words of the quantity) and the value. */
+export function shortLabel(e: Entry): string {
+  if (e.kind === 'failure') return `${WB.progressParagraph} ${e.paragraph}`;
+  const c = e.claim;
+  const short = c.limit_id ? UI.short[c.limit_id] : undefined;
+  const name = short ?? c.quantity.split(/[\s-]+/).filter(Boolean).slice(0, 2).join(' ');
+  return `${name} ${readValueText(c)}`;
+}
+
+/** Sentence ranges of a text, in code points: up to and including ". ", "! ", "? ", a line break, or the end. */
+export function sentenceRanges(text: string): { start: number; end: number }[] {
+  const cp = Array.from(text);
+  const out: { start: number; end: number }[] = [];
+  let start = 0;
+  for (let i = 0; i < cp.length; i++) {
+    const endHere = (/[.!?]/.test(cp[i]) && (i + 1 === cp.length || /\s/.test(cp[i + 1]))) || cp[i] === '\n';
+    if (endHere) {
+      out.push({ start, end: i + 1 });
+      start = i + 1;
+      while (start < cp.length && /\s/.test(cp[start])) start++;
+      i = start - 1;
+    }
+  }
+  if (start < cp.length) out.push({ start, end: cp.length });
+  return out.filter((r) => r.end > r.start);
+}
+
+const SUPER: Record<string, string> = { '⁰': '0', '¹': '1', '²': '2', '³': '3', '⁴': '4', '⁵': '5', '⁶': '6', '⁷': '7', '⁸': '8', '⁹': '9', '⁻': '-', '⁺': '+' };
+const NUM = /[-+−]?\d+(?:[.,]\d+)?(?:\s*(?:[eE][-+−]?\d+|[×x*·]\s*10(?:\^?[-+−]?\d+|[⁻⁺]?[⁰¹²³⁴⁵⁶⁷⁸⁹]+)))?/g;
+
+/** The value of a number as written: "3.6e8", "1 × 10⁻²⁴", "1,4". */
+export function readNumber(s: string): number {
+  const t = s.replace(/−/g, '-').replace(/\s/g, '').replace(',', '.');
+  const m = t.match(/^([-+]?\d+(?:\.\d+)?)(?:[eE]([-+]?\d+)|[×x*·]10\^?([-+]?\d+|[⁻⁺]?[⁰¹²³⁴⁵⁶⁷⁸⁹]+))?$/);
+  if (!m) return NaN;
+  const exp = m[2] ?? (m[3] ? Array.from(m[3]).map((c) => SUPER[c] ?? c).join('') : '0');
+  return Number(`${m[1]}e${exp}`);
+}
+
+/**
+ * Where the claim's value is written, in code points of `text`: the number
+ * inside the claim's evidence whose value is the value the model read.
+ * Falls back to the whole evidence when no number matches.
+ */
+export function valueRange(text: string, c: AnalyzedClaim): { start: number; end: number } | null {
+  const e = c.evidence;
+  if (!e) return null;
+  const cp = Array.from(text);
+  const ev = cp.slice(e.start, e.end).join('');
+  for (const m of ev.matchAll(NUM)) {
+    const v = readNumber(m[0]);
+    if (Number.isFinite(v) && Math.abs(v - c.raw_value) <= 1e-9 * Math.max(Math.abs(v), Math.abs(c.raw_value))) {
+      const at = Array.from(ev.slice(0, m.index ?? 0)).length;
+      return { start: e.start + at, end: e.start + at + Array.from(m[0]).length };
+    }
+  }
+  return { start: e.start, end: e.end };
+}
+
+/** A piece of a sentence: plain, or the value of claim `claim` (underlined, with its badge). */
+export interface Piece {
+  text: string;
+  claim: number | null;
+}
+
+/** A sentence of the reading panel: tinted for the first claim it holds, with the value pieces. */
+export interface ReadingSentence {
+  claim: number | null;
+  claims: number[];
+  pieces: Piece[];
+}
+
+/**
+ * The paragraph cut into sentences. A sentence that holds a claim's
+ * evidence is tinted with that claim; inside it, each claim's value is its
+ * own piece. Offsets are code points of the paragraph (claims already
+ * shifted to the paragraph).
+ */
+export function readingSentences(text: string, claims: { index: number; claim: AnalyzedClaim }[]): ReadingSentence[] {
+  const cp = Array.from(text);
+  return sentenceRanges(text).map((r) => {
+    const mine = claims.filter(({ claim }) => claim.evidence && claim.evidence.start < r.end && claim.evidence.end > r.start);
+    const values = mine
+      .map(({ index, claim }) => ({ index, range: valueRange(text, claim) }))
+      .filter((v): v is { index: number; range: { start: number; end: number } } => !!v.range)
+      .map((v) => ({ index: v.index, start: Math.max(v.range.start, r.start), end: Math.min(v.range.end, r.end) }))
+      .filter((v) => v.end > v.start)
+      .sort((a, b) => a.start - b.start);
+    const pieces: Piece[] = [];
+    let at = r.start;
+    for (const v of values) {
+      if (v.start < at) continue;
+      if (v.start > at) pieces.push({ text: cp.slice(at, v.start).join(''), claim: null });
+      pieces.push({ text: cp.slice(v.start, v.end).join(''), claim: v.index });
+      at = v.end;
+    }
+    if (at < r.end) pieces.push({ text: cp.slice(at, r.end).join(''), claim: null });
+    return { claim: mine[0]?.index ?? null, claims: mine.map((m) => m.index), pieces };
+  });
+}
+
+/** One candidate law of a disputed claim. */
+export interface Candidate {
+  model: string;
+  formula: string;
+  bound: number | null;
+  note: string;
+}
+
+/** A missing quantity the user can supply. */
+export interface MissingInput {
+  id: string;
+  label: string;
+  unit: string;
+}
+
+/** The card shown instead of metrics for a claim without a verdict. */
+export interface NoVerdict {
+  kind: 'disputed' | 'needs' | 'nolaw' | 'failed';
+  happened: string;
+  tried: string[];
+  settle: string;
+  candidates: Candidate[];
+  divergence: number | null;
+  missing: MissingInput[];
+  sources: string[];
+}
+
+function formulaOf(a: LawAttempt): string {
+  const d = a.definition;
+  if (!d) return a.errors[a.errors.length - 1] ?? UI.noDefinition;
+  if (d.formula) return d.formula;
+  const per = (d.assumptions ?? []).flatMap((s) => (s.options ?? []).filter((o) => o.formula).map((o) => `${o.id ?? o.name}: ${o.formula}`));
+  return per.length ? per.join('; ') : UI.noDefinition;
+}
+
+/** Steps of the trace, one short line each: "limit: failed, no built-in limit matches this claim". */
+function triedSteps(c: AnalyzedClaim): string[] {
+  return c.trace.map((t) => `${t.step}: ${t.status}${t.detail ? `, ${t.detail.split(/;|\(cached/)[0].trim()}` : ''}`);
+}
+
+/** What the card says for a claim with no engine verdict; null when there is a verdict. */
+export function noVerdict(e: Entry, limits: LimitInfo[]): NoVerdict | null {
+  if (e.kind === 'failure') {
+    return {
+      kind: 'failed',
+      happened: UI.failedSentence(e.failure.code),
+      tried: [`extraction: failed, ${e.failure.code}: ${e.failure.message} (${e.attempts} answer(s))`],
+      settle: UI.settleFailed,
+      candidates: [],
+      divergence: null,
+      missing: [],
+      sources: [],
+    };
+  }
+  const c = e.claim;
+  const r = c.result;
+  if (r && r.verdict !== 'INSUFFICIENT_DATA') return null;
+  const base = { tried: triedSteps(c), candidates: [] as Candidate[], divergence: null as number | null, missing: [] as MissingInput[], sources: [] as string[] };
+  if (c.law?.source === 'draft_disputed') {
+    const candidates = c.law.attempts.map((a) => ({
+      model: a.model,
+      formula: formulaOf(a),
+      bound: a.bound_at_claim ?? null,
+      note: a.bound_note ?? (a.ok ? '' : UI.noDefinition),
+    }));
+    const [x, y] = candidates.map((k) => k.bound);
+    const divergence =
+      x !== null && x !== undefined && y !== null && y !== undefined && Math.max(Math.abs(x), Math.abs(y)) > 0
+        ? Math.abs(x - y) / Math.max(Math.abs(x), Math.abs(y))
+        : null;
+    return { ...base, kind: 'disputed', happened: UI.disputedSentence, settle: UI.settleDisputed, candidates, divergence };
+  }
+  const limit = limits.find((l) => l.id === c.limit_id);
+  if (limit) {
+    const ids = r?.missing_parameters.map((m) => m.id) ?? limit.parameters.filter((p) => c.parameters[p.id]?.value == null).map((p) => p.id);
+    const missing = ids.map((id) => {
+      const spec = limit.parameters.find((p) => p.id === id);
+      return { id, label: limit.parameter_labels[id] ?? id, unit: spec?.units[0] ?? '' };
+    });
+    return {
+      ...base,
+      kind: 'needs',
+      happened: c.reason ? UI.noVerdictBecause(c.reason) : UI.missing(ids.join(', ')),
+      settle: missing.length ? UI.settleNeeds(missing.map((m) => m.label).join(', ')) : UI.settleUnit,
+      missing,
+    };
+  }
+  const law = c.trace.find((t) => t.step === 'law');
+  const sources = [UI.sourceLibrary(limits.length), law ? `${UI.sourceModel}: ${law.detail}` : UI.sourceNoModel, UI.sourceNoWeb];
+  return {
+    ...base,
+    kind: 'nolaw',
+    happened: c.reason ? UI.noVerdictBecause(c.reason) : UI.noVerdict,
+    settle: UI.settleNoLaw(c.quantity, c.raw_unit),
+    sources,
+  };
 }
 
 /** Summary strip: number of claims and of entries in each verdict family. */

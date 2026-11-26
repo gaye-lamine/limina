@@ -61,7 +61,7 @@ export class Gauge {
     this.g().scaleTicks.map((t) => {
       const a = polar(CX, CY, R0, t.angle);
       const b = polar(CX, CY, R0 + 8, t.angle);
-      const l = polar(CX, CY, R0 - 16, t.angle);
+      const l = polar(CX, CY, R0 - 38, t.angle);
       return { ...t, a, b, l };
     }),
   );

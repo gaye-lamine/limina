@@ -117,6 +117,15 @@ Tertiary passes only the 3:1 threshold for large text and non-text marks, so it 
 - **Command palette** (Ctrl or Cmd+K, CDK overlay): jump to a claim, open Library or How it works, download the report, toggle the trace drawer, start a new analysis.
 - **Toasts**: errors stay until dismissed; info messages leave after 4 s.
 
+## Polish pass
+
+- **Surfaces:** cards use background steps (surface-1 for panes, surface-2 for tiles and parts, surface-3 for candidates) and an inset 1px top highlight at 4 to 5% white. Borders are kept only where they carry meaning: verdict pills and the ratio tile.
+- **Reading highlights:** the whole sentence is tinted with the verdict at 12%. The value alone carries a 2px underline, drawn in 520 ms, and the numbered badge. The selected sentence gets a 1px verdict ring and a soft glow in its color.
+- **Claim chips:** `shortLabel` gives the law's short quantity name (`UI.short`) and the value. Chips sit in one scroll row with 16px edge fades; nothing is cut.
+- **No-verdict card:** "What happened", "What was tried", "What would settle it", plus candidates with their engine bounds (disputed), inputs and "Re-evaluate" (needs input), or the sources searched (no law).
+- **Crossfade:** the instrument body fades in over 160 ms on every claim change.
+- **Wordmark:** a 20px SVG with an accent arc reaching a dashed limit line, and a dot.
+
 ## Layout
 
 - From 1024px wide and 700px high, the app is one screen: no page scroll. The reading and instrument panes scroll internally only when their content overflows, with a thin styled scrollbar.

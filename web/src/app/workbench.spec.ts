@@ -78,8 +78,8 @@ describe('Workbench', { timeout: 30_000 }, () => {
     expect(el.querySelectorAll('.stream-card:not(.skeleton)')).toHaveLength(1);
     expect(el.querySelectorAll('.skeleton').length).toBeGreaterThan(0);
     answer(http, [
-      claimOf({ evidence: { text: '4', start: 5, end: 6 }, parameters: {}, result: result('CONDITIONAL') }),
-      claimOf({ evidence: { text: '300 K', start: 10, end: 15 }, parameters: {}, result: result('COMPATIBLE') }),
+      claimOf({ raw_value: 4, evidence: { text: '4', start: 5, end: 6 }, parameters: {}, result: result('CONDITIONAL') }),
+      claimOf({ raw_value: 300, evidence: { text: '300 K', start: 10, end: 15 }, parameters: {}, result: result('COMPATIBLE') }),
     ]);
     await settle(fixture);
     answer(http, [
@@ -112,9 +112,19 @@ describe('Workbench', { timeout: 30_000 }, () => {
     const pills = Array.from(el.querySelectorAll('.summary .pill-filter')).map((p) => p.textContent?.replace(/\s+/g, ' ').trim());
     expect(pills).toEqual(['Impossible 1', 'Conditional 1', 'Compatible 1', 'Needs input 1']);
     expect(el.querySelectorAll('.claim-item')).toHaveLength(4);
-    const marks = Array.from(el.querySelectorAll('.reading .hl'));
-    expect(marks.map((m) => m.className.match(/hl--(\w+)/)?.[1])).toEqual(['impossible', 'conditional', 'compatible', 'needs']);
-    expect(marks[0].textContent).toBe('160%');
+    // Each claim sentence is tinted; only the value is underlined, with its badge.
+    const sentences = Array.from(el.querySelectorAll('.reading .sent'));
+    expect(sentences.map((m) => m.className.match(/hl--(\w+)/)?.[1])).toEqual(['impossible', 'conditional', 'needs']);
+    expect(sentences[0].textContent?.replace(/\s+/g, ' ').trim()).toBe('Engine 160% at 600 K');
+    const values = Array.from(el.querySelectorAll('.reading .val')).map((v) => v.textContent);
+    expect(values).toEqual(['160', '24', '3300', '4Cell 5 kWh in 1 kg']);
+    // Short chips, never cut: the law's short quantity name and the value.
+    expect(Array.from(el.querySelectorAll('.claim-q')).map((c) => c.textContent)).toEqual([
+      'efficiency 60.0 %',
+      'efficiency 4.00 %',
+      'efficiency 300 %',
+      'specific energy 60.0 %',
+    ]);
     expect(el.querySelector('.inst-pill')?.textContent).toContain('IMPOSSIBLE');
     expect(el.querySelector('.inst-sentence')?.textContent).toBe('The claim is 1.20× what the law allows.');
     const tiles = Array.from(el.querySelectorAll('.tile-n')).map((t) => t.textContent?.trim());
@@ -130,7 +140,7 @@ describe('Workbench', { timeout: 30_000 }, () => {
     expect(pills[1].getAttribute('aria-pressed')).toBe('true');
     expect(el.querySelectorAll('.claim-item')).toHaveLength(1);
     expect(el.querySelector('.inst-pill')?.textContent).toContain('CONDITIONAL');
-    expect(Array.from(el.querySelectorAll('.reading .hl')).map((m) => m.classList.contains('is-dim'))).toEqual([true, false, true, true]);
+    expect(Array.from(el.querySelectorAll('.reading .sent')).map((m) => m.classList.contains('is-dim'))).toEqual([true, false, true]);
     pills[1].click();
     await settle(fixture);
     expect(el.querySelectorAll('.claim-item')).toHaveLength(4);
@@ -158,7 +168,7 @@ describe('Workbench', { timeout: 30_000 }, () => {
     await press('j', input);
     expect(current()).toBe('4');
     input.remove();
-    (el.querySelectorAll<HTMLElement>('.reading .hl')[1]).click();
+    (el.querySelectorAll<HTMLElement>('.reading .sent')[1]).click();
     await settle(fixture);
     expect(current()).toBe('2');
   });
@@ -227,9 +237,127 @@ describe('Workbench', { timeout: 30_000 }, () => {
     }
     await drain(http, fixture);
     expect(el.querySelector('.inst-pill')?.textContent).toContain('NOT ANALYSED');
-    expect(el.querySelector('.notice--error')?.textContent).toContain('ExtractionFailed');
+    expect(el.querySelector('.nv')?.textContent).toContain('ExtractionFailed');
+    expect(el.querySelector('.tiles')).toBeNull();
     const toasts = TestBed.inject(ToastService).toasts();
     expect(toasts.some((t) => t.kind === 'error' && t.text.includes('Paragraph 1 was not analysed: ExtractionFailed'))).toBe(true);
+  });
+
+  it('advances the stepper only on pipeline events', async () => {
+    const { http, fixture, el } = await setup();
+    type(el, 'Engine 60% at 600 K\n\nPump 4 at 300 K');
+    (el.querySelector('.wb-analyze') as HTMLButtonElement).click();
+    await settle(fixture);
+    const states = () => Array.from(el.querySelectorAll('.step')).map((s) => s.className.match(/step--(\w+)/)?.[1]);
+    // Request sent, no answer yet: only Reading is active.
+    expect(states()).toEqual(['active', 'waiting', 'waiting', 'waiting']);
+    expect(el.querySelector('.reading')).not.toBeNull();
+    expect(el.querySelector('.feed')).not.toBeNull();
+    answer(http, [
+      claimOf({
+        evidence: { text: '60%', start: 7, end: 10 },
+        trace: [
+          { step: 'extraction', status: 'done', detail: 'read efficiency' },
+          { step: 'limit', status: 'done', detail: 'built-in limit carnot' },
+        ],
+      }),
+    ]);
+    await settle(fixture);
+    // An answer carrying the server's law identification.
+    expect(states()).toEqual(['active', 'active', 'waiting', 'waiting']);
+    expect(el.querySelector('.reading .val')).not.toBeNull();
+    answer(http, [claimOf({ raw_value: 4, evidence: { text: '4', start: 5, end: 6 }, parameters: {} })]);
+    await settle(fixture);
+    // Every paragraph answered: Reading and Identifying are done; sources are being researched.
+    expect(states()).toEqual(['done', 'done', 'active', 'waiting']);
+    await drain(http, fixture);
+    expect(el.getAttribute('data-state')).toBe('reviewed');
+  });
+
+  it('shows a card instead of metrics for a disputed law, with both candidates and their divergence', async () => {
+    const { http, fixture, el } = await setup();
+    type(el, 'Probe 3.6e8 m/s');
+    (el.querySelector('.wb-analyze') as HTMLButtonElement).click();
+    await settle(fixture);
+    answer(http, [
+      claimOf({
+        limit_id: null,
+        quantity: 'speed',
+        raw_value: 3.6e8,
+        raw_unit: 'm/s',
+        value: null,
+        evidence: { text: '3.6e8 m/s', start: 6, end: 15 },
+        parameters: {},
+        status: 'needs_input',
+        result: null,
+        reason: 'the two models wrote different laws; no verdict is given',
+        trace: [
+          { step: 'extraction', status: 'done', detail: 'read speed: 3.6e8 m/s' },
+          { step: 'law', status: 'done', detail: 'Nothing with mass reaches c' },
+        ],
+        law: {
+          source: 'draft_disputed',
+          limit_id: null,
+          sentence: 'Nothing with mass reaches c',
+          comparison: null,
+          attempts: [
+            { model: 'model-a', ok: true, attempts: 1, errors: [], definition: { id: 'a', title: 'a', direction: 'max', formula: 'c' }, bound_at_claim: 299792458, bound_note: null },
+            { model: 'model-b', ok: true, attempts: 1, errors: [], definition: { id: 'b', title: 'b', direction: 'max', formula: '2*c' }, bound_at_claim: 599584916, bound_note: null },
+          ],
+        },
+      }),
+    ]);
+    await drain(http, fixture);
+    expect(el.querySelector('.inst-pill')?.textContent).toContain('DISPUTED');
+    expect(el.querySelector('.tiles')).toBeNull();
+    expect(el.querySelector('.visual')).toBeNull();
+    const card = el.querySelector('.nv')?.textContent ?? '';
+    expect(card).toContain('What happened');
+    expect(card).toContain('What was tried');
+    expect(card).toContain('What would settle it');
+    expect(Array.from(el.querySelectorAll('.cand-formula')).map((f) => f.textContent)).toEqual(['c', '2*c']);
+    expect(el.querySelector('.nv-div')?.textContent).toContain('50.0 %');
+    // The plain sentence is shown once.
+    expect((card.match(/Two models wrote/g) ?? []).length).toBe(1);
+  });
+
+  it('asks for a missing quantity and re-evaluates through the engine', async () => {
+    const { http, fixture, el } = await setup();
+    type(el, 'Engine 60%');
+    (el.querySelector('.wb-analyze') as HTMLButtonElement).click();
+    await settle(fixture);
+    const insufficient = { ...claimOf().result!, verdict: 'INSUFFICIENT_DATA' as const, bounds: null, wording: 'insufficient data', missing_parameters: [{ id: 'Tc', status: 'NoDomain' as const }] };
+    answer(http, [claimOf({ evidence: { text: '60%', start: 7, end: 10 }, result: insufficient })]);
+    await drain(http, fixture);
+    expect(el.querySelector('.tiles')).toBeNull();
+    const input = el.querySelector('.supply-input') as HTMLInputElement;
+    expect(input).not.toBeNull();
+    const button = el.querySelector('.reevaluate') as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    input.value = '300';
+    input.dispatchEvent(new Event('input'));
+    await settle(fixture);
+    expect(button.disabled).toBe(false);
+    button.click();
+    await settle(fixture);
+    const req = http.expectOne('/v1/evaluate');
+    expect(req.request.body.limit_id).toBe('carnot');
+    expect(req.request.body.parameters).toEqual({ Th: { value: 600, unit: 'K' }, Tc: { value: 300, unit: 'K' } });
+    req.flush(claimOf().result);
+    await drain(http, fixture);
+    expect(el.querySelector('.inst-pill')?.textContent).toContain('IMPOSSIBLE');
+    expect(el.querySelector('.tiles')).not.toBeNull();
+    expect(el.querySelector('.nv')).toBeNull();
+  });
+
+  it('lists the sources searched for a claim with no law', async () => {
+    const { fixture, el } = await reviewed();
+    (el.querySelectorAll<HTMLButtonElement>('.claim-item')[3]).click();
+    await settle(fixture);
+    expect(el.querySelector('.tiles')).toBeNull();
+    const sources = Array.from(el.querySelectorAll('.nv-list:not(.nv-steps) li')).map((l) => l.textContent?.trim());
+    expect(sources[0]).toBe(`Built-in library: ${LIMITS.length} laws compared by quantity name and dimension, none matched`);
+    expect(sources).toContain('No web research is run by this server');
   });
 
   it('shows the empty state when no claim is found', async () => {
@@ -260,7 +388,7 @@ describe('Workbench', { timeout: 30_000 }, () => {
     await drain(http, fixture);
     expect(el.querySelectorAll('.claim-item')).toHaveLength(3);
     expect(el.querySelector('.inst-pill')?.textContent).toContain('IMPOSSIBLE');
-    expect(Array.from(el.querySelectorAll('.reading .hl')).map((m) => m.textContent)).toEqual(['170%', '245%', '3300 nm']);
+    expect(Array.from(el.querySelectorAll('.reading .val')).map((m) => m.textContent)).toEqual(['170', '245', '3300']);
   });
 
   it('shows the offline notice when the engine cannot be reached', async () => {

@@ -9,21 +9,24 @@ import { ApiService } from './api.service';
 import { CarnotApparatus } from './carnot-apparatus';
 import { CopApparatus, TwinVerdicts } from './cop-apparatus';
 import { CountUp } from './count-up';
+import { formatValue } from './chart-geometry';
 import { Explorer } from './explorer';
 import { Gauge } from './gauge';
 import {
   Entry,
-  Segment,
+  NoVerdict,
+  ReadingSentence,
   VerdictKind,
+  noVerdict,
+  readingSentences,
+  shortLabel,
   boundText,
   claimValueText,
   entryTitle,
   filtered,
   plainSentence,
   ratioText,
-  readValueText,
   reviewMarkdown,
-  segments,
   step,
   summary,
   verdictKind,
@@ -47,10 +50,13 @@ export interface LogLine {
   status: 'running' | 'done' | 'failed';
 }
 
-/** A paragraph of the reading panel, cut at the evidence of its claims. */
+/** A paragraph of the reading panel, cut into sentences. */
 interface ReadingParagraph {
-  segments: Segment[];
+  sentences: ReadingSentence[];
 }
+
+/** State of one step of the stepper, set only by pipeline events. */
+export type StepState = 'waiting' | 'active' | 'done';
 
 /**
  * The analysis screen. Input: a hero with the text card and samples.
@@ -84,8 +90,11 @@ export class Workbench {
   protected readonly log = signal<LogLine[]>([]);
   protected readonly parts = signal<Paragraph[]>([]);
   protected readonly answered = signal(0);
-  /** Active step of the stepper: 0 Reading, 1 Identifying laws, 2 Researching sources, 3 Computing, 4 done. */
-  protected readonly stage = signal(0);
+  /** Reading, Identifying laws, Researching sources, Computing: each set by a real event. */
+  readonly steps = signal<StepState[]>(['waiting', 'waiting', 'waiting', 'waiting']);
+  /** Values typed for the missing quantities of the selected claim. */
+  protected readonly supplied = signal<Record<string, string>>({});
+  protected readonly reevaluating = signal(false);
   protected readonly filter = signal<VerdictKind | null>(null);
   protected readonly sourceOpen = signal(false);
   protected readonly analysedAt = signal('');
@@ -108,22 +117,23 @@ export class Workbench {
   });
   protected readonly explanation = computed(() => {
     const c = this.claim();
-    return c ? explain(c).filter((l) => l === EXPLAIN.aiDraft || l === EXPLAIN.disputed) : [];
+    return c ? explain(c).filter((l) => l === EXPLAIN.aiDraft) : [];
   });
   protected readonly board = computed(() => summary(this.entries(), this.parts().length));
   protected readonly visible = computed(() => filtered(this.entries(), this.filter()));
   protected readonly reading = computed<ReadingParagraph[]>(() => {
     const claims = this.entries().flatMap((e, index) => (e.kind === 'claim' ? [{ index, claim: e.claim }] : []));
     return this.parts().map((p) => ({
-      segments: segments(p.text, claims.map((c) => ({ ...c, claim: shiftClaim(c.claim, -p.start) }))),
+      sentences: readingSentences(p.text, claims.map((c) => ({ ...c, claim: shiftClaim(c.claim, -p.start) }))),
     }));
   });
   /** What the instrument draws: the gauge (a Max law with no parameter), the explorer, or nothing. */
-  protected readonly visual = computed<'gauge' | 'explorer' | 'none'>(() => {
+  protected readonly visual = computed<'apparatus' | 'gauge' | 'explorer' | 'none'>(() => {
     const c = this.claim();
     const l = this.limit();
-    if (!c || !l || !c.limit_id) return 'none';
-    if (l.parameters.length === 0 && l.direction === 'Max' && c.value !== null && c.result?.bounds) return 'gauge';
+    if (!c || !l || !c.limit_id || !c.result || c.result.verdict === 'INSUFFICIENT_DATA') return 'none';
+    if (c.limit_id === 'carnot' || c.limit_id === 'cop') return 'apparatus';
+    if (l.parameters.length === 0) return l.direction === 'Max' && c.value !== null && c.result.bounds ? 'gauge' : 'none';
     return 'explorer';
   });
   protected readonly gaugeBounds = computed(() => {
@@ -172,8 +182,14 @@ export class Workbench {
   protected quantityOf(e: Entry): string {
     return e.kind === 'claim' ? e.claim.quantity : `${WB.progressParagraph} ${e.paragraph}`;
   }
-  protected valueOf(e: Entry): string {
-    return e.kind === 'claim' ? readValueText(e.claim) : UI.notAnalysed;
+  protected sci(v: number): string {
+    return formatValue(v);
+  }
+  protected percent(f: number): string {
+    return `${formatValue(f * 100)} %`;
+  }
+  protected chipOf(e: Entry): string {
+    return shortLabel(e);
   }
   protected isVisible(i: number): boolean {
     return this.visible().includes(i);
@@ -205,9 +221,77 @@ export class Workbench {
     const t: TwinVerdicts | undefined = this.twins()[i];
     return t ?? { heating: null, cooling: null };
   }
-  protected stepState(i: number): 'done' | 'active' | 'waiting' {
-    const s = this.stage();
-    return i < s ? 'done' : i === s ? 'active' : 'waiting';
+  protected stepState(i: number): StepState {
+    return this.steps()[i] ?? 'waiting';
+  }
+
+  private setStep(i: number, s: StepState): void {
+    this.steps.update((all) => all.map((x, k) => (k === i ? s : x)));
+  }
+
+  /** The card of a claim without a verdict; null for a claim with one. */
+  protected readonly card = computed<NoVerdict | null>(() => {
+    const e = this.entry();
+    return e ? noVerdict(e, this.limits()) : null;
+  });
+
+  protected supply(id: string, raw: string): void {
+    this.supplied.update((m) => ({ ...m, [id]: raw }));
+  }
+
+  protected canReevaluate(card: NoVerdict): boolean {
+    const s = this.supplied();
+    return card.missing.length > 0 && card.missing.every((m) => Number.isFinite(Number(s[m.id])) && (s[m.id] ?? '').trim() !== '');
+  }
+
+  /** POST /v1/evaluate with the traced parameters and the values the user typed; the engine decides. */
+  protected async reevaluate(card: NoVerdict): Promise<void> {
+    const i = this.selected();
+    const e = this.entries()[i];
+    if (e?.kind !== 'claim' || !e.claim.limit_id || e.claim.value === null || !this.canReevaluate(card)) return;
+    const c = e.claim;
+    const limitId = c.limit_id;
+    const value = c.value;
+    if (limitId === null || value === null) return;
+    const s = this.supplied();
+    const parameters: Record<string, { value: number; unit: string }> = {};
+    for (const [id, p] of Object.entries(c.parameters)) if (p.value !== null) parameters[id] = { value: p.value, unit: p.unit };
+    for (const m of card.missing) parameters[m.id] = { value: Number(s[m.id]), unit: m.unit };
+    this.reevaluating.set(true);
+    try {
+      const result = await firstValueFrom(
+        this.api.evaluate({
+          limit_id: limitId,
+          claim: { value, unit: c.unit },
+          constraints: Object.fromEntries(Object.entries(c.constraints).map(([a, o]) => [a, [o]])),
+          parameters,
+        }),
+      );
+      const added = Object.fromEntries(
+        card.missing.map((m) => [m.id, { value: Number(s[m.id]), raw_value: Number(s[m.id]), unit: m.unit, evidence: null, flags: [UI.supplied] }]),
+      );
+      const claim: AnalyzedClaim = {
+        ...c,
+        parameters: { ...c.parameters, ...added },
+        status: 'evaluated',
+        result,
+        reason: null,
+        trace: [...c.trace, { step: 'evaluation', status: 'done', detail: `${UI.suppliedTrace(card.missing.map((m) => m.id).join(', '))}; engine verdict ${result.verdict}` }],
+      };
+      this.entries.update((all) => all.map((x, k) => (k === i ? { ...e, claim } : x)));
+      this.solved.update((m) => {
+        const n = { ...m };
+        delete n[i];
+        return n;
+      });
+      this.supplied.set({});
+      void this.enrich(i);
+    } catch (err) {
+      const f = err as ApiFailure;
+      this.toast.show(`${f.code}: ${f.message}`, 'error');
+    } finally {
+      this.reevaluating.set(false);
+    }
   }
   protected pending(): number[] {
     const n = Math.min(3, Math.max(0, this.parts().length - this.answered()));
@@ -358,20 +442,26 @@ export class Workbench {
     this.filter.set(null);
     this.sourceOpen.set(false);
     this.answered.set(0);
-    this.stage.set(0);
+    this.supplied.set({});
+    this.setStep(0, 'active');
+    this.setStep(1, 'waiting');
+    this.setStep(2, 'waiting');
+    this.setStep(3, 'waiting');
     this.log.set(this.log().filter((l) => l.text.startsWith(WB.imageRead)));
     const text = this.text();
     this.parts.set(paragraphs(text));
     const sample = sampleOf(text);
     if (sample && !this.status.extraction()) await this.runSample(sample);
     else await this.runModel();
-    this.stage.set(1);
-    await Promise.resolve();
-    this.stage.set(2);
+    // Every paragraph is answered: the server has read the text and identified each claim's law.
+    this.setStep(0, 'done');
+    this.setStep(1, 'done');
+    this.setStep(2, 'active');
     await this.loadLimits();
-    this.stage.set(3);
+    this.setStep(2, 'done');
+    this.setStep(3, 'active');
     if (this.entries().length) await this.enrich(0);
-    this.stage.set(4);
+    this.setStep(3, 'done');
     this.analysedAt.set(new Date().toISOString().slice(0, 16).replace('T', ' ') + ' UTC');
     this.running.set(false);
     this.analysed.set(true);
@@ -388,6 +478,8 @@ export class Workbench {
         try {
           const r = await this.analyzeOnce(p.text);
           const claims = r.claims.map((c) => shiftClaim(c, p.start));
+          // An answer with claims carries the server's law identification (its 'limit' step).
+          if (claims.some((c) => c.trace.some((t) => t.step === 'limit'))) this.setStep(1, 'active');
           this.entries.update((e) => [...e, ...claims.map((claim) => ({ kind: 'claim' as const, claim, paragraph: k + 1 }))]);
           this.settle(line, 'done', `${head}: ${claims.length} claim(s), model ${r.extraction.model}`);
           break;

@@ -28,11 +28,27 @@ export type LawSource =
   | 'not_authored'
   | 'no_law_identified';
 
+/** The part of an AI-written definition the review shows. */
+export interface LawDefinition {
+  id: string;
+  title: string;
+  direction: string;
+  formula?: string | null;
+  parameters?: { name: string; units?: string[] }[];
+  assumptions?: { name?: string; id?: string; options?: { id?: string; name?: string; formula?: string }[] }[];
+}
+
 export interface LawAttempt {
   model: string;
   ok: boolean;
   attempts: number;
   errors: string[];
+  /** The definition, when it passed the DSL checks. */
+  definition?: LawDefinition | null;
+  /** Decisive bound of this definition at the claim's parameters (SI), computed by the engine. */
+  bound_at_claim?: number | null;
+  /** Why that bound was not computed. */
+  bound_note?: string | null;
 }
 
 export interface Law {

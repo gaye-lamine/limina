@@ -776,6 +776,7 @@ version = "0.1.0"
 dependencies = [
  "limina-core",
  "limina-dsl",
+ "proptest",
  "reqwest",
  "serde",
  "serde_json",

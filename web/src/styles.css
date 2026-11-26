@@ -1924,3 +1924,414 @@ app-root {
   overflow: hidden;
   clip-path: inset(50%);
 }
+
+/* ================= Polish pass: layered surfaces, fewer lines, split running view ================= */
+/* Layered surfaces: background steps and a faint top inset highlight instead of borders. */
+.surface,
+.pane {
+  border: 0;
+  background: var(--surface-1);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045), var(--shadow-2);
+}
+.tile,
+.visual,
+.source,
+.stream-card,
+.input-card {
+  border: 0;
+}
+.tile,
+.visual,
+.source {
+  background: var(--surface-2);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+.tile[class*='tile--'] {
+  background: var(--v-bg);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), inset 0 0 0 1px var(--v-border);
+}
+.stream-card {
+  background: var(--surface-2);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045), var(--shadow-1);
+}
+.input-card {
+  background: var(--surface-2);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), var(--shadow-3);
+}
+.input-card:focus-within {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), var(--shadow-3), var(--glow-focus);
+}
+.input-foot {
+  border-top: 0;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+}
+.claim-item {
+  border: 0;
+  background: var(--surface-1);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+.claim-item:hover {
+  background: var(--surface-2);
+}
+.claim-item:active,
+.btn:active:not(:disabled),
+.chip:active,
+.pill-filter:active,
+.icon-btn:active {
+  transform: translateY(1px);
+}
+.claim-item[aria-current='true'] {
+  background: var(--surface-3);
+  box-shadow: inset 0 0 0 1px var(--accent), 0 0 18px rgba(122, 162, 255, 0.22);
+}
+.claim-q {
+  max-width: none;
+  overflow: visible;
+  white-space: nowrap;
+}
+
+/* Wordmark: a geometric mark (an arc meeting a limit line) and the name. */
+.wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.wordmark-mark {
+  display: block;
+}
+.wm-arc {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+}
+.wm-limit {
+  fill: none;
+  stroke: var(--text-secondary);
+  stroke-width: 1.4;
+  stroke-dasharray: 2 2.2;
+}
+.wm-dot {
+  fill: var(--text-primary);
+}
+
+/* Input: the hero centred in the height left under the top bar; textarea of fixed height. */
+.hero {
+  display: grid;
+  align-content: center;
+  min-height: 100%;
+  max-width: none;
+  margin: 0;
+  padding: var(--space-6) 0;
+}
+.hero-inner {
+  display: grid;
+  gap: var(--space-4);
+  width: 100%;
+  max-width: 880px;
+  margin: 0 auto;
+}
+.hero-title {
+  line-height: 1.12;
+  padding-bottom: 4px;
+}
+.wb-text {
+  height: clamp(150px, 30vh, 300px);
+  overflow-y: auto;
+}
+
+/* Claim chips: one line, short labels, horizontal scroll with edge fades. */
+.chips-scroll {
+  padding: 2px 16px !important;
+  scrollbar-width: none;
+  mask-image: linear-gradient(90deg, transparent 0, #000 16px, #000 calc(100% - 16px), transparent 100%);
+}
+.chips-scroll::-webkit-scrollbar {
+  display: none;
+}
+.claim-list {
+  margin-left: -16px;
+}
+
+/* Reading: the whole claim sentence lightly tinted, a 2px underline on the value only, the badge. */
+.reading {
+  overflow-y: auto;
+}
+.reading-p {
+  transition: opacity var(--dur) var(--ease);
+}
+.reading-p.is-pending {
+  opacity: 0.5;
+}
+.reading-p.is-current {
+  opacity: 0.8;
+}
+.sent {
+  background: var(--v-bg);
+  border-radius: 6px;
+  padding: 2px 3px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease), opacity var(--dur-fast) var(--ease);
+}
+.sent:hover {
+  background: color-mix(in srgb, var(--v) 18%, transparent);
+}
+.sent.is-selected {
+  background: color-mix(in srgb, var(--v) 20%, transparent);
+  box-shadow: 0 0 0 1px var(--v-border), 0 0 22px color-mix(in srgb, var(--v) 28%, transparent);
+}
+.sent.is-dim {
+  opacity: 0.35;
+}
+.sent:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.val {
+  font-family: var(--font-mono);
+  font-size: 0.95em;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+  background-image: linear-gradient(var(--v), var(--v));
+  background-repeat: no-repeat;
+  background-position: 0 100%;
+  background-size: 100% 2px;
+  padding-bottom: 2px;
+  animation: underline-draw 520ms var(--ease) both;
+}
+@keyframes underline-draw {
+  from {
+    background-size: 0% 2px;
+  }
+}
+.val .hl-badge {
+  margin-right: 5px;
+  font-family: var(--font-sans);
+}
+
+/* Running: stepper row, then the reading panel and the live feed side by side. */
+.run-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+.run-head .stepper {
+  flex: 1;
+  min-width: 0;
+}
+.step {
+  border: 0;
+  background: var(--surface-1);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+.step--active {
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 1px rgba(122, 162, 255, 0.45), 0 0 18px rgba(122, 162, 255, 0.14);
+}
+.run-count {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  white-space: nowrap;
+  color: var(--text-secondary);
+  font-size: var(--text-13);
+}
+.run-count .num {
+  color: var(--text-primary);
+  font-size: var(--text-20);
+  font-weight: 600;
+}
+.run-sep {
+  display: inline-block;
+  width: 1px;
+  height: 16px;
+  margin: 0 6px;
+  background: var(--border-strong);
+  align-self: center;
+}
+.feed {
+  padding: var(--space-4);
+  overflow-y: auto;
+}
+.feed .stream {
+  grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr));
+}
+
+/* Instrument: a 160 ms crossfade when switching claims; panels only with content. */
+.inst {
+  overflow-y: auto;
+}
+.inst-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-height: 100%;
+  animation: crossfade var(--dur-fast) var(--ease) both;
+}
+@keyframes crossfade {
+  from {
+    opacity: 0;
+  }
+}
+.visual--gauge {
+  flex: none !important;
+  display: grid;
+  place-items: center;
+  padding: var(--space-5) var(--space-4);
+}
+.visual--gauge app-gauge {
+  width: 100%;
+  max-width: 680px;
+}
+.visual--gauge .gauge svg {
+  max-height: min(40vh, 380px);
+}
+.visual--explorer {
+  flex: 1 0 auto;
+}
+.visual--apparatus {
+  grid-template-columns: minmax(0, 1fr) !important;
+  justify-items: center;
+}
+.visual--apparatus app-cop-apparatus,
+.visual--apparatus app-carnot-apparatus {
+  width: 100%;
+  max-width: 720px;
+}
+.visual--apparatus .apparatus-figure,
+.visual--apparatus .cop-figure svg {
+  max-height: 46vh;
+}
+.source .source-toggle {
+  border-radius: var(--radius-md);
+}
+
+/* The card of a claim without a verdict. */
+.nv {
+  display: grid;
+  gap: var(--space-3);
+}
+.nv-part {
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+.nv-h {
+  margin-bottom: var(--space-2);
+  color: var(--text-secondary);
+  font-size: var(--text-12);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.nv-list {
+  margin: 0;
+  padding-left: var(--space-5);
+  color: var(--text-secondary);
+  font-size: var(--text-13);
+  display: grid;
+  gap: 4px;
+}
+.nv-steps {
+  font-family: var(--font-mono);
+  font-size: var(--text-12);
+}
+.nv-div {
+  margin-top: var(--space-3);
+  color: var(--v-disputed);
+  font-size: var(--text-13);
+  font-weight: 500;
+}
+.cands {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.cand {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 4px;
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--surface-3);
+}
+.cand-model {
+  color: var(--text-secondary);
+  font-size: var(--text-12);
+}
+.cand-formula {
+  font-family: var(--font-mono);
+  font-size: var(--text-14);
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+.cand-bound {
+  display: flex;
+  gap: var(--space-2);
+  align-items: baseline;
+  font-size: var(--text-13);
+}
+.cand-label {
+  color: var(--text-secondary);
+}
+.supply {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+.supply-field {
+  display: grid;
+  gap: 4px;
+  color: var(--text-secondary);
+  font-size: var(--text-12);
+}
+.supply-input {
+  width: 160px;
+  height: 36px !important;
+  font-size: var(--text-14) !important;
+}
+
+@media (min-width: 1024px) and (min-height: 700px) {
+  app-workbench[data-state='input'] {
+    overflow-y: auto;
+    align-content: stretch;
+  }
+  app-workbench[data-state='running'] {
+    grid-template-rows: auto minmax(0, 1fr);
+    overflow: hidden;
+    align-content: stretch;
+  }
+  app-workbench[data-state='running'] .panes,
+  app-workbench[data-state='reviewed'] .panes {
+    min-height: 0;
+    height: 100%;
+  }
+}
+@media (min-width: 1024px) {
+  .panes {
+    grid-template-columns: minmax(0, 42fr) minmax(0, 58fr);
+  }
+}
+@media (max-width: 1023px) {
+  .run-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .wb-text {
+    height: 220px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .val {
+    background-size: 100% 2px !important;
+  }
+}

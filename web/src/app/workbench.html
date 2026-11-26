@@ -1,67 +1,64 @@
 @if (state() === 'input') {
   <section class="hero" aria-labelledby="hero-title">
-    <h1 id="hero-title" class="hero-title">{{ u.headline }}</h1>
-    <p class="hero-sub">{{ u.subline }}</p>
+    <div class="hero-inner">
+      <h1 id="hero-title" class="hero-title">{{ u.headline }}</h1>
+      <p class="hero-sub">{{ u.subline }}</p>
 
-    @if (status.state() === 'offline') {
-      <div class="notice notice--error" role="alert">
-        <p class="notice-title">{{ u.offlineTitle }}</p>
-        <p>{{ u.offlineBody }}</p>
-      </div>
-    } @else if (status.state() === 'online' && !status.extraction()) {
-      <div class="notice" role="status">
-        <p class="notice-title">{{ u.extractionOffTitle }}</p>
-        <p>{{ u.extractionOffBody }}</p>
-      </div>
-    }
-
-    <div class="input-card">
-      <label for="wb-text" class="sr-only">{{ u.inputLabel }}</label>
-      <textarea
-        id="wb-text"
-        class="wb-text"
-        [placeholder]="u.placeholder"
-        [value]="text()"
-        (input)="text.set($any($event.target).value)"
-        (drop)="onDrop($event)"
-        (dragover)="$event.preventDefault()"
-        (paste)="onPaste($event)"
-        spellcheck="false"
-      ></textarea>
-      <div class="input-foot">
-        <span class="char-count num" aria-live="polite">{{ u.chars(charCount()) }}</span>
-        <button type="button" class="btn btn-primary btn-lg wb-analyze" (click)="run()" [disabled]="!text().trim()">
-          {{ u.analyze }}
-        </button>
-      </div>
-    </div>
-
-    <div class="samples" role="group" [attr.aria-label]="u.samplesLabel">
-      <span class="samples-label">{{ u.samplesLabel }}</span>
-      @for (sm of samples; track sm.id) {
-        <button type="button" class="chip sample-chip" [attr.aria-pressed]="text() === sm.text" (click)="useSample(sm)">
-          {{ sm.label }}
-        </button>
+      @if (status.state() === 'offline') {
+        <div class="notice notice--error" role="alert">
+          <p class="notice-title">{{ u.offlineTitle }}</p>
+          <p>{{ u.offlineBody }}</p>
+        </div>
+      } @else if (status.state() === 'online' && !status.extraction()) {
+        <div class="notice" role="status">
+          <p class="notice-title">{{ u.extractionOffTitle }}</p>
+          <p>{{ u.extractionOffBody }}</p>
+        </div>
       }
-      <span class="samples-note">{{ s.inputIllustrative }}</span>
-    </div>
 
-    @if (status.vision()) {
-      <div class="dropzone" (drop)="onDrop($event)" (dragover)="$event.preventDefault()">
-        <lucide-icon [img]="icons.ImageUp" [size]="18" aria-hidden="true" />
-        <span>{{ u.dropTitle }}</span><span class="dropzone-hint" aria-hidden="true">·</span>
-        <span class="dropzone-hint">{{ u.dropHint }}</span>
+      <div class="input-card surface">
+        <label for="wb-text" class="sr-only">{{ u.inputLabel }}</label>
+        <textarea
+          id="wb-text"
+          class="wb-text"
+          [placeholder]="u.placeholder"
+          [value]="text()"
+          (input)="text.set($any($event.target).value)"
+          (drop)="onDrop($event)"
+          (dragover)="$event.preventDefault()"
+          (paste)="onPaste($event)"
+          spellcheck="false"
+        ></textarea>
+        <div class="input-foot">
+          <span class="char-count num" aria-live="polite">{{ u.chars(charCount()) }}</span>
+          <button type="button" class="btn btn-primary btn-lg wb-analyze" (click)="run()" [disabled]="!text().trim()">
+            {{ u.analyze }}
+          </button>
+        </div>
       </div>
-    }
+
+      <div class="samples" role="group" [attr.aria-label]="u.samplesLabel">
+        <span class="samples-label">{{ u.samplesLabel }}</span>
+        @for (sm of samples; track sm.id) {
+          <button type="button" class="chip sample-chip" [attr.aria-pressed]="text() === sm.text" (click)="useSample(sm)">
+            {{ sm.label }}
+          </button>
+        }
+        <span class="samples-note">{{ s.inputIllustrative }}</span>
+      </div>
+
+      @if (status.vision()) {
+        <div class="dropzone" (drop)="onDrop($event)" (dragover)="$event.preventDefault()">
+          <lucide-icon [img]="icons.ImageUp" [size]="18" aria-hidden="true" />
+          <span>{{ u.dropTitle }}</span>
+          <span class="dropzone-hint">{{ u.dropHint }}</span>
+        </div>
+      }
+    </div>
   </section>
 } @else {
   @if (state() === 'running') {
-    <section class="run" aria-live="polite" [attr.aria-label]="u.stepsLabel">
-      <div class="run-bar">
-        <p class="run-text">{{ text() }}</p>
-        <span class="run-count"><span class="num" [appCountUp]="entries().length"></span> {{ u.claimsWord }}</span>
-        <span class="run-count"><span class="num" [appCountUp]="answered()"></span> / <span class="num">{{ parts().length }}</span></span>
-      </div>
+    <section class="run-head" aria-live="polite" [attr.aria-label]="u.stepsLabel">
       <ol class="stepper">
         @for (st of u.steps; track $index; let i = $index) {
           <li class="step step--{{ stepState(i) }}" [attr.aria-current]="stepState(i) === 'active' ? 'step' : null">
@@ -71,20 +68,11 @@
           </li>
         }
       </ol>
-      <ul class="stream">
-        @for (e of entries(); track $index; let i = $index) {
-          <li class="stream-card reveal" [style.--i]="i">
-            <span class="pill pill--{{ kindOf(i) }}"><span class="pill-dot" aria-hidden="true"></span>{{ labelOf(i) }}</span>
-            <p class="stream-title">{{ titleOf(e) }}</p>
-            <p class="stream-sentence">{{ sentenceOf(i) }}</p>
-          </li>
-        }
-        @for (p of pending(); track p) {
-          <li class="stream-card skeleton" aria-hidden="true">
-            <span class="sk sk-pill"></span><span class="sk sk-line"></span><span class="sk sk-line sk-short"></span>
-          </li>
-        }
-      </ul>
+      <p class="run-count">
+        <span class="num" [appCountUp]="entries().length"></span> {{ u.claimsWord }}
+        <span class="run-sep" aria-hidden="true"></span>
+        <span class="num" [appCountUp]="answered()"></span> / <span class="num">{{ parts().length }}</span>
+      </p>
     </section>
   } @else {
     <section class="summary" [attr.aria-label]="u.summaryLabel">
@@ -94,7 +82,7 @@
       </p>
       <div class="summary-pills" role="group" [attr.aria-label]="u.filterLabel">
         <button type="button" class="chip filter-pill" [attr.aria-pressed]="filter() === null" (click)="setFilter(null)">
-          {{ u.filterAll }} <span class="num">{{ entries().length }}</span>
+          {{ u.filterAll }} <span class="num" [appCountUp]="entries().length"></span>
         </button>
         @for (c of board().counts; track c.kind) {
           <button
@@ -103,7 +91,7 @@
             [attr.aria-pressed]="filter() === c.kind"
             (click)="setFilter(c.kind)"
           >
-            <span class="pill-dot" aria-hidden="true"></span>{{ c.label }} <span class="num">{{ c.count }}</span>
+            <span class="pill-dot" aria-hidden="true"></span>{{ c.label }} <span class="num" [appCountUp]="c.count"></span>
           </button>
         }
       </div>
@@ -118,29 +106,17 @@
       </div>
     </section>
 
-    @if (entries().length === 0) {
-      <section class="empty card" role="status">
-        <p class="empty-title">{{ u.emptyTitle }}</p>
-        <p>{{ u.emptyBody }}</p>
-        <button type="button" class="btn btn-primary" (click)="newAnalysis()">{{ u.newAnalysis }}</button>
-      </section>
-    } @else {
+    @if (entries().length > 0) {
       <nav class="claim-list" [attr.aria-label]="u.listLabel">
-        <ul>
+        <ul class="chips-scroll">
           @for (e of entries(); track $index; let i = $index) {
             @if (isVisible(i)) {
               <li>
-                <button
-                  type="button"
-                  class="claim-item"
-                  [attr.aria-current]="selected() === i ? 'true' : null"
-                  (click)="select(i)"
-                >
+                <button type="button" class="claim-item" [attr.aria-current]="selected() === i ? 'true' : null" (click)="select(i)">
                   <span class="vdot vdot--{{ kindOf(i) }}" aria-hidden="true"></span>
                   <span class="claim-n num">{{ i + 1 }}</span>
-                  <span class="claim-q" [attr.title]="quantityOf(e)">{{ quantityOf(e) }}</span>
-                  <span class="claim-v num">{{ valueOf(e) }}</span>
-                  <span class="sr-only">{{ labelOf(i) }}</span>
+                  <span class="claim-q">{{ chipOf(e) }}</span>
+                  <span class="sr-only">{{ quantityOf(e) }}, {{ labelOf(i) }}</span>
                 </button>
               </li>
             }
@@ -148,161 +124,264 @@
         </ul>
         <span class="nav-hint">{{ u.navHint }}</span>
       </nav>
+    }
+  }
 
-      <div class="panes">
-        <article class="pane reading" [attr.aria-label]="u.readingLabel">
-          @for (p of reading(); track $index) {
-            <p class="reading-p">@for (g of p.segments; track $index) {@if (g.claim !== null) {<mark
-                    class="hl hl--{{ kindOf(g.claim) }}"
-                    [class.is-selected]="g.claim === selected()"
-                    [class.is-dim]="!isVisible(g.claim)"
-                    role="button"
-                    tabindex="0"
-                    [attr.aria-label]="(g.claim + 1) + ', ' + labelOf(g.claim) + ': ' + g.text"
-                    (click)="select(g.claim)"
-                    (keydown.enter)="select(g.claim)"
-                    (keydown.space)="$event.preventDefault(); select(g.claim)"
-                  ><sup class="hl-badge num">{{ g.claim + 1 }}</sup>{{ g.text }}</mark>} @else {<span>{{ g.text }}</span>}}</p>
-          }
-        </article>
+  @if (state() === 'reviewed' && entries().length === 0) {
+    <section class="empty surface" role="status">
+      <p class="empty-title">{{ u.emptyTitle }}</p>
+      <p>{{ u.emptyBody }}</p>
+      <button type="button" class="btn btn-primary" (click)="newAnalysis()">{{ u.newAnalysis }}</button>
+    </section>
+  } @else {
+    <div class="panes">
+      <article class="pane reading surface" [attr.aria-label]="running() ? u.readingRunning : u.readingLabel">
+        @for (p of reading(); track $index; let k = $index) {
+          <p class="reading-p" [class.is-pending]="running() && k >= answered()" [class.is-current]="running() && k === answered()">
+            @for (st of p.sentences; track $index) {
+              @if (st.claim !== null) {
+                <span
+                  class="sent hl--{{ kindOf(st.claim) }}"
+                  [class.is-selected]="!running() && st.claims.includes(selected())"
+                  [class.is-dim]="!running() && !isVisible(st.claim)"
+                  (click)="!running() && select(st.claim)"
+                  (keydown.enter)="select(st.claim)"
+                  [attr.role]="running() ? null : 'button'"
+                  [attr.tabindex]="running() ? null : 0"
+                  [attr.aria-label]="running() ? null : (st.claim + 1) + ', ' + labelOf(st.claim)"
+                >@for (g of st.pieces; track $index) {@if (g.claim !== null) {<span class="val hl--{{ kindOf(g.claim) }}"><sup class="hl-badge num">{{ g.claim + 1 }}</sup>{{ g.text }}</span>} @else {<span>{{ g.text }}</span>}}</span>{{ ' ' }}
+              } @else {
+                <span class="sent-plain">@for (g of st.pieces; track $index) {{{ g.text }}}</span>{{ ' ' }}
+              }
+            }
+          </p>
+        }
+      </article>
 
-        <section class="pane inst" [attr.aria-label]="u.instrumentLabel" aria-live="polite">
-          @if (entry(); as e) {
-            <header class="inst-head">
-              <span class="pill pill--{{ kindOf(selected()) }} pill-lg inst-pill"><span class="pill-dot" aria-hidden="true"></span>{{ labelOf(selected()) }}</span>
-              <div class="inst-title">
-                <h2 class="inst-q">{{ quantityOf(e) }}</h2>
-                @if (limit(); as l) {
-                  <p class="inst-law">{{ l.title }} · <span class="mono">{{ l.formula }}</span></p>
-                }
-              </div>
-              <div class="inst-nav">
-                <button type="button" class="icon-btn" (click)="move(-1)" [attr.aria-label]="u.previous">
-                  <lucide-icon [img]="icons.ChevronLeft" [size]="16" aria-hidden="true" />
-                </button>
-                <span class="num inst-pos">{{ selected() + 1 }} / {{ entries().length }}</span>
-                <button type="button" class="icon-btn" (click)="move(1)" [attr.aria-label]="u.next">
-                  <lucide-icon [img]="icons.ChevronRight" [size]="16" aria-hidden="true" />
-                </button>
-              </div>
-            </header>
-            <p class="inst-sentence">{{ sentenceOf(selected()) }}</p>
-            @if (claim(); as c) {
-              @for (line of explanation(); track $index) {
-                <p class="inst-note">{{ line }}</p>
-              }
-              @if (solved()[selected()]; as sv) {
-                <p class="inst-note inst-solve">{{ sv }}</p>
-              }
-              @if (c.result) {
-                <p class="inst-wording"><span class="inst-wording-label">{{ u.engineWording }}</span> <span class="wording">{{ c.result.wording }}</span></p>
-              }
-              <dl class="tiles">
-                <div class="tile">
-                  <dt>{{ u.metricClaim }}</dt>
-                  <dd class="num tile-n">{{ claimText(c) }}</dd>
-                </div>
-                <div class="tile">
-                  <dt>{{ u.metricBound }}</dt>
-                  <dd class="num tile-n">{{ bound(c) }}</dd>
-                </div>
-                <div class="tile tile--{{ kindOf(selected()) }}">
-                  <dt>{{ u.metricRatio }}</dt>
-                  <dd class="num tile-n">{{ ratio(c) }}</dd>
-                </div>
-              </dl>
-              <div class="visual" [class.visual--apparatus]="c.limit_id === 'cop' || c.limit_id === 'carnot'">
-                @switch (visual()) {
-                  @case ('gauge') {
-                    <div class="visual-main">
-                      <app-gauge [claim]="c.value ?? 0" [bounds]="gaugeBounds()" [unit]="c.unit === 'dimensionless' ? '' : c.unit" />
-                    </div>
-                  }
-                  @case ('explorer') {
-                    <div class="visual-main">
-                      <app-explorer [claim]="c" [limit]="limit()" />
-                    </div>
-                  }
-                  @default {
-                    <p class="visual-empty">{{ s.explorerUnavailable }}</p>
-                  }
-                }
-                @if (c.limit_id === 'carnot') {
-                  <div class="visual-side">
-                    <app-carnot-apparatus [th]="paramText(c, 'Th')" [tc]="paramText(c, 'Tc')" [claim]="number(c.value)" />
-                  </div>
-                } @else if (c.limit_id === 'cop') {
-                  <div class="visual-side">
-                    <app-cop-apparatus
-                      [th]="paramText(c, 'Th')"
-                      [tc]="paramText(c, 'Tc')"
-                      [claim]="number(c.value)"
-                      [mode]="c.constraints['mode'] === 'cooling' ? 'cooling' : c.constraints['mode'] === 'heating' ? 'heating' : ''"
-                      [twinVerdicts]="twinOf(selected())"
-                      [evaluated]="true"
-                    />
-                  </div>
-                }
-              </div>
-              <div class="source">
-                <button
-                  type="button"
-                  class="source-toggle"
-                  [attr.aria-expanded]="sourceOpen()"
-                  aria-controls="source-panel"
-                  (click)="sourceOpen.set(!sourceOpen())"
-                >
-                  <span>{{ u.source }}</span>
-                  <span class="source-peek">{{ badgeOf(c) }}{{ classOf(c) ? ', ' + classOf(c) : '' }}</span>
-                  <lucide-icon class="source-chevron" [img]="icons.ChevronDown" [size]="16" aria-hidden="true" />
-                </button>
-                <div id="source-panel" class="source-panel" [hidden]="!sourceOpen()">
-                  <dl class="facts">
-                    <dt>{{ u.sourceDomain }}</dt>
-                    <dd>{{ limit()?.validity_domain || u.sourceNone }}</dd>
-                    <dt>{{ u.sourceQuote }}</dt>
-                    <dd class="source-quote">
-                      <q>{{ c.evidence?.text ?? '' }}</q>
-                      @if (c.evidence?.text) {
-                        <button type="button" class="icon-btn icon-btn-sm" (click)="copyQuote(c.evidence?.text ?? '')" [attr.aria-label]="u.copy">
-                          <lucide-icon [img]="icons.Copy" [size]="14" aria-hidden="true" />
-                        </button>
-                      }
-                    </dd>
-                    <dt>{{ u.sourceDate }}</dt>
-                    <dd class="num">{{ analysedAt() }}</dd>
-                    <dt>{{ u.sourceStatus }}</dt>
-                    <dd>{{ badgeOf(c) }}@if (c.result) {, engine {{ c.result.engine_version }}}</dd>
-                    @if (c.law?.sentence) {
-                      <dt>{{ u.sourceLaw }}</dt>
-                      <dd>{{ c.law?.sentence }}</dd>
+      @if (state() === 'running') {
+        <section class="pane feed" [attr.aria-label]="u.feedLabel" aria-live="polite">
+          <ul class="stream">
+            @for (e of entries(); track $index; let i = $index) {
+              <li class="stream-card surface reveal" [style.--i]="i">
+                <span class="pill pill--{{ kindOf(i) }}"><span class="pill-dot" aria-hidden="true"></span>{{ labelOf(i) }}</span>
+                <p class="stream-title">{{ titleOf(e) }}</p>
+                <p class="stream-sentence">{{ sentenceOf(i) }}</p>
+              </li>
+            }
+            @for (p of pending(); track p) {
+              <li class="stream-card surface skeleton" aria-hidden="true">
+                <span class="sk sk-pill"></span><span class="sk sk-line"></span><span class="sk sk-line sk-short"></span>
+              </li>
+            }
+          </ul>
+        </section>
+      } @else {
+        <section class="pane inst surface" [attr.aria-label]="u.instrumentLabel" aria-live="polite">
+          @for (key of [selected()]; track key) {
+            <div class="inst-body">
+              @if (entry(); as e) {
+                <header class="inst-head">
+                  <span class="pill pill--{{ kindOf(selected()) }} pill-lg inst-pill"><span class="pill-dot" aria-hidden="true"></span>{{ labelOf(selected()) }}</span>
+                  <div class="inst-title">
+                    <h2 class="inst-q">{{ quantityOf(e) }}</h2>
+                    @if (limit(); as l) {
+                      <p class="inst-law">{{ l.title }} · <span class="mono">{{ l.formula }}</span></p>
                     }
-                    <dt>{{ u.sourceReferences }}</dt>
-                    <dd>
-                      @if (limit()?.references?.length) {
-                        <ul class="refs">
-                          @for (r of limit()?.references ?? []; track $index) {
-                            <li>{{ r }}</li>
+                  </div>
+                  <div class="inst-nav">
+                    <button type="button" class="icon-btn" (click)="move(-1)" [attr.aria-label]="u.previous">
+                      <lucide-icon [img]="icons.ChevronLeft" [size]="16" aria-hidden="true" />
+                    </button>
+                    <span class="num inst-pos">{{ selected() + 1 }} / {{ entries().length }}</span>
+                    <button type="button" class="icon-btn" (click)="move(1)" [attr.aria-label]="u.next">
+                      <lucide-icon [img]="icons.ChevronRight" [size]="16" aria-hidden="true" />
+                    </button>
+                  </div>
+                </header>
+
+                @if (card(); as cd) {
+                  <div class="nv">
+                    <section class="nv-part">
+                      <h3 class="nv-h">{{ u.happened }}</h3>
+                      <p class="inst-sentence">{{ cd.happened }}</p>
+                    </section>
+
+                    @if (cd.kind === 'disputed') {
+                      <section class="nv-part">
+                        <h3 class="nv-h">{{ u.candidates }}</h3>
+                        <ul class="cands">
+                          @for (k of cd.candidates; track $index) {
+                            <li class="cand">
+                              <span class="cand-model mono">{{ k.model }}</span>
+                              <code class="cand-formula">{{ k.formula }}</code>
+                              <span class="cand-bound">
+                                <span class="cand-label">{{ u.candidateBound }}</span>
+                                @if (k.bound !== null) {
+                                  <span class="num">{{ sci(k.bound) }} {{ claim()?.unit === 'dimensionless' ? '' : claim()?.unit }}</span>
+                                } @else {
+                                  <span class="muted">{{ u.candidateNoBound }}{{ k.note ? ': ' + k.note : '' }}</span>
+                                }
+                              </span>
+                            </li>
                           }
                         </ul>
-                      } @else {
-                        {{ u.sourceNone }}
-                      }
-                    </dd>
+                        @if (cd.divergence !== null) {
+                          <p class="nv-div">{{ u.divergence(percent(cd.divergence)) }}</p>
+                        }
+                      </section>
+                    }
+
+                    @if (cd.kind === 'needs' && cd.missing.length) {
+                      <section class="nv-part">
+                        <h3 class="nv-h">{{ u.settle }}</h3>
+                        <p class="inst-note">{{ cd.settle }}</p>
+                        <form class="supply" (submit)="$event.preventDefault(); reevaluate(cd)">
+                          @for (m of cd.missing; track m.id) {
+                            <label class="supply-field">
+                              <span>{{ u.supplyLabel(m.label, m.unit) }}</span>
+                              <input
+                                type="text"
+                                inputmode="decimal"
+                                class="supply-input num"
+                                [attr.name]="'supply-' + m.id"
+                                [value]="supplied()[m.id] || ''"
+                                (input)="supply(m.id, $any($event.target).value)"
+                                autocomplete="off"
+                              />
+                            </label>
+                          }
+                          <button type="submit" class="btn btn-primary reevaluate" [disabled]="!canReevaluate(cd) || reevaluating()">
+                            {{ reevaluating() ? u.reevaluating : u.reevaluate }}
+                          </button>
+                        </form>
+                      </section>
+                    } @else {
+                      <section class="nv-part">
+                        <h3 class="nv-h">{{ u.settle }}</h3>
+                        <p class="inst-note">{{ cd.settle }}</p>
+                      </section>
+                    }
+
+                    @if (cd.sources.length) {
+                      <section class="nv-part">
+                        <h3 class="nv-h">{{ u.sourcesSearched }}</h3>
+                        <ul class="nv-list">
+                          @for (src of cd.sources; track $index) {
+                            <li>{{ src }}</li>
+                          }
+                        </ul>
+                      </section>
+                    }
+
+                    <section class="nv-part">
+                      <h3 class="nv-h">{{ u.tried }}</h3>
+                      <ol class="nv-list nv-steps">
+                        @for (t of cd.tried; track $index) {
+                          <li>{{ t }}</li>
+                        }
+                      </ol>
+                    </section>
+                  </div>
+                } @else if (claim(); as c) {
+                  <p class="inst-sentence">{{ sentenceOf(selected()) }}</p>
+                  @for (line of explanation(); track $index) {
+                    <p class="inst-note">{{ line }}</p>
+                  }
+                  @if (solved()[selected()]; as sv) {
+                    <p class="inst-note inst-solve">{{ sv }}</p>
+                  }
+                  @if (c.result) {
+                    <p class="inst-wording"><span class="inst-wording-label">{{ u.engineWording }}</span> <span class="wording">{{ c.result.wording }}</span></p>
+                  }
+                  <dl class="tiles">
+                    <div class="tile">
+                      <dt>{{ u.metricClaim }}</dt>
+                      <dd class="num tile-n">{{ claimText(c) }}</dd>
+                    </div>
+                    <div class="tile">
+                      <dt>{{ u.metricBound }}</dt>
+                      <dd class="num tile-n">{{ bound(c) }}</dd>
+                    </div>
+                    <div class="tile tile--{{ kindOf(selected()) }}">
+                      <dt>{{ u.metricRatio }}</dt>
+                      <dd class="num tile-n">{{ ratio(c) }}</dd>
+                    </div>
                   </dl>
-                </div>
-              </div>
-            } @else if (e.kind === 'failure') {
-              <div class="notice notice--error">
-                <p class="notice-title mono">{{ e.failure.code }}</p>
-                <p>{{ e.failure.message }}</p>
-                <p class="inst-note">{{ e.text }}</p>
-              </div>
-            }
+                  @if (visual() !== 'none') {
+                    <div class="visual visual--{{ visual() }}">
+                      @switch (visual()) {
+                        @case ('gauge') {
+                          <app-gauge [claim]="c.value ?? 0" [bounds]="gaugeBounds()" [unit]="c.unit === 'dimensionless' ? '' : c.unit" />
+                        }
+                        @case ('explorer') {
+                          <app-explorer [claim]="c" [limit]="limit()" />
+                        }
+                        @case ('apparatus') {
+                          @if (c.limit_id === 'carnot') {
+                            <app-carnot-apparatus [th]="paramText(c, 'Th')" [tc]="paramText(c, 'Tc')" [claim]="number(c.value)" />
+                          } @else {
+                            <app-cop-apparatus
+                              [th]="paramText(c, 'Th')"
+                              [tc]="paramText(c, 'Tc')"
+                              [claim]="number(c.value)"
+                              [mode]="c.constraints['mode'] === 'cooling' ? 'cooling' : c.constraints['mode'] === 'heating' ? 'heating' : ''"
+                              [twinVerdicts]="twinOf(selected())"
+                              [evaluated]="true"
+                            />
+                          }
+                        }
+                      }
+                    </div>
+                  }
+                  <div class="source">
+                    <button type="button" class="source-toggle" [attr.aria-expanded]="sourceOpen()" aria-controls="source-panel" (click)="sourceOpen.set(!sourceOpen())">
+                      <span>{{ u.source }}</span>
+                      <span class="source-peek">{{ badgeOf(c) }}{{ classOf(c) ? ', ' + classOf(c) : '' }}</span>
+                      <lucide-icon class="source-chevron" [img]="icons.ChevronDown" [size]="16" aria-hidden="true" />
+                    </button>
+                    <div id="source-panel" class="source-panel" [hidden]="!sourceOpen()">
+                      <dl class="facts">
+                        <dt>{{ u.sourceDomain }}</dt>
+                        <dd>{{ limit()?.validity_domain || u.sourceNone }}</dd>
+                        <dt>{{ u.sourceQuote }}</dt>
+                        <dd class="source-quote">
+                          <q>{{ c.evidence?.text ?? '' }}</q>
+                          @if (c.evidence?.text) {
+                            <button type="button" class="icon-btn icon-btn-sm" (click)="copyQuote(c.evidence?.text ?? '')" [attr.aria-label]="u.copy">
+                              <lucide-icon [img]="icons.Copy" [size]="14" aria-hidden="true" />
+                            </button>
+                          }
+                        </dd>
+                        <dt>{{ u.sourceDate }}</dt>
+                        <dd class="num">{{ analysedAt() }}</dd>
+                        <dt>{{ u.sourceStatus }}</dt>
+                        <dd>{{ badgeOf(c) }}@if (c.result) {, engine {{ c.result.engine_version }}}</dd>
+                        @if (c.law?.sentence) {
+                          <dt>{{ u.sourceLaw }}</dt>
+                          <dd>{{ c.law?.sentence }}</dd>
+                        }
+                        <dt>{{ u.sourceReferences }}</dt>
+                        <dd>
+                          @if (limit()?.references?.length) {
+                            <ul class="refs">
+                              @for (r of limit()?.references ?? []; track $index) {
+                                <li>{{ r }}</li>
+                              }
+                            </ul>
+                          } @else {
+                            {{ u.sourceNone }}
+                          }
+                        </dd>
+                      </dl>
+                    </div>
+                  </div>
+                }
+              }
+            </div>
           }
         </section>
-      </div>
-    }
+      }
+    </div>
   }
 }
 

@@ -34,6 +34,21 @@ fileMatchPattern: "web/**"
 - Designed states: empty, loading, error toasts, offline, extraction unavailable (the built-in samples still work through the engine), and the "Download review" Markdown report.
 - Both panes fit at 1920x1080 and 1440x900 without page scroll. A pane may scroll internally only for overflow content, with a thin styled scrollbar. Below 1024px everything stacks.
 
+## Review details (polish pass)
+- Highlights: the whole claim sentence gets a light verdict tint. Only the value gets the 2px underline, drawn with an animation, plus the numbered badge. The selected sentence glows softly in its verdict color.
+- Claim chips: short labels only, never cut with an ellipsis. They show the law's short quantity name (`UI.short`, or the first two words of the quantity) and the value, in one horizontal scroll row with edge fades.
+- Running state: split view. The reading panel on the left shows paragraphs not yet answered dimmed. The live feed on the right shows claim cards and skeletons. The stepper moves only on real events: a request sent, an answer that carries the server's law identification, the limits loaded, the solver done.
+- A claim without a verdict (disputed, needs input, no law, not analysed) never shows empty metric tiles or an empty visual. It shows a card instead:
+  - "What happened".
+  - "What was tried": the trace, one short line per step.
+  - "What would settle it".
+  - Disputed: both candidate formulas and their engine-computed bounds at the claim, with the divergence.
+  - Needs input: an input for each missing quantity and "Re-evaluate", which calls `POST /v1/evaluate`.
+  - No law: the sources searched.
+- A claim with a verdict shows exactly one visual: the Carnot or COP apparatus, the gauge (Max law without parameters), or the curve explorer. A panel with no content is not rendered.
+- Surfaces: background steps and a faint top inset highlight instead of borders. The instrument crossfades over 160 ms when the claim changes. The wordmark is a small SVG mark (an arc meeting a dashed limit line) next to the name.
+- The DOM check (`web/e2e/ui.spec.ts`) also fails on a scroll container nested in another one, and on a key element overflowing its box.
+
 ## Charts and apparatus
 - Keep every computation and geometry function. Restyle only.
 - Curve and map: a smooth accent line, and the region inconsistent with the law filled with the impossible color at 14% over a subtle diagonal pattern. Direct labels, a crosshair readout that follows the pointer, and an animated claim line.

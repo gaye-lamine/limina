@@ -3,7 +3,13 @@ import { LIMITS } from './testing-fixtures';
 import {
   Entry,
   filtered,
+  noVerdict,
   plainSentence,
+  readNumber,
+  readingSentences,
+  sentenceRanges,
+  shortLabel,
+  valueRange,
   ratioText,
   reviewMarkdown,
   segments,
@@ -80,6 +86,89 @@ describe('segments of the text', () => {
       { index: 2, claim: claimOf({ evidence: { text: 'x', start: 40, end: 41 } }) },
     ]);
     expect(s.filter((g) => g.claim !== null).map((g) => g.claim)).toEqual([0]);
+  });
+});
+
+describe('short labels, sentences and values', () => {
+  it('labels a claim with the short name of its law and its value, never cut', () => {
+    expect(shortLabel(entry('IMPOSSIBLE'))).toBe('efficiency 60.0 %');
+    const noLawEntry: Entry = { kind: 'claim', claim: claimOf({ limit_id: null, quantity: 'position-momentum uncertainty product', raw_value: 5, raw_unit: 'kWh/kg' }), paragraph: 1 };
+    expect(shortLabel(noLawEntry)).toBe('position momentum 5.00 kWh/kg');
+    expect(shortLabel(failure)).toBe('Paragraph 3');
+  });
+
+  it('reads numbers as written, powers of ten included', () => {
+    expect(readNumber('3.6e8')).toBe(3.6e8);
+    expect(readNumber('1 × 10⁻²⁴')).toBe(1e-24);
+    expect(readNumber('1,4')).toBe(1.4);
+    expect(Number.isNaN(readNumber('abc'))).toBe(true);
+  });
+
+  it('cuts a paragraph into sentences and finds the value inside the evidence', () => {
+    const text = 'The probe cruises at 3.6e8 m/s. It weighs 2 kg.';
+    expect(sentenceRanges(text)).toEqual([
+      { start: 0, end: 31 },
+      { start: 32, end: 47 },
+    ]);
+    const c = claimOf({ raw_value: 3.6e8, evidence: { text: 'cruises at 3.6e8 m/s', start: 10, end: 30 } });
+    expect(valueRange(text, c)).toEqual({ start: 21, end: 26 });
+    const s = readingSentences(text, [{ index: 0, claim: c }]);
+    expect(s[0].claim).toBe(0);
+    expect(s[0].pieces).toEqual([
+      { text: 'The probe cruises at ', claim: null },
+      { text: '3.6e8', claim: 0 },
+      { text: ' m/s.', claim: null },
+    ]);
+    expect(s[1].claim).toBeNull();
+  });
+});
+
+describe('the card of a claim without a verdict', () => {
+  it('is null for a claim with a verdict', () => {
+    expect(noVerdict(entry('IMPOSSIBLE'), LIMITS)).toBeNull();
+  });
+
+  it('lists the missing quantities for insufficient data', () => {
+    const card = noVerdict(entry('INSUFFICIENT_DATA'), LIMITS)!;
+    expect(card.kind).toBe('needs');
+    expect(card.missing.map((m) => m.id)).toEqual(['Tc']);
+    expect(card.missing[0].unit).toBe('K');
+    expect(card.settle).toContain('Enter it below');
+  });
+
+  it('gives both candidates and their divergence for a disputed law', () => {
+    const e: Entry = {
+      kind: 'claim',
+      claim: claimOf({
+        limit_id: null,
+        result: null,
+        law: {
+          source: 'draft_disputed',
+          limit_id: null,
+          sentence: 's',
+          comparison: null,
+          attempts: [
+            { model: 'a', ok: true, attempts: 1, errors: [], definition: { id: 'a', title: 'a', direction: 'max', formula: 'c' }, bound_at_claim: 100 },
+            { model: 'b', ok: false, attempts: 3, errors: ['dimension mismatch'], definition: null, bound_at_claim: null },
+          ],
+        },
+      }),
+      paragraph: 1,
+    };
+    const card = noVerdict(e, LIMITS)!;
+    expect(card.kind).toBe('disputed');
+    expect(card.candidates.map((k) => [k.model, k.formula, k.bound])).toEqual([
+      ['a', 'c', 100],
+      ['b', 'dimension mismatch', null],
+    ]);
+    expect(card.divergence).toBeNull();
+  });
+
+  it('names the sources searched for a claim with no law', () => {
+    const card = noVerdict(noLaw, LIMITS)!;
+    expect(card.kind).toBe('nolaw');
+    expect(card.sources[0]).toContain(`${LIMITS.length} laws`);
+    expect(card.settle).toContain('added to the library');
   });
 });
 
