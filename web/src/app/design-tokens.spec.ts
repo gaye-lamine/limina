@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { contrast } from './testing-contrast';
 
 const tokens = readFileSync(resolve(process.cwd(), 'src/tokens.css'), 'utf8');
 
@@ -8,14 +9,6 @@ function hex(name: string): [number, number, number] {
   const m = tokens.match(new RegExp(`--${name}:\\s*(#[0-9a-fA-F]{6})`));
   if (!m) throw new Error(`token --${name} is not a hex color`);
   return [1, 3, 5].map((i) => parseInt(m[1].slice(i, i + 2), 16) / 255) as [number, number, number];
-}
-const lin = (c: number) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
-const lum = (c: number[]) => 0.2126 * lin(c[0]) + 0.7152 * lin(c[1]) + 0.0722 * lin(c[2]);
-/** WCAG 2.2 contrast ratio. */
-export function contrast(a: number[], b: number[]): number {
-  const x = lum(a);
-  const y = lum(b);
-  return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
 }
 /** `fg` at `alpha` over `bg`. */
 const over = (fg: number[], bg: number[], alpha: number) => fg.map((v, i) => v * alpha + bg[i] * (1 - alpha));

@@ -40,6 +40,14 @@
 
 `ngOnDestroy` cancels the animation frame, disconnects the `ResizeObserver`, removes listeners, disposes the orbit controls, walks the scene and disposes every geometry, material and texture, disposes the renderer, forces the context loss and removes the canvas.
 
+Switching between the physical apparatus and the mathematical boundary clears the other view's group with the same release walk (`releaseObject` on every object), so the GPU holds one view at a time. The observatory writes `renderer.info.memory` (geometries, textures) on the stage twice a second; the end-to-end test checks that four round trips leave these counts unchanged.
+
+## 6b. Dual view (R-11, R-12)
+- `apparatus.ts` (pure): `apparatusFor(limit)` scores each bench: claim unit 2 (a ratio claim 1 for `flow`, an efficiency), each parameter 1 by its first unit of a bench, a temperature parameter 3 for `flow`, a label cue 3 (`wave`: wavelength, frequency, aperture, bandwidth, signal-to-noise, resolution; `quantum`: level, quantum, half-life, decay, lifetime, uncertainty). Highest score wins; ties go to the more specific bench (wave, quantum, trajectory, flow); no score gives `quantum`. Helpers find the level, mass, spectral and aperture parameters by their metadata and compute what the benches draw (flow shares, converter speed, well depth, Lorentz squash, spectrum colour, Airy pattern with J1 by Simpson's rule, peak separation, n² shells, packet agitation).
+- `apparatus-view.ts`: `ApparatusView` draws one bench in the observatory's stage and returns its state (`flowing`, `collapsed`, `escapes`, `falls`, `resolved`, `merged`, `shells`, `packet`), exposed as `data-bench` with `data-view` and `data-apparatus` on the stage for the end-to-end checks.
+- The page keeps one `mode` signal; `redraw()` draws the active view and clears the other. The text alternative of the stage describes the active view.
+- Routing by the 35 built-in laws (verified, not coded): energy bench for Carnot, COP, Betz, Shockley-Queisser, Landauer, Stefan-Boltzmann, mass-energy, power conservation, Eddington, luminous efficacy, energy-momentum; optics bench for Abbe, Rayleigh, Shannon-Hartley, both photon energies, Friedmann (a rate in Hz); quantum bench for hydrogen levels, Heisenberg, de Broglie, radioactive decay; field bench for the others.
+
 ## 6. Decisions
 
 - D-01 The laboratory sends units the core parses only (the declared ones and the core units of the same dimension). The reading-time conversions of `limina-extract` (°C, ft, solar masses) are not available through these routes, and the Rust code is not changed.

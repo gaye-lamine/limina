@@ -24,3 +24,10 @@
 - [x] 4.1 Find Breaking Point (`/v1/solve`), with the cases the route cannot answer.
 - [x] 4.2 Inspect in 3D Lab from the workbench.
 - [x] 4.3 Playwright: lab screens at the three sizes, DOM checks, keyboard path; WebGL release checked by navigating away and back. (1920x1080, 1440x900, 768x1024, 390x844; context count checked on /laboratory, /, /laboratory.)
+
+## Phase 5: dual view (physical apparatus and mathematical boundary)
+- [x] 5.1 Segmented control Physical apparatus (default) / Mathematical boundary, radio group with arrow keys; the stage's text alternative describes the active view.
+- [x] 5.2 `apparatus.ts` (pure): `apparatusFor(limit)` from units, parameter kinds and labels only, with the drawing quantities; unit tests over the four benches and an unseen draft.
+- [x] 5.3 `apparatus-view.ts`: energy, field, optics and quantum benches, driven by the same controls, Find Breaking Point, Dual Probe and Inspect in 3D Lab.
+- [x] 5.4 Switching releases the other view; e2e checks the GPU geometry count over four round trips and the WebGL context on /laboratory, /, /laboratory.
+- [x] 5.5 Test runner: `vitest-base.config.ts` (two workers, 15 s timeouts) via `runnerConfig`; `claimOf` and `contrast` moved out of spec files into `testing-fixtures.ts` and `testing-contrast.ts` (importing a spec from another spec made Vitest report "No test suite found" and run its tests twice).

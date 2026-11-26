@@ -17,7 +17,7 @@ import {
   valuesUsed,
 } from './review-format';
 import { LIMITS } from './testing-fixtures';
-import { claimOf } from './workbench-logic.spec';
+import { claimOf } from './testing-fixtures';
 
 const carnot = LIMITS.find((l) => l.id === 'carnot')!;
 const betz = LIMITS.find((l) => l.id === 'betz')!;

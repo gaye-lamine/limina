@@ -64,6 +64,12 @@ async function openLab(page: Page): Promise<void> {
   await expect(page.locator('.lab-verdict')).toHaveText(VERDICT, { timeout: 30_000 });
 }
 
+/** Picks one of the two views with its segmented control, and waits for the stage to show it. */
+async function showView(page: Page, mode: 'apparatus' | 'boundary'): Promise<void> {
+  await page.locator(`.lab-segment[data-mode='${mode}']`).click();
+  await expect(page.locator('.lab-stage')).toHaveAttribute('data-view', mode);
+}
+
 async function domChecks(page: Page, desktop: boolean): Promise<string[]> {
   return page.evaluate(
     ({ keys, desktop }) => {
@@ -105,6 +111,7 @@ test('the laboratory opens, changes law and evaluates live', async ({ page }) =>
   const law = page.locator('select.lab-law');
   const verdict = page.locator('.lab-verdict');
   const stage = page.locator('.lab-stage');
+  await showView(page, 'boundary');
 
   // Carnot starts with a heat engine cycle chosen, so it has a verdict.
   await law.selectOption('carnot');
@@ -152,6 +159,7 @@ test('the corridor marks the values where the law does not apply', async ({ page
   await page.setViewportSize({ width: 1440, height: 900 });
   await openLab(page);
   const stage = page.locator('.lab-stage');
+  await showView(page, 'boundary');
   // Hydrogen levels: the quantum number must be at least 1; typing 0.2 widens the corridor below it.
   await page.locator('select.lab-law').selectOption('hydrogen_levels');
   await expect(stage).toHaveAttribute('data-topology', 'corridor', { timeout: 30_000 });
@@ -165,6 +173,103 @@ test('the corridor marks the values where the law does not apply', async ({ page
   await expect(stage).toHaveAttribute('aria-label', /where the law does not apply/);
   await page.waitForTimeout(600);
   await page.screenshot({ path: join(OUT, 'laboratory-corridor-1440x900.png') });
+});
+
+test('the physical apparatus is the default view and follows the engine', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openLab(page);
+  const law = page.locator('select.lab-law');
+  const verdict = page.locator('.lab-verdict');
+  const stage = page.locator('.lab-stage');
+  await expect(stage).toHaveAttribute('data-view', 'apparatus');
+  await expect(page.locator(".lab-segment[data-mode='apparatus']")).toHaveAttribute('aria-checked', 'true');
+
+  // Carnot: the energy bench; past the limit the rejected flow collapses behind a barrier.
+  await law.selectOption('carnot');
+  await expect(verdict).toHaveText(VERDICT, { timeout: 30_000 });
+  await expect(stage).toHaveAttribute('data-apparatus', 'flow');
+  const track = page.locator('#lab-track-claim');
+  await track.focus();
+  await track.press('End');
+  await expect(verdict).toHaveText('IMPOSSIBLE', { timeout: 30_000 });
+  await expect(stage).toHaveAttribute('data-bench', 'collapsed', { timeout: 30_000 });
+  await page.waitForTimeout(600);
+  await page.screenshot({ path: join(OUT, 'laboratory-apparatus-flow-1440x900.png') });
+  await track.press('Home');
+  await expect(verdict).toHaveText(/^(COMPATIBLE|CONDITIONAL)$/, { timeout: 30_000 });
+  await expect(stage).toHaveAttribute('data-bench', 'flowing', { timeout: 30_000 });
+
+  // The same values drive the mathematical boundary, and back, by keyboard.
+  await showView(page, 'boundary');
+  await expect(stage).toHaveAttribute('data-topology', 'surface');
+  await expect(stage).not.toHaveAttribute('data-bench', /.+/);
+  await page.locator(".lab-segment[data-mode='boundary']").press('ArrowLeft');
+  await expect(stage).toHaveAttribute('data-view', 'apparatus');
+  await expect(page.locator(".lab-segment[data-mode='apparatus']")).toBeFocused();
+  await expect(verdict).toHaveText(/^(COMPATIBLE|CONDITIONAL)$/);
+  expect((await page.locator('.lab').innerText()).toLowerCase()).not.toMatch(TECH);
+});
+
+test('each kind of law gets its bench, in both views', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openLab(page);
+  const law = page.locator('select.lab-law');
+  const verdict = page.locator('.lab-verdict');
+  const stage = page.locator('.lab-stage');
+  const cases = [
+    { id: 'escape_speed_min', bench: 'trajectory', states: /^(escapes|falls)$/ },
+    { id: 'rayleigh_criterion', bench: 'wave', states: /^(resolved|merged)$/ },
+    { id: 'hydrogen_levels', bench: 'quantum', states: /^shells$/ },
+    { id: 'heisenberg', bench: 'quantum', states: /^packet$/ },
+  ];
+  for (const c of cases) {
+    await law.selectOption(c.id);
+    await expect(verdict).toHaveText(VERDICT, { timeout: 30_000 });
+    await expect(stage).toHaveAttribute('data-apparatus', c.bench);
+    await expect(stage).toHaveAttribute('data-bench', c.states, { timeout: 30_000 });
+    await page.waitForTimeout(500);
+    await page.screenshot({ path: join(OUT, `laboratory-apparatus-${c.bench}-${c.id}-1440x900.png`) });
+    await showView(page, 'boundary');
+    await expect(verdict).toHaveText(VERDICT);
+    await showView(page, 'apparatus');
+    await expect(stage).toHaveAttribute('data-bench', c.states);
+  }
+  // The optics bench merges the peaks once the claim goes past the limit.
+  await law.selectOption('rayleigh_criterion');
+  await expect(verdict).toHaveText(VERDICT, { timeout: 30_000 });
+  const track = page.locator('#lab-track-claim');
+  await track.focus();
+  await track.press('Home');
+  await expect(verdict).toHaveText('IMPOSSIBLE', { timeout: 30_000 });
+  await expect(stage).toHaveAttribute('data-bench', 'merged', { timeout: 30_000 });
+});
+
+test('switching views releases what the other view drew', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await trackWebgl(page);
+  const errors = collectErrors(page);
+  await openLab(page);
+  await page.locator('select.lab-law').selectOption('carnot');
+  await expect(page.locator('.lab-verdict')).toHaveText(VERDICT, { timeout: 30_000 });
+  const stage = page.locator('.lab-stage');
+  const geometries = async () => {
+    await page.waitForTimeout(700);
+    return Number(await stage.getAttribute('data-geometries'));
+  };
+  await showView(page, 'boundary');
+  const boundary = await geometries();
+  await showView(page, 'apparatus');
+  const apparatus = await geometries();
+  for (let i = 0; i < 4; i++) {
+    await showView(page, 'boundary');
+    await showView(page, 'apparatus');
+  }
+  // After four round trips the GPU holds what one view needs, not four times it.
+  expect(await geometries()).toBe(apparatus);
+  await showView(page, 'boundary');
+  expect(await geometries()).toBe(boundary);
+  expect(await live(page)).toBe(1);
+  expect(errors).toEqual([]);
 });
 
 for (const size of SIZES) {

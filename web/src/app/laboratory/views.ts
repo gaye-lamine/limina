@@ -78,7 +78,7 @@ const SHELL = 3.5;
 const AXIS_GAP = 0.7;
 
 /** A tileable diagonal hatch in one colour on transparent ground: the "past the limit" pattern. */
-function hatchTexture(color: Color, size = 64, gap = 16, width = 5): Texture {
+export function hatchTexture(color: Color, size = 64, gap = 16, width = 5): Texture {
   const canvas = document.createElement('canvas');
   canvas.width = size;
   canvas.height = size;
@@ -102,7 +102,7 @@ function hatchTexture(color: Color, size = 64, gap = 16, width = 5): Texture {
 }
 
 /** A text label as a sprite, from the theme's text colour (decorative: the page has the text alternative). */
-function textSprite(text: string, color: Color, height = 0.42): Sprite {
+export function textSprite(text: string, color: Color, height = 0.42): Sprite {
   const canvas = document.createElement('canvas');
   const g = canvas.getContext('2d');
   const px = 40;

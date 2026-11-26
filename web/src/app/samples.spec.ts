@@ -1,5 +1,5 @@
 import { SAMPLES, evaluateRequest, sampleClaims, sampleOf } from './samples';
-import { claimOf } from './workbench-logic.spec';
+import { claimOf } from './testing-fixtures';
 
 describe('built-in samples', () => {
   it('has three illustrative samples whose evidence is found in their text', () => {

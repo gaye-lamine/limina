@@ -1,3 +1,4 @@
+import { AnalyzedClaim } from './analysis.models';
 import { LimitInfo } from './api.models';
 
 /** Display labels of the temperatures, as served by the API. */
@@ -85,3 +86,38 @@ export const LIMIT_SEVERAL_UNITS: LimitInfo = {
   option_labels: {},
   parameter_labels: { P: 'power' },
 };
+
+/** An analysed claim for tests: Carnot, 60 % at 600 K, IMPOSSIBLE; over replaces fields. */
+export function claimOf(over: Partial<AnalyzedClaim> = {}): AnalyzedClaim {
+  return {
+    limit_id: 'carnot',
+    quantity: 'efficiency',
+    value: 0.6,
+    unit: 'dimensionless',
+    raw_value: 60,
+    raw_unit: '%',
+    evidence: { text: '60%', start: 3, end: 6 },
+    constraints: {},
+    parameters: { Th: { value: 600, raw_value: 600, unit: 'K', evidence: { text: '600 K', start: 10, end: 15 }, flags: [] } },
+    notes: [],
+    flags: [],
+    status: 'evaluated',
+    result: {
+      verdict: 'IMPOSSIBLE',
+      limit_id: 'carnot',
+      engine_version: '0.1.0',
+      wording: 'inconsistent with limit carnot under assumptions cycle model = ideal',
+      bounds: {
+        permissive: { b_min: 0.5, b_max: 0.5, margin: { low: 1.2, high: 1.2 } },
+        restrictive: { b_min: 0.5, b_max: 0.5, margin: { low: 1.2, high: 1.2 } },
+      },
+      configurations: [],
+      missing_parameters: [],
+    },
+    reason: null,
+    code: null,
+    trace: [],
+    law: { source: 'built_in', limit_id: 'carnot', sentence: null, attempts: [], comparison: null },
+    ...over,
+  };
+}

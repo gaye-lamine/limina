@@ -48,6 +48,8 @@ import { skinFor } from './skin';
 import { readTheme } from './theme';
 import { canSolve, topologyFor } from './topology';
 import { Drawn, LawView, ViewData } from './views';
+import { apertureParameter, apparatusFor, discreteParameter, massParameter, spectralParameter, toNanometres } from './apparatus';
+import { ApparatusData, ApparatusView, BenchState } from './apparatus-view';
 
 /** What one live update brings back. */
 interface Answer {
@@ -89,6 +91,7 @@ export class Laboratory implements AfterViewInit, OnDestroy {
   private readonly host = viewChild.required<ElementRef<HTMLElement>>('stage');
   private observatory: Observatory | null = null;
   private view: LawView | null = null;
+  private bench: ApparatusView | null = null;
   private readonly reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
   private readonly changes = new Subject<void>();
   private loadSeq = 0;
@@ -114,6 +117,14 @@ export class Laboratory implements AfterViewInit, OnDestroy {
   protected readonly pin = signal<Pin | null>(null);
   /** What the last draw put in the scene (exposed as data attributes for the end-to-end checks). */
   protected readonly drawn = signal<Drawn>({ hatchedCells: 0, zones: 0 });
+  /** Physical apparatus (the default) or mathematical boundary. */
+  protected readonly mode = signal<'apparatus' | 'boundary'>('apparatus');
+  /** What the physical apparatus shows (exposed as a data attribute for the end-to-end checks). */
+  protected readonly benchState = signal<BenchState | null>(null);
+  protected readonly benchKind = computed(() => {
+    const l = this.limit();
+    return l ? apparatusFor(l) : null;
+  });
   private readonly curve = signal<CurveResponse | null>(null);
   private readonly surface = signal<SurfaceResponse | null>(null);
 
@@ -156,7 +167,8 @@ export class Laboratory implements AfterViewInit, OnDestroy {
           ? LAB.views.corridor(ps[0]?.label ?? '')
           : LAB.views.chamber;
     const zones = this.topology() === 'corridor' && (this.curve()?.validity_zones?.length ?? 0) > 0 ? ` ${LAB.views.outsideZones}` : '';
-    return `${LAB.regionLabel}. ${this.limit()?.title ?? ''}. ${shape}${zones}${r ? ` ${r.label}.` : ''}`;
+    const what = this.mode() === 'apparatus' ? (LAB.benches[this.benchKind() ?? 'quantum'] ?? '') : `${shape}${zones}`;
+    return `${LAB.regionLabel}. ${this.limit()?.title ?? ''}. ${what}${r ? ` ${r.label}.` : ''}`;
   });
 
   constructor() {
@@ -188,7 +200,11 @@ export class Laboratory implements AfterViewInit, OnDestroy {
       const theme = readTheme();
       this.observatory = new Observatory(this.host().nativeElement, theme, this.reduced);
       this.view = new LawView(this.observatory.stage, theme, this.reduced);
-      this.observatory.onFrame = (s) => this.view?.tick(s);
+      this.bench = new ApparatusView(this.observatory.stage, theme, this.reduced);
+      this.observatory.onFrame = (s) => {
+        this.view?.tick(s);
+        this.bench?.tick(s);
+      };
     });
     this.viewReady.set(true);
     this.redraw();
@@ -394,10 +410,45 @@ export class Laboratory implements AfterViewInit, OnDestroy {
   }
 
   private redraw(): void {
-    const view = this.view;
     const limit = this.limit();
     const claim = this.claim();
-    if (!view || !limit || !claim) return;
+    if (!this.view || !this.bench || !limit || !claim) return;
+    if (this.mode() === 'apparatus') {
+      const data = this.benchData(limit, claim);
+      const bench = this.bench;
+      this.zone.runOutsideAngular(() => this.view?.clear());
+      this.benchState.set(this.zone.runOutsideAngular(() => bench.draw(data)));
+      this.drawn.set({ hatchedCells: 0, zones: 0 });
+      return;
+    }
+    this.zone.runOutsideAngular(() => this.bench?.clear());
+    this.benchState.set(null);
+    this.drawBoundary(limit, claim, this.view);
+  }
+
+  /** The values of the physical apparatus: the sliders' places, the level, the wavelength, the pinned probe. */
+  private benchData(limit: LimitInfo, claim: Slider): ApparatusData {
+    const ps = this.params();
+    const place = (s: Slider | undefined) => (s ? toPosition(s) / STEPS : null);
+    const byId = (id: string | null) => (id ? ps.find((p) => p.id === id) : undefined);
+    const spectral = spectralParameter(limit);
+    const sp = byId(spectral?.id ?? null);
+    const pin = this.pin();
+    return {
+      kind: apparatusFor(limit),
+      direction: limit.direction,
+      claim: claim.value,
+      claimUnit: claim.base,
+      result: this.result(),
+      position: place(byId(apertureParameter(limit)) ?? ps[0]) ?? 0.5,
+      strength: place(byId(massParameter(limit))),
+      level: byId(discreteParameter(limit))?.value ?? null,
+      nanometres: sp && spectral ? toNanometres(sp.value, spectral.as) : null,
+      pinned: pin && pin.limitId === limit.id ? { ratio: pin.result?.ratio ?? null, impossible: pin.result?.kind === 'impossible' } : null,
+    };
+  }
+
+  private drawBoundary(limit: LimitInfo, claim: Slider, view: LawView): void {
     const ps = this.params();
     const axis = (id: string) => {
       const s = ps.find((p) => p.id === id);
@@ -494,6 +545,22 @@ export class Laboratory implements AfterViewInit, OnDestroy {
 
   // ---------- view ----------
 
+  protected setMode(mode: 'apparatus' | 'boundary'): void {
+    if (this.mode() === mode) return;
+    this.mode.set(mode);
+    this.redraw();
+  }
+
+  /** Arrow keys move between the two views of the segmented choice (radio group pattern). */
+  protected onModeKey(event: KeyboardEvent): void {
+    if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
+    event.preventDefault();
+    const next = this.mode() === 'apparatus' ? 'boundary' : 'apparatus';
+    this.setMode(next);
+    const host = (event.currentTarget as HTMLElement).closest('.lab-segments')?.querySelector<HTMLElement>(`[data-mode='${next}']`);
+    host?.focus();
+  }
+
   protected onKey(event: KeyboardEvent): void {
     if (this.observatory?.onKey(event.key)) event.preventDefault();
   }
@@ -510,6 +577,8 @@ export class Laboratory implements AfterViewInit, OnDestroy {
     cancelAnimationFrame(this.animation);
     this.view?.dispose();
     this.view = null;
+    this.bench?.dispose();
+    this.bench = null;
     this.observatory?.dispose();
     this.observatory = null;
   }

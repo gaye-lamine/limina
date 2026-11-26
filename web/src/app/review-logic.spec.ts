@@ -20,7 +20,7 @@ import {
   verdictKind,
   verdictText,
 } from './review-logic';
-import { claimOf } from './workbench-logic.spec';
+import { claimOf } from './testing-fixtures';
 
 function entry(verdict: 'IMPOSSIBLE' | 'CONDITIONAL' | 'COMPATIBLE' | 'INSUFFICIENT_DATA', over: Partial<AnalyzedClaim> = {}): Entry {
   const base = claimOf();

@@ -1,8 +1,8 @@
 import { Entry } from './review-logic';
 import { PRINT, reviewDocument } from './review-pdf';
 import { LIMITS } from './testing-fixtures';
-import { claimOf } from './workbench-logic.spec';
-import { contrast } from './design-tokens.spec';
+import { claimOf } from './testing-fixtures';
+import { contrast } from './testing-contrast';
 
 const hex = (h: string) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255);
 

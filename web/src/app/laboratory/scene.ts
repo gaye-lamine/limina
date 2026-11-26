@@ -138,6 +138,11 @@ export class Observatory {
     this.controls.update();
     this.onFrame?.(performance.now() / 1000);
     this.renderer.render(this.scene, this.camera);
+    // The live GPU resources, twice a second, for the release checks of the end-to-end tests.
+    if (this.frame % 30 === 0) {
+      this.host.dataset['geometries'] = String(this.renderer.info.memory.geometries);
+      this.host.dataset['textures'] = String(this.renderer.info.memory.textures);
+    }
   };
 
   /** Back to the starting view. */

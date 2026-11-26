@@ -3,7 +3,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ILLUSTRATIVE_TEXT, Workbench } from './workbench';
 import { LIMITS } from './testing-fixtures';
-import { claimOf } from './workbench-logic.spec';
+import { claimOf } from './testing-fixtures';
 import { AnalyzedClaim } from './analysis.models';
 import { ToastService } from './toast.service';
 import { SAMPLES } from './samples';
