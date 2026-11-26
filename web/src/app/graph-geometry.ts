@@ -29,6 +29,8 @@ export interface GraphGeometry {
   logX: boolean;
   /** True when the y values span three decades or more and the y axis is logarithmic. */
   logY: boolean;
+  /** Each defined point of the decisive curve, in viewBox units and in data units, for the crosshair readout. */
+  points: { x: number; y: number; vx: number; vy: number }[];
 }
 
 const inner = () => ({
@@ -165,6 +167,7 @@ export function graphGeometry(curve: CurveResponse, claim: number | null): Graph
     yTicks: logY ? logTicks(y0, y1, sy) : linearTicks(y0, y1, sy),
     logX,
     logY,
+    points: defined.map((p) => ({ x: sx(p.x), y: sy(p.decisive as number), vx: p.x, vy: p.decisive as number })),
   };
 }
 

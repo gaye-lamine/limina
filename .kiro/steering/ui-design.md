@@ -2,18 +2,47 @@
 inclusion: fileMatch
 fileMatchPattern: "web/**"
 ---
-# UI design rules
-- Palette: black, white and light greys only. No accent color of any kind.
-- No emoji. No icon fonts, no pictograms, no external assets. Hierarchy comes from type size and weight, tabular numerals, thin rules and white space.
-- Verdicts are never encoded by color. IMPOSSIBLE: solid black block with a white uppercase label. CONDITIONAL: dashed border. COMPATIBLE: thin solid border on a white background. INSUFFICIENT_DATA: dotted grey border. The text label is always shown.
-- Typography: system UI sans-serif stack for text, system monospace for numbers and units. No external fonts, CDN or remote assets.
-- Visual direction: editorial and restrained, scientific-chart sobriety, developer-tool seriousness. Nothing decorative.
-- Accessibility: WCAG 2.2 AA contrast, full keyboard use, visible focus, labelled form fields, aria-live for results, prefers-reduced-motion respected, no meaning carried by color alone.
-- Wording: display the API wording field as received; never invent verdict text; never use the words fraud, lie, scam, hoax.
-- All user-visible strings live in one file so that French and English can be added later.
-- Layout: one column on narrow screens, two columns from 960px, bounded content width.
-- Technical schematic SVG drawn in code is allowed and encouraged, in the style of a textbook or lab-notebook figure: 1.5px black strokes, hatching for fills, dimension lines with arrowheads, leader lines for callouts, labels in system monospace, symbols such as Th, Tc, Qh, Qc, W in italic serif with real subscripts, a caption "Fig. 1: ..." in italic serif under each figure, graduated scales.
-- Page background: very light neutral grey (paper). A faint 24px grid appears behind the apparatus only.
-- The wording sentence may use the system serif stack (Georgia, Times New Roman, serif) for editorial contrast.
-- Native form controls must be restyled: appearance none, 1px solid border, no browser default chrome, visible custom focus ring.
-- Animation shows direction only (for example a moving dash along a flow arrow); speed never encodes a value; no animation under prefers-reduced-motion.
+# UI design rules (dark premium theme)
+
+## Stack
+- Tailwind CSS v4 through PostCSS, Angular CDK (Overlay for the palette, A11yModule for focus traps), lucide-angular as the one icon set, Inter and JetBrains Mono variable fonts self-hosted from npm. No CDN, no remote assets. Check every new package against the Angular version in use before installing, and pin it exactly.
+- Icons are functional only: close, chevrons, download, external link, copy, search. No emoji anywhere.
+
+## Tokens
+- All colors, radii, spacing, shadows, type sizes and motion values come from `web/src/tokens.css`, documented in `docs/design-system.md`. Never hard-code a new color in a component.
+- Dark theme only.
+  - Surfaces: bg #0A0C10, surface-1 #11141A, surface-2 #171B22, surface-3 #1E232B.
+  - Borders: rgba(255,255,255,.08), strong rgba(255,255,255,.16).
+  - Text: primary #E7EAEE, secondary #A3ACB8, tertiary #6F7885. Tertiary is only for large text and non-text marks, because it is below 4.5:1.
+- ONE accent, #7AA2FF (hover #9DBBFF), for focus rings, selection, links and the primary button (accent background, dark text).
+- Verdict colors, always with a text label: impossible #F2717B, conditional #E8B454, compatible #5FCB92, needs-input #8D98A8, disputed #B39DFA. Each one has a 12% tinted background and a 35% border.
+- Radii: 8 / 12 / 16 / 999. Spacing: 4px scale. Layered soft shadows.
+- Type scale: 12 / 13 / 14 / 16 / 20 / 28 / 44. Headings: Inter 600, tracking -0.02em. Values: tabular mono numerals. No visible text under 12px.
+- Motion: 160-240 ms with cubic-bezier(.2,.8,.2,1). Count-up on headline numbers, staggered reveals of 40 ms. Everything is off under prefers-reduced-motion.
+- Background: a subtle radial accent glow at 8% at the top center and a faint 32px grid that fades out. Backdrop blur only on the top bar and the drawers. No heavy glassmorphism, no noise.
+
+## Screens
+- Top bar, 56px: wordmark, engine status (online or offline, extraction available or not), Library, How it works, Ctrl+K hint.
+- Input: the headline "Check any technical claim against the laws of physics", one supporting line, and the input card (surface-2, hairline border, radius 16, glow on focus) with the textarea, a character counter and the primary Analyze button. Below it, three illustrative sample chips, and an image drop zone only when vision works.
+- Running: the input collapses into a compact bar. Claim cards stream in (skeleton shimmer, then content) under a stepper (Reading, Identifying laws, Researching sources, Computing) whose active step is animated. The counters tick up.
+- Reviewed:
+  - A summary strip: large numerals, then one pill per verdict that also filters.
+  - A compact claim list: verdict dot, quantity, value. Arrow keys and J/K navigate.
+  - Left pane (42%): the text with each claim highlighted inline (verdict tint, 2px underline, numbered badge). Clicking selects the claim.
+  - Right pane (58%): the instrument card. It holds the verdict pill, one plain sentence, three metric tiles (Claim, Bound, Ratio), then the gauge or the explorer with compact controls, the Source accordion (domain, quote, date, status), and the "How this was checked" button opening the right-side trace drawer.
+- Command palette (Ctrl or Cmd+K): jump to a claim, open Library or How it works, download the Markdown report, toggle the trace drawer.
+- Designed states: empty, loading, error toasts, offline, extraction unavailable (the built-in samples still work through the engine), and the "Download review" Markdown report.
+- Both panes fit at 1920x1080 and 1440x900 without page scroll. A pane may scroll internally only for overflow content, with a thin styled scrollbar. Below 1024px everything stacks.
+
+## Charts and apparatus
+- Keep every computation and geometry function. Restyle only.
+- Curve and map: a smooth accent line, and the region inconsistent with the law filled with the impossible color at 14% over a subtle diagonal pattern. Direct labels, a crosshair readout that follows the pointer, and an animated claim line.
+- Gauge: an arc with a gradient track and an animated needle.
+- Carnot and COP apparatus: 1.5px light strokes on the dark surface, and accent flow arrows with a moving dash (direction only, constant speed). Clean mono labels; italic serif only for the symbols T, Q and W. Keep the proportional arrow widths and the text alternatives.
+
+## Always
+- The verdict is never encoded by color alone: the text label is always shown.
+- WCAG 2.2 AA contrast (tested from the token pairs), full keyboard use, visible focus, labelled fields, aria-live for results.
+- Display the API wording as received; never invent verdict text; never use the words fraud, lie, scam or hoax.
+- All user-visible strings live in `web/src/app/strings.ts`.
+- Quality gate: `npm test`, `npm run lint`, `npm run build`, and `npx playwright test` (screenshots into docs/screens/, with DOM checks for horizontal overflow, overlapping boxes, text under 12px, page scroll on desktop sizes and visible focus).

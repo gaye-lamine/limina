@@ -82,6 +82,13 @@ export class Gauge {
   });
 
   protected readonly needle = computed(() => polar(CX, CY, R - 4, this.g().needleAngle));
+  /** Scale label as computed; a label longer than 6 characters is written short and only every other one is shown. */
+  protected scaleLabel(label: string, value: number, index: number): string {
+    if (label.length <= 6) return label;
+    return index % 2 === 0 ? formatValue(value) : '';
+  }
+  /** Start rotation of the needle sweep: from the left end of the dial to the claim. */
+  protected readonly needleFrom = computed(() => `${this.g().needleAngle - 180}deg`);
 
   protected readonly claimText = computed(() => withUnit(formatValue(this.claim()), this.unit()));
 

@@ -1,34 +1,67 @@
 <a class="skip" href="#main">{{ s.skipLink }}</a>
 <header class="topbar">
-  <h1>{{ s.appName }}</h1>
-  <p class="topbar-tagline">{{ s.appTagline }}</p>
-  <button type="button" class="topbar-button" (click)="openDrawer()" [attr.aria-expanded]="drawerOpen()" aria-controls="drawer">
-    {{ wb.topBarDrawer }}
-  </button>
+  <span class="wordmark">{{ u.wordmark }}</span>
+  <span class="status status--{{ status.state() }}" [class.status--degraded]="status.state() === 'online' && !status.extraction()" role="status">
+    <span class="status-dot" aria-hidden="true"></span><span class="status-text">{{ statusText() }}</span>
+  </span>
+  <nav class="topbar-nav" aria-label="Main">
+    <button type="button" class="nav-link topbar-library" (click)="openDrawer('library')" [attr.aria-expanded]="drawerOpen() && drawerView() === 'library'" aria-controls="drawer">
+      {{ u.library }}
+    </button>
+    <button type="button" class="nav-link topbar-how" (click)="openDrawer('how')" [attr.aria-expanded]="drawerOpen() && drawerView() === 'how'" aria-controls="drawer">
+      {{ u.howItWorks }}
+    </button>
+    <button type="button" class="kbd-hint" (click)="openPalette()" [attr.aria-label]="u.commandOpen">
+      <kbd class="kbd">Ctrl</kbd><kbd class="kbd">K</kbd>
+    </button>
+  </nav>
 </header>
-<main id="main" class="wb">
+<main id="main" class="main">
   <app-workbench />
 </main>
 <aside
   id="drawer"
   class="drawer"
+  [class.is-open]="drawerOpen()"
   [hidden]="!drawerOpen()"
   role="dialog"
   aria-modal="true"
   aria-labelledby="drawer-title"
   tabindex="-1"
+  [cdkTrapFocus]="drawerOpen()"
   #drawer
 >
   <div class="drawer-head">
-    <h2 id="drawer-title">{{ wb.drawerTitle }}</h2>
-    <button type="button" class="topbar-button" (click)="closeDrawer()">{{ wb.drawerClose }}</button>
+    <h2 id="drawer-title" class="drawer-title">{{ drawerView() === 'library' ? u.library : u.howItWorks }}</h2>
+    <button type="button" class="icon-btn drawer-close" (click)="closeDrawer()" [attr.aria-label]="u.close">
+      <lucide-icon [img]="XIcon" [size]="18" aria-hidden="true" />
+    </button>
   </div>
-  <section class="panel how" aria-labelledby="how-title">
-    <h2 id="how-title">{{ s.howTitle }}</h2>
+  <div class="drawer-tabs" role="group">
+    <button type="button" class="chip" [attr.aria-pressed]="drawerView() === 'library'" (click)="drawerView.set('library')">{{ u.library }}</button>
+    <button type="button" class="chip" [attr.aria-pressed]="drawerView() === 'how'" (click)="drawerView.set('how')">{{ u.howItWorks }}</button>
+  </div>
+  <section class="how" aria-labelledby="how-title" [hidden]="drawerView() !== 'how'">
+    <h2 id="how-title" class="drawer-sub">{{ s.howTitle }}</h2>
     <p>{{ s.howDeterministic }}</p>
     <p>{{ s.howLanguageModel }}</p>
     <p class="muted">{{ s.howPriorArt }}</p>
+    <p class="muted">{{ s.footerNote }}</p>
   </section>
-  <app-limits-list [limits]="limits()" [failure]="limitsFailure()" />
-  <p class="muted">{{ s.footerNote }}</p>
+  <div [hidden]="drawerView() !== 'library'">
+    <app-limits-list [limits]="limits()" [failure]="limitsFailure()" />
+  </div>
 </aside>
+@if (drawerOpen()) {
+  <button type="button" class="scrim" tabindex="-1" (click)="closeDrawer()" [attr.aria-label]="u.close"></button>
+}
+<div class="toasts" aria-live="polite">
+  @for (t of toasts.toasts(); track t.id) {
+    <div class="toast toast--{{ t.kind }}" [attr.role]="t.kind === 'error' ? 'alert' : 'status'">
+      <span>{{ t.text }}</span>
+      <button type="button" class="icon-btn icon-btn-sm" (click)="toasts.dismiss(t.id)" [attr.aria-label]="u.dismiss">
+        <lucide-icon [img]="XIcon" [size]="14" aria-hidden="true" />
+      </button>
+    </div>
+  }
+</div>

@@ -177,6 +177,41 @@ export class Explorer implements OnDestroy {
     this.request(0);
   }
 
+  /** The curve point nearest the pointer, for the crosshair readout. */
+  readonly hover = signal<{ x: number; y: number; vx: number; vy: number } | null>(null);
+  protected readonly readout = computed(() => {
+    const h = this.hover();
+    const c = this.curve();
+    if (!h || !c) return '\u00a0';
+    return `${c.free_parameter} = ${formatValue(h.vx)} → ${WB.explorerBound} ${formatValue(h.vy)}`;
+  });
+  /** Direct label of the bound line, at its last defined point. */
+  protected readonly boundLabel = computed(() => {
+    const pts = this.geometry()?.points ?? [];
+    const last = pts[pts.length - 1];
+    return last ? { x: last.x - 4, y: Math.max(PLOT.top + 12, last.y - 8) } : null;
+  });
+
+  protected onPointer(event: PointerEvent): void {
+    const target = event.currentTarget as SVGGraphicsElement | null;
+    const svg = target?.ownerSVGElement;
+    const pts = this.geometry()?.points ?? [];
+    if (!svg || pts.length === 0) return;
+    const box = svg.getBoundingClientRect();
+    if (box.width === 0) return;
+    const px = ((event.clientX - box.left) * PLOT.width) / box.width;
+    let best = pts[0];
+    for (const p of pts) if (Math.abs(p.x - px) < Math.abs(best.x - px)) best = p;
+    this.hover.set(best);
+  }
+
+  /** Fill of a heat-map cell: the accent, more opaque for a larger bound (smaller grey level). */
+  protected cellFill(grey: number | null): string {
+    if (grey === null) return 'transparent';
+    const a = 0.08 + ((255 - grey) / 255) * 0.8;
+    return `rgba(122, 162, 255, ${a.toFixed(3)})`;
+  }
+
   protected log10(v: number): number {
     return Math.log10(v);
   }

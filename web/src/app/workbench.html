@@ -1,143 +1,360 @@
-<section class="wb-input" aria-labelledby="wb-input-label">
-  <div class="wb-input-head">
-    <label id="wb-input-label" for="wb-text">{{ s.inputLabel }}</label>
-    <span class="muted">{{ s.inputIllustrative }}</span>
-    <span class="muted">{{ info()?.vision ? s.inputImageHint : '' }}</span>
-  </div>
-  <div class="wb-input-row">
-    <textarea
-      id="wb-text"
-      class="control wb-text"
-      [value]="text()"
-      (input)="text.set($any($event.target).value)"
-      (drop)="onDrop($event)"
-      (dragover)="$event.preventDefault()"
-      (paste)="onPaste($event)"
-    ></textarea>
-    <button type="button" class="wb-analyze" (click)="run()" [disabled]="running()">
-      {{ running() ? s.analyzing : s.analyze }}
-    </button>
-  </div>
-</section>
+@if (state() === 'input') {
+  <section class="hero" aria-labelledby="hero-title">
+    <h1 id="hero-title" class="hero-title">{{ u.headline }}</h1>
+    <p class="hero-sub">{{ u.subline }}</p>
 
-<div class="wb-columns">
-  <section class="wb-trace" aria-labelledby="wb-trace-title" aria-live="polite">
-    <h2 id="wb-trace-title" class="wb-title">{{ s.traceTitle }}</h2>
-    @if (log().length === 0 && !claim()) {
-      <p class="muted">{{ s.traceEmpty }}</p>
+    @if (status.state() === 'offline') {
+      <div class="notice notice--error" role="alert">
+        <p class="notice-title">{{ u.offlineTitle }}</p>
+        <p>{{ u.offlineBody }}</p>
+      </div>
+    } @else if (status.state() === 'online' && !status.extraction()) {
+      <div class="notice" role="status">
+        <p class="notice-title">{{ u.extractionOffTitle }}</p>
+        <p>{{ u.extractionOffBody }}</p>
+      </div>
     }
-    @if (log().length) {
-      <ol class="wb-log">
-        @for (l of log(); track $index) {
-          <li><span class="wb-status">{{ l.status === 'running' ? s.traceRunning : s.traceStatus[l.status] }}</span> {{ l.text }}</li>
-        }
-      </ol>
-    }
-    @if (claim(); as c) {
-      <ol class="wb-steps">
-        @for (t of c.trace; track $index) {
-          <li class="wb-step">
-            <span class="wb-step-name">{{ t.step }}</span>
-            <span class="wb-status">{{ s.traceStatus[t.status] }}</span>
-            <span class="wb-step-detail">{{ t.detail }}</span>
-          </li>
-        }
-      </ol>
-    }
-    @if (entry(); as e) {
-      @if (e.kind === 'failure') {
-        <ol class="wb-steps">
-          <li class="wb-step">
-            <span class="wb-step-name">extraction</span>
-            <span class="wb-status">{{ s.traceStatus['failed'] }}</span>
-            <span class="wb-step-detail">{{ e.failure.code }}: {{ e.failure.message }} ({{ e.attempts }} answer(s))</span>
-          </li>
-        </ol>
+
+    <div class="input-card">
+      <label for="wb-text" class="sr-only">{{ u.inputLabel }}</label>
+      <textarea
+        id="wb-text"
+        class="wb-text"
+        [placeholder]="u.placeholder"
+        [value]="text()"
+        (input)="text.set($any($event.target).value)"
+        (drop)="onDrop($event)"
+        (dragover)="$event.preventDefault()"
+        (paste)="onPaste($event)"
+        spellcheck="false"
+      ></textarea>
+      <div class="input-foot">
+        <span class="char-count num" aria-live="polite">{{ u.chars(charCount()) }}</span>
+        <button type="button" class="btn btn-primary btn-lg wb-analyze" (click)="run()" [disabled]="!text().trim()">
+          {{ u.analyze }}
+        </button>
+      </div>
+    </div>
+
+    <div class="samples" role="group" [attr.aria-label]="u.samplesLabel">
+      <span class="samples-label">{{ u.samplesLabel }}</span>
+      @for (sm of samples; track sm.id) {
+        <button type="button" class="chip sample-chip" [attr.aria-pressed]="text() === sm.text" (click)="useSample(sm)">
+          {{ sm.label }}
+        </button>
       }
+      <span class="samples-note">{{ s.inputIllustrative }}</span>
+    </div>
+
+    @if (status.vision()) {
+      <div class="dropzone" (drop)="onDrop($event)" (dragover)="$event.preventDefault()">
+        <lucide-icon [img]="icons.ImageUp" [size]="18" aria-hidden="true" />
+        <span>{{ u.dropTitle }}</span><span class="dropzone-hint" aria-hidden="true">·</span>
+        <span class="dropzone-hint">{{ u.dropHint }}</span>
+      </div>
     }
   </section>
-
-  <section class="wb-claims" aria-labelledby="wb-claims-title">
-    <h2 id="wb-claims-title" class="wb-title">{{ s.claimsTitle }}</h2>
-    @if (entries().length === 0) {
-      <p class="muted">{{ analysed() && !running() ? s.claimsNone : s.claimsEmpty }}</p>
-    } @else {
-      <div class="wb-tabs" role="tablist" [attr.aria-label]="s.claimsTitle">
-        @for (e of entries(); track $index) {
+} @else {
+  @if (state() === 'running') {
+    <section class="run" aria-live="polite" [attr.aria-label]="u.stepsLabel">
+      <div class="run-bar">
+        <p class="run-text">{{ text() }}</p>
+        <span class="run-count"><span class="num" [appCountUp]="entries().length"></span> {{ u.claimsWord }}</span>
+        <span class="run-count"><span class="num" [appCountUp]="answered()"></span> / <span class="num">{{ parts().length }}</span></span>
+      </div>
+      <ol class="stepper">
+        @for (st of u.steps; track $index; let i = $index) {
+          <li class="step step--{{ stepState(i) }}" [attr.aria-current]="stepState(i) === 'active' ? 'step' : null">
+            <span class="step-dot" aria-hidden="true"></span>
+            <span class="step-name">{{ st }}</span>
+            <span class="sr-only">{{ stepState(i) === 'done' ? u.stepDone : stepState(i) === 'active' ? u.stepActive : u.stepWaiting }}</span>
+          </li>
+        }
+      </ol>
+      <ul class="stream">
+        @for (e of entries(); track $index; let i = $index) {
+          <li class="stream-card reveal" [style.--i]="i">
+            <span class="pill pill--{{ kindOf(i) }}"><span class="pill-dot" aria-hidden="true"></span>{{ labelOf(i) }}</span>
+            <p class="stream-title">{{ titleOf(e) }}</p>
+            <p class="stream-sentence">{{ sentenceOf(i) }}</p>
+          </li>
+        }
+        @for (p of pending(); track p) {
+          <li class="stream-card skeleton" aria-hidden="true">
+            <span class="sk sk-pill"></span><span class="sk sk-line"></span><span class="sk sk-line sk-short"></span>
+          </li>
+        }
+      </ul>
+    </section>
+  } @else {
+    <section class="summary" [attr.aria-label]="u.summaryLabel">
+      <p class="summary-total">
+        <span class="summary-n num" [appCountUp]="board().claims"></span>
+        <span class="summary-unit">{{ u.claimsWord }}</span>
+      </p>
+      <div class="summary-pills" role="group" [attr.aria-label]="u.filterLabel">
+        <button type="button" class="chip filter-pill" [attr.aria-pressed]="filter() === null" (click)="setFilter(null)">
+          {{ u.filterAll }} <span class="num">{{ entries().length }}</span>
+        </button>
+        @for (c of board().counts; track c.kind) {
           <button
             type="button"
-            role="tab"
-            class="wb-tab"
-            [id]="'wb-tab-' + $index"
-            [attr.aria-selected]="selected() === $index"
-            [attr.tabindex]="selected() === $index ? 0 : -1"
-            (click)="select($index)"
-            (keydown)="onKey($event, $index)"
+            class="pill pill--{{ c.kind }} pill-filter filter-pill"
+            [attr.aria-pressed]="filter() === c.kind"
+            (click)="setFilter(c.kind)"
           >
-            <span class="wb-tab-verdict">{{ label(e) }}</span>
-            <span class="wb-tab-title">{{ tabTitle(e) }}</span>
+            <span class="pill-dot" aria-hidden="true"></span>{{ c.label }} <span class="num">{{ c.count }}</span>
           </button>
         }
       </div>
-      <div class="wb-panel" role="tabpanel" [attr.aria-labelledby]="'wb-tab-' + selected()" aria-live="polite">
-        @if (claim(); as c) {
-          <div class="wb-head">
-            <p class="verdict {{ verdictClass(c) }}">{{ verdictText(c) }}</p>
-            <p class="wb-badge">{{ badgeOf(c) }}@if (classOf(c)) {, {{ classOf(c) }}}</p>
-            <p class="mono wb-limit">{{ c.limit_id ?? '' }}</p>
-          </div>
-          @if (c.result) {
-            <p class="wording">{{ c.result.wording }}</p>
+      <div class="summary-actions">
+        <button type="button" class="btn btn-ghost how-button" (click)="openHow()" [attr.aria-expanded]="howOpen()" aria-controls="how-drawer">
+          {{ u.how }}
+        </button>
+        <button type="button" class="btn btn-ghost download-button" (click)="download()" [disabled]="entries().length === 0">
+          <lucide-icon [img]="icons.Download" [size]="16" aria-hidden="true" />{{ u.download }}
+        </button>
+        <button type="button" class="btn btn-secondary new-button" (click)="newAnalysis()">{{ u.newAnalysis }}</button>
+      </div>
+    </section>
+
+    @if (entries().length === 0) {
+      <section class="empty card" role="status">
+        <p class="empty-title">{{ u.emptyTitle }}</p>
+        <p>{{ u.emptyBody }}</p>
+        <button type="button" class="btn btn-primary" (click)="newAnalysis()">{{ u.newAnalysis }}</button>
+      </section>
+    } @else {
+      <nav class="claim-list" [attr.aria-label]="u.listLabel">
+        <ul>
+          @for (e of entries(); track $index; let i = $index) {
+            @if (isVisible(i)) {
+              <li>
+                <button
+                  type="button"
+                  class="claim-item"
+                  [attr.aria-current]="selected() === i ? 'true' : null"
+                  (click)="select(i)"
+                >
+                  <span class="vdot vdot--{{ kindOf(i) }}" aria-hidden="true"></span>
+                  <span class="claim-n num">{{ i + 1 }}</span>
+                  <span class="claim-q" [attr.title]="quantityOf(e)">{{ quantityOf(e) }}</span>
+                  <span class="claim-v num">{{ valueOf(e) }}</span>
+                  <span class="sr-only">{{ labelOf(i) }}</span>
+                </button>
+              </li>
+            }
           }
-          <dl class="wb-figures">
-            <dt>{{ s.claimLine }}</dt>
-            <dd class="num">{{ number(c.value ?? c.raw_value) }} {{ c.value !== null ? c.unit : c.raw_unit }}</dd>
-            <dt>{{ s.boundLine }}</dt>
-            <dd class="num">{{ bound(c) }}</dd>
-          </dl>
-          @if (c.law?.sentence) {
-            <p class="wb-law"><span class="muted">{{ s.lawSentence }}:</span> {{ c.law?.sentence }}</p>
+        </ul>
+        <span class="nav-hint">{{ u.navHint }}</span>
+      </nav>
+
+      <div class="panes">
+        <article class="pane reading" [attr.aria-label]="u.readingLabel">
+          @for (p of reading(); track $index) {
+            <p class="reading-p">@for (g of p.segments; track $index) {@if (g.claim !== null) {<mark
+                    class="hl hl--{{ kindOf(g.claim) }}"
+                    [class.is-selected]="g.claim === selected()"
+                    [class.is-dim]="!isVisible(g.claim)"
+                    role="button"
+                    tabindex="0"
+                    [attr.aria-label]="(g.claim + 1) + ', ' + labelOf(g.claim) + ': ' + g.text"
+                    (click)="select(g.claim)"
+                    (keydown.enter)="select(g.claim)"
+                    (keydown.space)="$event.preventDefault(); select(g.claim)"
+                  ><sup class="hl-badge num">{{ g.claim + 1 }}</sup>{{ g.text }}</mark>} @else {<span>{{ g.text }}</span>}}</p>
           }
-          <div class="wb-explain">
-            <h3 class="wb-subtitle">{{ s.explainTitle }}</h3>
-            @for (line of explanation(); track $index) {
-              <p>{{ line }}</p>
-            }
-            @if (solved()[selected()]; as sentence) {
-              <p>{{ sentence }}</p>
-            }
-          </div>
-          <div class="wb-visual">
-            @if (c.limit_id && limit()) {
-              <app-explorer [claim]="c" [limit]="limit()" />
-            } @else {
-              <p class="muted">{{ s.explorerUnavailable }}</p>
-            }
-            @if (c.limit_id === 'carnot') {
-              <div class="wb-apparatus">
-                <app-carnot-apparatus [th]="paramText(c, 'Th')" [tc]="paramText(c, 'Tc')" [claim]="number(c.value)" />
+        </article>
+
+        <section class="pane inst" [attr.aria-label]="u.instrumentLabel" aria-live="polite">
+          @if (entry(); as e) {
+            <header class="inst-head">
+              <span class="pill pill--{{ kindOf(selected()) }} pill-lg inst-pill"><span class="pill-dot" aria-hidden="true"></span>{{ labelOf(selected()) }}</span>
+              <div class="inst-title">
+                <h2 class="inst-q">{{ quantityOf(e) }}</h2>
+                @if (limit(); as l) {
+                  <p class="inst-law">{{ l.title }} · <span class="mono">{{ l.formula }}</span></p>
+                }
               </div>
-            } @else if (c.limit_id === 'cop') {
-              <div class="wb-apparatus">
-                <app-cop-apparatus
-                  [th]="paramText(c, 'Th')"
-                  [tc]="paramText(c, 'Tc')"
-                  [claim]="number(c.value)"
-                  [mode]="c.constraints['mode'] === 'cooling' ? 'cooling' : c.constraints['mode'] === 'heating' ? 'heating' : ''"
-                  [twinVerdicts]="twinOf(selected())"
-                  [evaluated]="true"
-                />
+              <div class="inst-nav">
+                <button type="button" class="icon-btn" (click)="move(-1)" [attr.aria-label]="u.previous">
+                  <lucide-icon [img]="icons.ChevronLeft" [size]="16" aria-hidden="true" />
+                </button>
+                <span class="num inst-pos">{{ selected() + 1 }} / {{ entries().length }}</span>
+                <button type="button" class="icon-btn" (click)="move(1)" [attr.aria-label]="u.next">
+                  <lucide-icon [img]="icons.ChevronRight" [size]="16" aria-hidden="true" />
+                </button>
+              </div>
+            </header>
+            <p class="inst-sentence">{{ sentenceOf(selected()) }}</p>
+            @if (claim(); as c) {
+              @for (line of explanation(); track $index) {
+                <p class="inst-note">{{ line }}</p>
+              }
+              @if (solved()[selected()]; as sv) {
+                <p class="inst-note inst-solve">{{ sv }}</p>
+              }
+              @if (c.result) {
+                <p class="inst-wording"><span class="inst-wording-label">{{ u.engineWording }}</span> <span class="wording">{{ c.result.wording }}</span></p>
+              }
+              <dl class="tiles">
+                <div class="tile">
+                  <dt>{{ u.metricClaim }}</dt>
+                  <dd class="num tile-n">{{ claimText(c) }}</dd>
+                </div>
+                <div class="tile">
+                  <dt>{{ u.metricBound }}</dt>
+                  <dd class="num tile-n">{{ bound(c) }}</dd>
+                </div>
+                <div class="tile tile--{{ kindOf(selected()) }}">
+                  <dt>{{ u.metricRatio }}</dt>
+                  <dd class="num tile-n">{{ ratio(c) }}</dd>
+                </div>
+              </dl>
+              <div class="visual" [class.visual--apparatus]="c.limit_id === 'cop' || c.limit_id === 'carnot'">
+                @switch (visual()) {
+                  @case ('gauge') {
+                    <div class="visual-main">
+                      <app-gauge [claim]="c.value ?? 0" [bounds]="gaugeBounds()" [unit]="c.unit === 'dimensionless' ? '' : c.unit" />
+                    </div>
+                  }
+                  @case ('explorer') {
+                    <div class="visual-main">
+                      <app-explorer [claim]="c" [limit]="limit()" />
+                    </div>
+                  }
+                  @default {
+                    <p class="visual-empty">{{ s.explorerUnavailable }}</p>
+                  }
+                }
+                @if (c.limit_id === 'carnot') {
+                  <div class="visual-side">
+                    <app-carnot-apparatus [th]="paramText(c, 'Th')" [tc]="paramText(c, 'Tc')" [claim]="number(c.value)" />
+                  </div>
+                } @else if (c.limit_id === 'cop') {
+                  <div class="visual-side">
+                    <app-cop-apparatus
+                      [th]="paramText(c, 'Th')"
+                      [tc]="paramText(c, 'Tc')"
+                      [claim]="number(c.value)"
+                      [mode]="c.constraints['mode'] === 'cooling' ? 'cooling' : c.constraints['mode'] === 'heating' ? 'heating' : ''"
+                      [twinVerdicts]="twinOf(selected())"
+                      [evaluated]="true"
+                    />
+                  </div>
+                }
+              </div>
+              <div class="source">
+                <button
+                  type="button"
+                  class="source-toggle"
+                  [attr.aria-expanded]="sourceOpen()"
+                  aria-controls="source-panel"
+                  (click)="sourceOpen.set(!sourceOpen())"
+                >
+                  <span>{{ u.source }}</span>
+                  <span class="source-peek">{{ badgeOf(c) }}{{ classOf(c) ? ', ' + classOf(c) : '' }}</span>
+                  <lucide-icon class="source-chevron" [img]="icons.ChevronDown" [size]="16" aria-hidden="true" />
+                </button>
+                <div id="source-panel" class="source-panel" [hidden]="!sourceOpen()">
+                  <dl class="facts">
+                    <dt>{{ u.sourceDomain }}</dt>
+                    <dd>{{ limit()?.validity_domain || u.sourceNone }}</dd>
+                    <dt>{{ u.sourceQuote }}</dt>
+                    <dd class="source-quote">
+                      <q>{{ c.evidence?.text ?? '' }}</q>
+                      @if (c.evidence?.text) {
+                        <button type="button" class="icon-btn icon-btn-sm" (click)="copyQuote(c.evidence?.text ?? '')" [attr.aria-label]="u.copy">
+                          <lucide-icon [img]="icons.Copy" [size]="14" aria-hidden="true" />
+                        </button>
+                      }
+                    </dd>
+                    <dt>{{ u.sourceDate }}</dt>
+                    <dd class="num">{{ analysedAt() }}</dd>
+                    <dt>{{ u.sourceStatus }}</dt>
+                    <dd>{{ badgeOf(c) }}@if (c.result) {, engine {{ c.result.engine_version }}}</dd>
+                    @if (c.law?.sentence) {
+                      <dt>{{ u.sourceLaw }}</dt>
+                      <dd>{{ c.law?.sentence }}</dd>
+                    }
+                    <dt>{{ u.sourceReferences }}</dt>
+                    <dd>
+                      @if (limit()?.references?.length) {
+                        <ul class="refs">
+                          @for (r of limit()?.references ?? []; track $index) {
+                            <li>{{ r }}</li>
+                          }
+                        </ul>
+                      } @else {
+                        {{ u.sourceNone }}
+                      }
+                    </dd>
+                  </dl>
+                </div>
+              </div>
+            } @else if (e.kind === 'failure') {
+              <div class="notice notice--error">
+                <p class="notice-title mono">{{ e.failure.code }}</p>
+                <p>{{ e.failure.message }}</p>
+                <p class="inst-note">{{ e.text }}</p>
               </div>
             }
-          </div>
-        } @else if (entry(); as e) {
-          @if (e.kind === 'failure') {
-            <p class="verdict verdict--insufficient-data">{{ s.paragraphFailed }}</p>
-            <p class="error-block"><span class="mono">{{ e.failure.code }}</span> {{ e.failure.message }}</p>
-            <p class="muted">{{ e.text }}</p>
           }
-        }
+        </section>
       </div>
     }
-  </section>
-</div>
+  }
+}
+
+<aside
+  id="how-drawer"
+  class="drawer"
+  [class.is-open]="howOpen()"
+  [hidden]="!howOpen()"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="how-drawer-title"
+  tabindex="-1"
+  [cdkTrapFocus]="howOpen()"
+  #how
+>
+  <div class="drawer-head">
+    <h2 id="how-drawer-title" class="drawer-title">{{ u.how }}</h2>
+    <button type="button" class="icon-btn" (click)="closeHow()" [attr.aria-label]="u.close">
+      <lucide-icon [img]="icons.X" [size]="18" aria-hidden="true" />
+    </button>
+  </div>
+  <h3 class="drawer-sub">{{ u.runLog }}</h3>
+  <ol class="log">
+    @for (l of log(); track $index) {
+      <li class="log-line log-line--{{ l.status }}"><span class="log-status">{{ l.status === 'running' ? s.traceRunning : s.traceStatus[l.status] }}</span> {{ l.text }}</li>
+    }
+  </ol>
+  @for (e of entries(); track $index; let i = $index) {
+    <section class="trace-entry" [class.is-selected]="i === selected()">
+      <h3 class="drawer-sub">
+        <span class="vdot vdot--{{ kindOf(i) }}" aria-hidden="true"></span> {{ i + 1 }}. {{ titleOf(e) }} · {{ labelOf(i) }}
+      </h3>
+      <ol class="trace">
+        @if (e.kind === 'claim') {
+          @for (t of e.claim.trace; track $index) {
+            <li class="trace-step trace-step--{{ t.status }}">
+              <span class="trace-name">{{ t.step }}</span>
+              <span class="trace-status">{{ s.traceStatus[t.status] }}</span>
+              <span class="trace-detail">{{ t.detail }}</span>
+            </li>
+          }
+        } @else {
+          <li class="trace-step trace-step--failed">
+            <span class="trace-name">extraction</span>
+            <span class="trace-status">{{ s.traceStatus['failed'] }}</span>
+            <span class="trace-detail">{{ e.failure.code }}: {{ e.failure.message }} ({{ e.attempts }} answer(s))</span>
+          </li>
+        }
+      </ol>
+    </section>
+  }
+</aside>
+@if (howOpen()) {
+  <button type="button" class="scrim" tabindex="-1" (click)="closeHow()" [attr.aria-label]="u.close"></button>
+}

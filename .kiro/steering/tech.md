@@ -30,3 +30,5 @@ inclusion: always
 
 - thiserror = "=2.0.21"
 - proptest = "=1.12.0" (dev)
+- web: tailwindcss 4.3.5, @tailwindcss/postcss 4.3.5, postcss 8.5.33, @angular/cdk 21.2.14, lucide-angular 1.0.0, @fontsource-variable/inter 5.3.0, @fontsource-variable/jetbrains-mono 5.3.0; dev: @playwright/test 1.65.1, @types/node 20.19.43 (see docs/design-system.md)
+- Web e2e: `npx playwright test` in web/ (app on 4200 and API on 3000 running; uses installed Edge)

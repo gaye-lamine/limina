@@ -9,18 +9,22 @@
     <title id="gauge-title">{{ s.gaugeTitle }}</title>
     <desc id="gauge-desc">{{ alt() }}</desc>
     <defs>
+      <linearGradient id="gauge-track" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0" class="gauge-stop-a" />
+        <stop offset="1" class="gauge-stop-b" />
+      </linearGradient>
       <pattern id="gauge-hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
         <rect class="gauge-hatch-ground" x="0" y="0" width="7" height="7" />
         <line x1="0" y1="0" x2="0" y2="7" class="gauge-hatch-line" />
       </pattern>
     </defs>
-    <path class="gauge-dial" [attr.d]="dialPath" />
+    <path class="gauge-dial" [attr.d]="dialPath" fill="url(#gauge-track)" />
     @if (hatchPath(); as h) {
       <path class="gauge-hatch" [attr.d]="h" fill="url(#gauge-hatch)" />
     }
     @for (t of scale(); track t.value) {
       <line class="gauge-scale-tick" [attr.x1]="t.a.x" [attr.y1]="t.a.y" [attr.x2]="t.b.x" [attr.y2]="t.b.y" />
-      <text class="gauge-scale-label" text-anchor="middle" [attr.x]="t.l.x" [attr.y]="t.l.y + 4" [attr.font-size]="font.scale">{{ t.label }}</text>
+      <text class="gauge-scale-label" text-anchor="middle" [attr.x]="t.l.x" [attr.y]="t.l.y + 4" [attr.font-size]="font.scale">{{ scaleLabel(t.label, t.value, $index) }}</text>
     }
     @for (t of boundMarks(); track t.value) {
       <line class="gauge-bound-tick" [attr.x1]="t.a.x" [attr.y1]="t.a.y" [attr.x2]="t.b.x" [attr.y2]="t.b.y" />
@@ -32,7 +36,9 @@
         [attr.font-size]="font.bound"
       >{{ t.text }}</text>
     }
-    <line class="gauge-needle" [attr.x1]="cx" [attr.y1]="cy" [attr.x2]="needle().x" [attr.y2]="needle().y" />
+    <g class="gauge-needle-g" [style.--from]="needleFrom()" [style.transform-origin]="cx + 'px ' + cy + 'px'">
+      <line class="gauge-needle" [attr.x1]="cx" [attr.y1]="cy" [attr.x2]="needle().x" [attr.y2]="needle().y" />
+    </g>
     <circle class="gauge-hub" [attr.cx]="cx" [attr.cy]="cy" r="5" />
     <text class="gauge-claim-label" text-anchor="middle" [attr.x]="cx" [attr.y]="claimLabelY" [attr.font-size]="font.claim">
       {{ s.gaugeClaim }} {{ claimText() }}

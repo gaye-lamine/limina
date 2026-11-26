@@ -1,5 +1,5 @@
 <section class="explorer" aria-labelledby="explorer-title">
-  <h3 id="explorer-title" class="wb-subtitle">{{ s.explorerTitle }}</h3>
+  <h3 id="explorer-title" class="section-label">{{ s.explorerTitle }}</h3>
   @if (parameters().length === 0) {
     @if (scale(); as sc) {
       <figure class="explorer-figure">
@@ -183,7 +183,7 @@
                   [attr.y]="c.y"
                   [attr.width]="c.width"
                   [attr.height]="c.height"
-                  [attr.fill]="'rgb(' + c.grey + ',' + c.grey + ',' + c.grey + ')'"
+                  [attr.fill]="cellFill(c.grey)"
                 />
               } @else {
                 <rect
@@ -267,6 +267,7 @@
             />
           }
           @if (g.forbidden) {
+            <path class="explorer-forbidden" [attr.d]="g.forbidden" />
             <path class="explorer-region" [attr.d]="g.forbidden" fill="url(#explorer-hatch)" />
           }
           @if (g.tolerance) {
@@ -322,6 +323,9 @@
               {{ s.explorerClaim }}
             </text>
           }
+          @if (boundLabel(); as bl) {
+            <text class="fig-label explorer-bound-label" [attr.x]="bl.x" [attr.y]="bl.y" text-anchor="end">{{ s.explorerBound }}</text>
+          }
           @if (marker(); as m) {
             <line
               class="explorer-marker"
@@ -331,7 +335,24 @@
               [attr.y2]="plot.height - plot.bottom"
             />
           }
+          @if (hover(); as hv) {
+            <g class="crosshair" aria-hidden="true">
+              <line class="crosshair-line" [attr.x1]="hv.x" [attr.x2]="hv.x" [attr.y1]="plot.top" [attr.y2]="plot.height - plot.bottom" />
+              <line class="crosshair-line" [attr.x1]="plot.left" [attr.x2]="plot.width - plot.right" [attr.y1]="hv.y" [attr.y2]="hv.y" />
+              <circle class="crosshair-dot" [attr.cx]="hv.x" [attr.cy]="hv.y" r="4" />
+            </g>
+          }
+          <rect
+            class="explorer-hit"
+            [attr.x]="plot.left"
+            [attr.y]="plot.top"
+            [attr.width]="plot.width - plot.left - plot.right"
+            [attr.height]="plot.height - plot.top - plot.bottom"
+            (pointermove)="onPointer($event)"
+            (pointerleave)="hover.set(null)"
+          />
         </svg>
+        <p class="readout num" aria-live="off">{{ readout() }}</p>
         <figcaption class="fig-caption">
           {{ g.kind === 'equality' ? s.explorerToleranceCaption : s.explorerCaption }} {{ free() }};
           {{ g.kind === 'equality' ? s.explorerToleranceNote : s.explorerInconsistent }}.

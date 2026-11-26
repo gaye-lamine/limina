@@ -12,59 +12,85 @@ describe('App', () => {
     }).compileComponents();
   });
 
-  function flushStart(http: HttpTestingController): void {
+  async function start(extraction = true) {
+    const http = TestBed.inject(HttpTestingController);
+    const fixture = TestBed.createComponent(App);
+    await fixture.whenStable();
     for (const r of http.match('/v1/limits')) r.flush({ limits: LIMITS });
-    for (const r of http.match('/v1/pipeline'))
-      r.flush({ extraction: true, law_authoring: true, vision: false, models: [] });
+    for (const r of http.match('/v1/pipeline')) r.flush({ extraction, law_authoring: true, vision: false, models: [] });
+    fixture.detectChanges();
+    await fixture.whenStable();
+    return { http, fixture, el: fixture.nativeElement as HTMLElement };
   }
 
-  it('shows the analysis screen with no example select, no limit select and no Evaluate button', async () => {
-    const http = TestBed.inject(HttpTestingController);
-    const fixture = TestBed.createComponent(App);
-    await fixture.whenStable();
-    flushStart(http);
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
-    expect(el.querySelector('h1')?.textContent).toContain('Limina');
+  it('shows the top bar with the wordmark, the engine status, the links and the Ctrl+K hint', async () => {
+    const { el } = await start();
+    expect(el.querySelector('.wordmark')?.textContent).toContain('Limina');
+    expect(el.querySelector('.status')?.textContent).toContain('Engine online, extraction available');
+    expect(el.querySelector('.status--online')).not.toBeNull();
+    expect(el.querySelector('.topbar-library')?.textContent).toContain('Library');
+    expect(el.querySelector('.topbar-how')?.textContent).toContain('How it works');
+    expect(el.querySelector('.kbd-hint')?.textContent).toContain('Ctrl');
     expect(el.querySelector('#wb-text')).not.toBeNull();
-    expect(el.querySelector('.wb-analyze')?.textContent).toContain('Analyze');
-    expect(el.textContent).toContain('Illustrative text');
     expect(el.querySelector('#limit')).toBeNull();
-    expect(el.querySelector('#evaluate-title')).toBeNull();
-    expect(el.querySelector('#assumption-reference_area')).toBeNull();
-    http.verify();
   });
 
-  it('keeps the Library and How it works in a drawer, opened from the top bar and closed by Escape', async () => {
-    const http = TestBed.inject(HttpTestingController);
-    const fixture = TestBed.createComponent(App);
-    await fixture.whenStable();
-    flushStart(http);
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
+  it('marks extraction unavailable in the status', async () => {
+    const { el } = await start(false);
+    expect(el.querySelector('.status')?.textContent).toContain('extraction unavailable');
+    expect(el.querySelector('.status--degraded')).not.toBeNull();
+  });
+
+  it('opens the Library drawer from the top bar and closes it with Escape', async () => {
+    const { http, fixture, el } = await start();
     const drawer = el.querySelector('#drawer') as HTMLElement;
     expect(drawer.hidden).toBe(true);
-    (el.querySelector('.topbar-button') as HTMLButtonElement).click();
+    (el.querySelector('.topbar-library') as HTMLButtonElement).click();
     fixture.detectChanges();
     for (const r of http.match('/v1/limits')) r.flush({ limits: LIMITS });
     await fixture.whenStable();
+    fixture.detectChanges();
     expect(drawer.hidden).toBe(false);
-    expect(drawer.querySelector('#limits-title')?.textContent).toContain('Library');
     expect(drawer.querySelectorAll('.limit')).toHaveLength(2);
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
     fixture.detectChanges();
     expect(drawer.hidden).toBe(true);
   });
 
-  it('shows the error block in the Library when loading fails', async () => {
+  it('opens the command palette with Ctrl+K and runs a command', async () => {
+    const { http, fixture } = await start();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }));
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const palette = document.querySelector('.palette') as HTMLElement;
+    expect(palette).not.toBeNull();
+    const items = Array.from(palette.querySelectorAll('.palette-item')).map((i) => i.textContent?.trim());
+    expect(items).toEqual(['Open Library', 'Open How it works']);
+    const input = palette.querySelector('.palette-input') as HTMLInputElement;
+    input.value = 'how';
+    input.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+    fixture.detectChanges();
+    for (const r of http.match('/v1/limits')) r.flush({ limits: LIMITS });
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(document.querySelector('.palette')).toBeNull();
+    const drawer = (fixture.nativeElement as HTMLElement).querySelector('#drawer') as HTMLElement;
+    expect(drawer.hidden).toBe(false);
+    expect(drawer.querySelector('#drawer-title')?.textContent).toContain('How it works');
+  });
+
+  it('shows the error block in the Library and the offline status when the API is down', async () => {
     const http = TestBed.inject(HttpTestingController);
     const fixture = TestBed.createComponent(App);
     await fixture.whenStable();
     for (const r of http.match('/v1/limits')) r.error(new ProgressEvent('error'));
     for (const r of http.match('/v1/pipeline')) r.error(new ProgressEvent('error'));
+    fixture.detectChanges();
     await fixture.whenStable();
-    expect((fixture.nativeElement as HTMLElement).querySelector('.error-block')?.textContent).toContain(
-      'NetworkError',
-    );
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('.error-block')?.textContent).toContain('NetworkError');
+    expect(el.querySelector('.status--offline')?.textContent).toContain('Engine offline');
   });
 });
