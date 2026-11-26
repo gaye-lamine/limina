@@ -2335,3 +2335,290 @@ app-root {
     background-size: 100% 2px !important;
   }
 }
+/* Image drop zone: idle, dragging, reading, done, error. */
+.dropzone {
+  position: relative;
+  min-height: 64px;
+  transition: border-color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease);
+}
+.dropzone--dragging {
+  border-color: var(--accent);
+  border-style: solid;
+  background: var(--accent-soft);
+  color: var(--text-primary);
+}
+.dropzone--reading {
+  border-style: solid;
+  border-color: rgba(122, 162, 255, 0.45);
+  color: var(--text-primary);
+}
+.dropzone--done {
+  border-style: solid;
+  border-color: var(--v-compatible-border);
+  background: var(--v-compatible-bg);
+}
+.dropzone--error {
+  border-style: solid;
+  border-color: var(--v-impossible-border);
+  background: var(--v-impossible-bg);
+}
+.drop-main {
+  color: var(--text-primary);
+}
+.drop-error {
+  color: var(--text-primary);
+}
+.drop-choose {
+  height: 32px;
+  padding: 0 var(--space-3);
+  font-size: var(--text-13);
+}
+.drop-spinner {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--surface-3);
+  border-top-color: var(--accent);
+  animation: spin 800ms linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+/* "How this was checked": PrimeNG Drawer, Accordion and Timeline on Limina's tokens. */
+.p-drawer.how-drawer {
+  width: min(600px, 100vw);
+  background: rgba(17, 20, 26, 0.92);
+  backdrop-filter: blur(16px) saturate(140%);
+  border-left: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-3);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+}
+.how-drawer .p-drawer-header {
+  padding: var(--space-5) var(--space-6) var(--space-2);
+}
+.how-drawer .p-drawer-title {
+  font-size: var(--text-20);
+  font-weight: var(--heading-weight);
+  letter-spacing: var(--heading-tracking);
+}
+.how-drawer .p-drawer-content {
+  padding: 0 var(--space-6) var(--space-6);
+}
+.how-drawer .p-drawer-close-button {
+  border-radius: var(--radius-sm);
+}
+.how-intro {
+  color: var(--text-secondary);
+  font-size: var(--text-14);
+  margin-bottom: var(--space-2);
+}
+.how-log {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--text-13);
+  color: var(--text-secondary);
+}
+.how-log-line {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.how-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-tertiary);
+  flex: none;
+}
+.how-dot--done {
+  background: var(--v-compatible);
+}
+.how-dot--failed {
+  background: var(--v-impossible);
+}
+.how-dot--running {
+  background: var(--accent);
+}
+.how-accordion {
+  display: grid;
+  gap: var(--space-2);
+}
+.how-accordion .p-accordionpanel {
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  overflow: hidden;
+}
+.how-accordion .p-accordionpanel.is-selected {
+  box-shadow: inset 0 0 0 1px rgba(122, 162, 255, 0.45);
+}
+.how-accordion .p-accordionheader {
+  background: transparent;
+  border: 0;
+  padding: var(--space-3) var(--space-4);
+  color: var(--text-primary);
+  font-weight: 500;
+}
+.how-accordion .p-accordionheader:hover {
+  background: var(--surface-3);
+}
+.how-accordion .p-accordioncontent-content {
+  background: transparent;
+  border: 0;
+  padding: 0 var(--space-4) var(--space-4);
+}
+.how-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  flex: 1;
+}
+.how-head-title {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--text-14);
+}
+.how-head-pill {
+  height: 22px;
+  font-size: var(--text-12);
+}
+.how-timeline .p-timeline-event-opposite {
+  display: none;
+}
+.how-timeline .p-timeline-event-content {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 0 0 var(--space-3) var(--space-3);
+  font-size: var(--text-13);
+}
+.how-timeline .p-timeline-event-connector {
+  background: var(--border-strong);
+  width: 1px;
+}
+.tl-marker {
+  display: block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--text-tertiary);
+  background: var(--surface-2);
+}
+.tl-marker--done {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+.tl-marker--failed {
+  border-color: var(--v-impossible);
+}
+.tl-name {
+  color: var(--text-primary);
+}
+.tl-status {
+  flex: none;
+  color: var(--text-secondary);
+  font-size: var(--text-12);
+}
+.tl-status--done {
+  color: var(--v-compatible);
+}
+.tl-status--failed {
+  color: var(--v-impossible);
+}.how-timeline .p-timeline-event {
+  min-height: 0;
+}
+.how-timeline .p-timeline-event-separator {
+  padding-top: 3px;
+}
+.how-timeline .p-timeline-event-content {
+  padding-bottom: var(--space-4);
+  line-height: 1.4;
+}
+.how-timeline .p-timeline-event:last-child .p-timeline-event-content {
+  padding-bottom: 0;
+}
+.how-head-pill {
+  margin-right: var(--space-3);
+}
+/* Insufficient data: its own family, in the needs-input colors (always with its label). */
+.pill--insufficient,
+.hl--insufficient,
+.tile--insufficient {
+  --v: var(--v-needs);
+  --v-bg: var(--v-needs-bg);
+  --v-border: var(--v-needs-border);
+}
+.vdot--insufficient {
+  background: var(--v-needs);
+}
+.tile-note {
+  margin: 2px 0 0;
+  color: var(--text-secondary);
+  font-size: var(--text-12);
+}
+.calc {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 4px var(--space-4);
+  margin: 0;
+  font-size: var(--text-13);
+}
+.calc dt {
+  color: var(--text-secondary);
+}
+.calc dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.byopt {
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+.byopt-list {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.byopt-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: var(--text-13);
+}
+.byopt-name {
+  flex: 1;
+  min-width: 0;
+}
+.byopt-vals {
+  color: var(--text-secondary);
+  font-size: var(--text-12);
+}
+.ref-link {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  color: var(--accent);
+  text-decoration: none;
+}
+.ref-link:hover {
+  color: var(--accent-hover);
+  text-decoration: underline;
+}
+.supply-select {
+  min-width: 220px;
+  height: 36px !important;
+  font-size: var(--text-14) !important;
+}

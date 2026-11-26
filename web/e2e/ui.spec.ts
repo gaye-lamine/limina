@@ -1,5 +1,5 @@
 import { expect, Page, test } from '@playwright/test';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 /**
@@ -152,10 +152,19 @@ for (const size of SIZES) {
       await page.keyboard.press('Escape');
       await expect(page.locator('.palette')).toHaveCount(0);
       await page.locator('.how-button').click();
-      await expect(page.locator('#how-drawer')).toBeVisible();
+      await expect(page.locator('.how-drawer')).toBeVisible();
+      await expect(page.locator('.how-drawer .p-timeline').first()).toBeVisible();
+      await page.waitForTimeout(500);
       await page.screenshot({ path: join(OUT, `trace-${size.name}.png`) });
       await page.keyboard.press('Escape');
-      await expect(page.locator('#how-drawer')).toBeHidden();
+      await expect(page.locator('.how-drawer')).toBeHidden();
+
+      // The review as a PDF.
+      const [download] = await Promise.all([page.waitForEvent('download'), page.locator('.download-button').click()]);
+      expect(download.suggestedFilename()).toBe('limina-review.pdf');
+      const pdf = join(OUT, '..', `review-sample-${size.name}.pdf`);
+      await download.saveAs(pdf);
+      expect(readFileSync(pdf).subarray(0, 5).toString()).toBe('%PDF-');
     }
 
     // A claim with parameters: the curve explorer with its crosshair readout.
@@ -193,6 +202,20 @@ for (const size of SIZES) {
     await checks(page, 'instrument', false);
   });
 }
+
+test('an image chosen with the button is read and fills the text box', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  await expect(page.locator('.dropzone')).toBeVisible({ timeout: 20_000 });
+  await expect(page.locator('.drop-choose')).toHaveText(/Choose an image/);
+  const image = join(__dirname, 'fixtures', 'claim-text.png');
+  await page.locator('#image-file').setInputFiles(image);
+  await expect(page.locator('.dropzone--reading')).toBeVisible();
+  await page.screenshot({ path: join(OUT, 'image-reading-1440x900.png') });
+  await expect(page.locator('.dropzone--done')).toBeVisible({ timeout: 120_000 });
+  await expect(page.locator('#wb-text')).toHaveValue(/Volta/);
+  await page.screenshot({ path: join(OUT, 'image-done-1440x900.png') });
+});
 
 test('reduced motion turns animations off', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });

@@ -48,10 +48,39 @@
       </div>
 
       @if (status.vision()) {
-        <div class="dropzone" (drop)="onDrop($event)" (dragover)="$event.preventDefault()">
-          <lucide-icon [img]="icons.ImageUp" [size]="18" aria-hidden="true" />
-          <span>{{ u.dropTitle }}</span>
-          <span class="dropzone-hint">{{ u.dropHint }}</span>
+        <div
+          class="dropzone dropzone--{{ imageState() }}"
+          (dragenter)="onDragEnter($event)"
+          (dragover)="$event.preventDefault()"
+          (dragleave)="onDragLeave()"
+          (drop)="onDrop($event)"
+          aria-live="polite"
+        >
+          <input #fileInput id="image-file" class="sr-only" type="file" [accept]="imageTypes" (change)="onFileChosen($event)" />
+          @switch (imageState()) {
+            @case ('reading') {
+              <span class="drop-spinner" aria-hidden="true"></span>
+              <span class="drop-main">{{ u.dropReading(imageName()) }}</span>
+            }
+            @case ('dragging') {
+              <lucide-icon [img]="icons.ImageUp" [size]="18" aria-hidden="true" />
+              <span class="drop-main">{{ u.dropRelease }}</span>
+            }
+            @default {
+              <lucide-icon [img]="icons.ImageUp" [size]="18" aria-hidden="true" />
+              @if (imageState() === 'done') {
+                <span class="drop-main">{{ u.dropDone(imageName()) }}</span>
+              } @else if (imageState() === 'error') {
+                <span class="drop-main drop-error" role="alert">{{ imageMessage() }}</span>
+              }
+              <button type="button" class="btn btn-secondary drop-choose" (click)="fileInput.click()">
+                {{ imageState() === 'idle' ? u.dropChoose : u.dropAnother }}
+              </button>
+              @if (imageState() === 'idle') {
+                <span class="dropzone-hint">{{ u.dropOr }} · {{ u.dropTypes }}</span>
+              }
+            }
+          }
         </div>
       }
     </div>
@@ -99,8 +128,8 @@
         <button type="button" class="btn btn-ghost how-button" (click)="openHow()" [attr.aria-expanded]="howOpen()" aria-controls="how-drawer">
           {{ u.how }}
         </button>
-        <button type="button" class="btn btn-ghost download-button" (click)="download()" [disabled]="entries().length === 0">
-          <lucide-icon [img]="icons.Download" [size]="16" aria-hidden="true" />{{ u.download }}
+        <button type="button" class="btn btn-ghost download-button" (click)="download()" [disabled]="entries().length === 0 || downloading()">
+          <lucide-icon [img]="icons.Download" [size]="16" aria-hidden="true" />{{ downloading() ? u.downloading : u.download }}
         </button>
         <button type="button" class="btn btn-secondary new-button" (click)="newAnalysis()">{{ u.newAnalysis }}</button>
       </div>
@@ -185,7 +214,7 @@
                   <div class="inst-title">
                     <h2 class="inst-q">{{ quantityOf(e) }}</h2>
                     @if (limit(); as l) {
-                      <p class="inst-law">{{ l.title }} · <span class="mono">{{ l.formula }}</span></p>
+                      <p class="inst-law">{{ l.title }} · <span class="mono">{{ formula(l.formula) }}</span></p>
                     }
                   </div>
                   <div class="inst-nav">
@@ -231,11 +260,22 @@
                       </section>
                     }
 
-                    @if (cd.kind === 'needs' && cd.missing.length) {
+                    @if (cd.kind === 'needs' && (cd.missing.length || cd.assumptions.length)) {
                       <section class="nv-part">
                         <h3 class="nv-h">{{ u.settle }}</h3>
                         <p class="inst-note">{{ cd.settle }}</p>
                         <form class="supply" (submit)="$event.preventDefault(); reevaluate(cd)">
+                          @for (a of cd.assumptions; track a.id) {
+                            <label class="supply-field">
+                              <span>{{ a.label }}</span>
+                              <select class="supply-select" [attr.name]="'assumption-' + a.id" (change)="supply('assumption:' + a.id, $any($event.target).value)">
+                                <option value="" [selected]="!supplied()['assumption:' + a.id]">{{ u.chooseOption }}</option>
+                                @for (o of a.options; track o.id) {
+                                  <option [value]="o.id" [selected]="supplied()['assumption:' + a.id] === o.id">{{ o.label }}</option>
+                                }
+                              </select>
+                            </label>
+                          }
                           @for (m of cd.missing; track m.id) {
                             <label class="supply-field">
                               <span>{{ u.supplyLabel(m.label, m.unit) }}</span>
@@ -293,17 +333,47 @@
                   <dl class="tiles">
                     <div class="tile">
                       <dt>{{ u.metricClaim }}</dt>
-                      <dd class="num tile-n">{{ claimText(c) }}</dd>
+                      <dd class="num tile-n">{{ claimShown(c) }}</dd>
                     </div>
                     <div class="tile">
                       <dt>{{ u.metricBound }}</dt>
-                      <dd class="num tile-n">{{ bound(c) }}</dd>
+                      <dd class="num tile-n">{{ boundShown(c, selected()) }}</dd>
+                      @if (focus(selected()); as fo) {
+                        <dd class="tile-note">{{ fo.option }}</dd>
+                      }
                     </div>
                     <div class="tile tile--{{ kindOf(selected()) }}">
                       <dt>{{ u.metricRatio }}</dt>
-                      <dd class="num tile-n">{{ ratio(c) }}</dd>
+                      <dd class="num tile-n">{{ ratioShown(c, selected()) }}</dd>
+                      @if (focus(selected()); as fo) {
+                        <dd class="tile-note">{{ fo.option }}</dd>
+                      }
                     </div>
                   </dl>
+                  <dl class="calc">
+                    @if (values(c)) {
+                      <dt>{{ u.valuesUsed }}</dt>
+                      <dd class="num">{{ values(c) }}</dd>
+                    }
+                    @if (calc(c, selected()); as k) {
+                      <dt>{{ u.calculation }}</dt>
+                      <dd class="num">{{ k }}</dd>
+                    }
+                  </dl>
+                  @if (optionList(selected()).length) {
+                    <section class="byopt" [attr.aria-label]="u.byAssumption">
+                      <h3 class="nv-h">{{ u.byAssumption }} · {{ optionList(selected())[0].assumption }}</h3>
+                      <ul class="byopt-list">
+                        @for (o of optionList(selected()); track o.option) {
+                          <li class="byopt-item">
+                            <span class="byopt-name">{{ o.option }}</span>
+                            <span class="byopt-vals num">{{ u.optionBound(optionBound(c, o)) }}@if (optionRatio(o); as r) { · {{ u.optionRatio(r) }}}</span>
+                            <span class="pill pill--{{ optionKind(o) }}">{{ optionVerdict(o) }}</span>
+                          </li>
+                        }
+                      </ul>
+                    </section>
+                  }
                   @if (visual() !== 'none') {
                     <div class="visual visual--{{ visual() }}">
                       @switch (visual()) {
@@ -340,7 +410,7 @@
                       <dl class="facts">
                         @if (c.result) {
                           <dt>{{ u.engineWording }}</dt>
-                          <dd class="wording">{{ c.result.wording }}</dd>
+                          <dd class="wording">{{ statement(c) }}</dd>
                         }
                         <dt>{{ u.sourceDomain }}</dt>
                         <dd>{{ limit()?.validity_domain || u.sourceNone }}</dd>
@@ -366,7 +436,13 @@
                           @if (limit()?.references?.length) {
                             <ul class="refs">
                               @for (r of limit()?.references ?? []; track $index) {
-                                <li>{{ r }}</li>
+                                <li>
+                                  @if (doi(r); as url) {
+                                    <a class="ref-link" [href]="url" target="_blank" rel="noopener noreferrer">{{ r }}<lucide-icon [img]="icons.ExternalLink" [size]="12" aria-hidden="true" /></a>
+                                  } @else {
+                                    {{ r }}
+                                  }
+                                </li>
                               }
                             </ul>
                           } @else {
@@ -386,47 +462,51 @@
   }
 }
 
-<aside
-  id="how-drawer"
-  class="drawer"
-  [class.is-open]="howOpen()"
-  [hidden]="!howOpen()"
-  role="dialog"
-  aria-modal="true"
-  aria-labelledby="how-drawer-title"
-  tabindex="-1"
-  [cdkTrapFocus]="howOpen()"
-  #how
+@defer (when howOpen()) {
+<p-drawer
+  [visible]="howOpen()"
+  (visibleChange)="$event ? null : closeHow()"
+  position="right"
+  [modal]="true"
+  [blockScroll]="true"
+  [closeOnEscape]="true"
+  styleClass="how-drawer"
+  [header]="u.how"
+  [ariaCloseLabel]="u.close"
 >
-  <div class="drawer-head">
-    <h2 id="how-drawer-title" class="drawer-title">{{ u.how }}</h2>
-    <button type="button" class="icon-btn" (click)="closeHow()" [attr.aria-label]="u.close">
-      <lucide-icon [img]="icons.X" [size]="18" aria-hidden="true" />
-    </button>
-  </div>
+  <p class="how-intro">{{ u.howIntro }}</p>
   <h3 class="drawer-sub">{{ u.runLog }}</h3>
-  <ol class="log">
+  <ul class="how-log">
     @for (l of log(); track $index) {
-      <li class="log-line log-line--{{ l.status }}">{{ l.text }}</li>
+      <li class="how-log-line how-log-line--{{ l.status }}">
+        <span class="how-dot how-dot--{{ l.status }}" aria-hidden="true"></span>{{ l.text }}
+      </li>
     }
-  </ol>
-  @for (e of entries(); track $index; let i = $index) {
-    <section class="trace-entry" [class.is-selected]="i === selected()">
-      <h3 class="drawer-sub">
-        <span class="vdot vdot--{{ kindOf(i) }}" aria-hidden="true"></span> {{ i + 1 }}. {{ titleOf(e) }} · {{ labelOf(i) }}
-      </h3>
-      <ol class="trace">
-        @if (e.kind === 'claim') {
-          @for (t of e.claim.trace; track $index) {
-            <li class="trace-step trace-step--{{ t.status }}">{{ stepLine(t) }}</li>
-          }
-        } @else {
-          <li class="trace-step trace-step--failed">{{ stepLine({ step: 'extraction', status: 'failed' }) }}</li>
-        }
-      </ol>
-    </section>
-  }
-</aside>
-@if (howOpen()) {
-  <button type="button" class="scrim" tabindex="-1" (click)="closeHow()" [attr.aria-label]="u.close"></button>
+  </ul>
+  <h3 class="drawer-sub">{{ u.listLabel }}</h3>
+  <p-accordion [value]="openSteps()" (valueChange)="openSteps.set($any($event))" [multiple]="true" styleClass="how-accordion">
+    @for (e of entries(); track $index; let i = $index) {
+      <p-accordion-panel [value]="i" class="trace-entry" [class.is-selected]="i === selected()">
+        <p-accordion-header>
+          <span class="how-head">
+            <span class="vdot vdot--{{ kindOf(i) }}" aria-hidden="true"></span>
+            <span class="how-head-title">{{ i + 1 }}. {{ chipOf(e) }}</span>
+            <span class="pill pill--{{ kindOf(i) }} how-head-pill">{{ labelOf(i) }}</span>
+          </span>
+        </p-accordion-header>
+        <p-accordion-content>
+          <p-timeline [value]="stepsOf(e)" styleClass="how-timeline">
+            <ng-template #marker let-step>
+              <span class="tl-marker tl-marker--{{ step.status }}" aria-hidden="true"></span>
+            </ng-template>
+            <ng-template #content let-step>
+              <span class="tl-name">{{ step.name }}</span>
+              <span class="tl-status tl-status--{{ step.status }}">{{ step.label }}</span>
+            </ng-template>
+          </p-timeline>
+        </p-accordion-content>
+      </p-accordion-panel>
+    }
+  </p-accordion>
+</p-drawer>
 }

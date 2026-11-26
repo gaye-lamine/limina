@@ -22,6 +22,7 @@
           "options": {
             "browser": "src/main.ts",
             "tsConfig": "tsconfig.app.json",
+            "allowedCommonJsDependencies": ["pdfmake/build/pdfmake", "pdfmake/build/vfs_fonts"],
             "styles": ["node_modules/@fontsource-variable/inter/index.css", "node_modules/@fontsource-variable/jetbrains-mono/index.css", "node_modules/@angular/cdk/overlay-prebuilt.css", "src/styles.css"]
           },
           "configurations": {
@@ -29,7 +30,7 @@
               "budgets": [
                 {
                   "type": "initial",
-                  "maximumWarning": "500kB",
+                  "maximumWarning": "700kB",
                   "maximumError": "1MB"
                 },
                 {

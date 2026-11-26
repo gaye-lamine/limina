@@ -5,10 +5,11 @@
  * here decides a verdict.
  */
 import { AnalyzedClaim, LawAttempt } from './analysis.models';
+import { MissingAssumption, missingAssumptions, stateAssumptions } from './review-format';
 import { ApiFailure, LimitInfo } from './api.models';
 import { formatValue } from './chart-geometry';
 import { UI, WB } from './strings';
-import { badge, explain, verdictLabel } from './workbench-logic';
+import { verdictLabel } from './workbench-logic';
 
 /** One reviewed item: a claim, or a paragraph that could not be analysed. Paragraphs are 1-based. */
 export type Entry =
@@ -16,9 +17,9 @@ export type Entry =
   | { kind: 'failure'; paragraph: number; text: string; failure: ApiFailure; attempts: number };
 
 /** The visual family of a verdict; it is always shown with its text label. */
-export type VerdictKind = 'impossible' | 'conditional' | 'compatible' | 'needs' | 'disputed';
+export type VerdictKind = 'impossible' | 'conditional' | 'compatible' | 'insufficient' | 'needs' | 'disputed';
 
-export const VERDICT_KINDS: VerdictKind[] = ['impossible', 'conditional', 'compatible', 'needs', 'disputed'];
+export const VERDICT_KINDS: VerdictKind[] = ['impossible', 'conditional', 'compatible', 'insufficient', 'needs', 'disputed'];
 
 export function verdictKind(e: Entry): VerdictKind {
   if (e.kind === 'failure') return 'needs';
@@ -30,6 +31,8 @@ export function verdictKind(e: Entry): VerdictKind {
       return 'conditional';
     case 'COMPATIBLE':
       return 'compatible';
+    case 'INSUFFICIENT_DATA':
+      return 'insufficient';
     default:
       return 'needs';
   }
@@ -259,6 +262,10 @@ export interface NoVerdict {
   candidates: Candidate[];
   divergence: number | null;
   missing: MissingInput[];
+  /** Assumptions of the law the text does not state, to choose from. */
+  assumptions: MissingAssumption[];
+  /** "What would settle it" for the printed review (no on-screen instruction). */
+  settlePrint: string;
   sources: string[];
 }
 
@@ -278,6 +285,25 @@ export function plainStep(t: { step: string; status: string }): string {
   const authoring = /^authoring\b/.test(t.step);
   const name = authoring ? UI.stepNames['authoring'] : (UI.stepNames[t.step] ?? t.step.replace(/_/g, ' '));
   return `${name}: ${UI.stepStatus[t.status] ?? t.status}`;
+}
+
+/** One step of the check, for the timeline: a plain name and its status. */
+export interface StepItem {
+  name: string;
+  status: 'done' | 'failed' | 'skipped';
+  label: string;
+}
+
+/** The steps of an entry for the timeline, in plain words. */
+export function stepItems(e: Entry): StepItem[] {
+  const trace = e.kind === 'claim' ? e.claim.trace : [{ step: 'extraction', status: 'failed' as const, detail: '' }];
+  let version = 0;
+  return trace.map((t) => {
+    const authoring = /^authoring\b/.test(t.step);
+    const base = authoring ? UI.stepNames['authoring'] : (UI.stepNames[t.step] ?? t.step.replace(/_/g, ' '));
+    const name = authoring ? `${base} (${UI.version(version++)})` : base;
+    return { name, status: t.status, label: UI.stepStatus[t.status] ?? t.status };
+  });
 }
 
 /** Steps of the trace, one plain line each. */
@@ -301,16 +327,25 @@ export function noVerdict(e: Entry, limits: LimitInfo[]): NoVerdict | null {
       happened: UI.failedSentence(),
       tried: [plainStep({ step: 'extraction', status: 'failed' })],
       settle: UI.settleFailed,
+      settlePrint: UI.settleFailed,
       candidates: [],
       divergence: null,
       missing: [],
+      assumptions: [],
       sources: [],
     };
   }
   const c = e.claim;
   const r = c.result;
   if (r && r.verdict !== 'INSUFFICIENT_DATA') return null;
-  const base = { tried: triedSteps(c), candidates: [] as Candidate[], divergence: null as number | null, missing: [] as MissingInput[], sources: [] as string[] };
+  const base = {
+    tried: triedSteps(c),
+    candidates: [] as Candidate[],
+    divergence: null as number | null,
+    missing: [] as MissingInput[],
+    assumptions: [] as MissingAssumption[],
+    sources: [] as string[],
+  };
   if (c.law?.source === 'draft_disputed') {
     const candidates = c.law.attempts.map((a, n) => ({
       model: UI.version(n),
@@ -323,11 +358,12 @@ export function noVerdict(e: Entry, limits: LimitInfo[]): NoVerdict | null {
       x !== null && x !== undefined && y !== null && y !== undefined && Math.max(Math.abs(x), Math.abs(y)) > 0
         ? Math.abs(x - y) / Math.max(Math.abs(x), Math.abs(y))
         : null;
-    return { ...base, kind: 'disputed', happened: UI.disputedSentence, settle: UI.settleDisputed, candidates, divergence };
+    return { ...base, kind: 'disputed', happened: UI.disputedSentence, settle: UI.settleDisputed, settlePrint: UI.settleDisputed, candidates, divergence };
   }
   const limit = limits.find((l) => l.id === c.limit_id);
   if (limit) {
     const ids = r?.missing_parameters.map((m) => m.id) ?? limit.parameters.filter((p) => c.parameters[p.id]?.value == null).map((p) => p.id);
+    const assumptions = r ? [] : missingAssumptions(c, limit);
     const missing = ids.map((id) => {
       const spec = limit.parameters.find((p) => p.id === id);
       return { id, label: limit.parameter_labels[id] ?? id, unit: spec?.units[0] ?? '' };
@@ -336,8 +372,10 @@ export function noVerdict(e: Entry, limits: LimitInfo[]): NoVerdict | null {
       ...base,
       kind: 'needs',
       happened: c.reason ? UI.noVerdictBecause(c.reason) : UI.missing(ids.join(', ')),
-      settle: missing.length ? UI.settleNeeds(missing.map((m) => m.label).join(', ')) : UI.settleUnit,
+      settle: missing.length ? UI.settleNeeds(missing.map((m) => m.label).join(', ')) : assumptions.length ? stateAssumptions(assumptions) : UI.settleUnit,
+      settlePrint: missing.length ? UI.settleNeedsPrint(missing.map((m) => m.label).join(', ')) : assumptions.length ? stateAssumptions(assumptions) : UI.settleUnit,
       missing,
+      assumptions,
     };
   }
   const law = c.trace.find((t) => t.step === 'law');
@@ -347,6 +385,7 @@ export function noVerdict(e: Entry, limits: LimitInfo[]): NoVerdict | null {
     kind: 'nolaw',
     happened: c.reason ? UI.noVerdictBecause(c.reason) : UI.noVerdict,
     settle: UI.settleNoLaw(c.quantity, c.raw_unit),
+    settlePrint: UI.settleNoLaw(c.quantity, c.raw_unit),
     sources,
   };
 }
@@ -383,43 +422,4 @@ export function step(visible: number[], current: number, by: 1 | -1): number {
 /** Title of an entry in lists: "speed of a massive body · 3.60e+8 m/s". */
 export function entryTitle(e: Entry): string {
   return e.kind === 'claim' ? `${e.claim.quantity} · ${readValueText(e.claim)}` : `${WB.progressParagraph} ${e.paragraph}`;
-}
-
-/**
- * The review as a self-contained Markdown document: title, summary, then
- * each claim with its verdict, plain sentence, engine wording, bound, law,
- * source and engine version.
- */
-export function reviewMarkdown(entries: Entry[], paragraphs: number, limits: LimitInfo[], date: string): string {
-  const s = summary(entries, paragraphs);
-  const out = [`# ${UI.reportTitle}`, '', `${UI.reportDate}: ${date}`, '', `${UI.claimsCount(s.claims)}, ${UI.paragraphsCount(s.paragraphs)}.`, ''];
-  for (const c of s.counts) out.push(`- ${c.label}: ${c.count}`);
-  out.push('');
-  entries.forEach((e, i) => {
-    const limit = e.kind === 'claim' ? limits.find((l) => l.id === e.claim.limit_id) : undefined;
-    const direction = limit?.direction ?? 'Max';
-    out.push(`## ${i + 1}. ${entryTitle(e)}`, '');
-    out.push(`- ${UI.reportVerdict}: ${verdictText(e)}`);
-    out.push(`- ${UI.reportPlain}: ${plainSentence(e, direction)}`);
-    if (e.kind === 'failure') {
-      out.push(`- ${UI.reportQuote}: "${e.text}"`, `- ${UI.reportError}: ${UI.paragraphNotRead}`, '');
-      return;
-    }
-    const c = e.claim;
-    if (c.evidence) out.push(`- ${UI.reportQuote}: "${c.evidence.text}"`);
-    for (const line of explain(c)) out.push(`- ${line}`);
-    if (c.result) out.push(`- ${UI.reportWording}: ${c.result.wording}`);
-    out.push(`- ${UI.metricClaim}: ${claimValueText(c)}`, `- ${UI.metricBound}: ${boundText(c)}`);
-    const ratio = ratioText(c);
-    if (ratio) out.push(`- ${UI.metricRatio}: ${ratio}`);
-    if (limit) out.push(`- ${UI.reportLaw}: ${limit.title}, \`${limit.formula}\``);
-    else if (c.law?.sentence) out.push(`- ${UI.reportLaw}: ${c.law.sentence}`);
-    out.push(`- ${UI.reportStatus}: ${badge(c)}`);
-    if (limit?.validity_domain) out.push(`- ${UI.sourceDomain}: ${limit.validity_domain}`);
-    const refs = limit?.references ?? [];
-    out.push(`- ${UI.reportSource}: ${refs.length ? refs.join('; ') : UI.reportNoSource}`);
-    out.push(`- ${UI.reportEngine}: ${c.result?.engine_version ?? UI.reportNotEvaluated}`, '');
-  });
-  out.push('---', '', UI.reportFooter, '');
-  return out.join('\n');
 }

@@ -1,6 +1,9 @@
 import { A11yModule } from '@angular/cdk/a11y';
-import { Component, ElementRef, HostListener, computed, inject, signal, viewChild } from '@angular/core';
-import { LucideAngularModule, ChevronDown, ChevronLeft, ChevronRight, Copy, Download, ImageUp, X } from 'lucide-angular';
+import { Component, HostListener, computed, inject, signal } from '@angular/core';
+import { Accordion, AccordionContent, AccordionHeader, AccordionPanel } from 'primeng/accordion';
+import { Drawer } from 'primeng/drawer';
+import { Timeline } from 'primeng/timeline';
+import { LucideAngularModule, ChevronDown, ChevronLeft, ChevronRight, Copy, Download, ExternalLink, ImageUp, X } from 'lucide-angular';
 import { Observable, firstValueFrom } from 'rxjs';
 import { AnalyzeResponse, AnalyzedClaim } from './analysis.models';
 import { AnalysisService } from './analysis.service';
@@ -11,6 +14,22 @@ import { CopApparatus, TwinVerdicts } from './cop-apparatus';
 import { CountUp } from './count-up';
 import { formatValue } from './chart-geometry';
 import { Explorer } from './explorer';
+import { IMAGE_TYPES, imageProblem, prepareImage } from './image-input';
+import { ReviewExport } from './review-export';
+import {
+  OptionResult,
+  boundDisplay,
+  calculation,
+  doiUrl,
+  focusOption,
+  formalStatement,
+  inClaimUnit,
+  missingAssumptions,
+  prettyFormula,
+  ratioDisplay,
+  valuesUsed,
+} from './review-format';
+import { reviewDocument } from './review-pdf';
 import { Gauge } from './gauge';
 import {
   Entry,
@@ -19,6 +38,8 @@ import {
   VerdictKind,
   noVerdict,
   plainStep,
+  stepItems,
+  StepItem,
   readingSentences,
   shortLabel,
   boundText,
@@ -27,7 +48,6 @@ import {
   filtered,
   plainSentence,
   ratioText,
-  reviewMarkdown,
   step,
   summary,
   verdictKind,
@@ -68,7 +88,21 @@ export type StepState = 'waiting' | 'active' | 'done';
  */
 @Component({
   selector: 'app-workbench',
-  imports: [Explorer, Gauge, CarnotApparatus, CopApparatus, CountUp, LucideAngularModule, A11yModule],
+  imports: [
+    Explorer,
+    Gauge,
+    CarnotApparatus,
+    CopApparatus,
+    CountUp,
+    LucideAngularModule,
+    A11yModule,
+    Drawer,
+    Accordion,
+    AccordionPanel,
+    AccordionHeader,
+    AccordionContent,
+    Timeline,
+  ],
   templateUrl: './workbench.html',
   host: { '[attr.data-state]': 'state()' },
 })
@@ -76,11 +110,12 @@ export class Workbench {
   private readonly analysis = inject(AnalysisService);
   private readonly api = inject(ApiService);
   private readonly toast = inject(ToastService);
+  private readonly exporter = inject(ReviewExport);
   protected readonly status = inject(StatusService);
   protected readonly s = WB;
   protected readonly u = UI;
   protected readonly samples = SAMPLES;
-  protected readonly icons = { ChevronDown, ChevronLeft, ChevronRight, Copy, Download, ImageUp, X };
+  protected readonly icons = { ChevronDown, ChevronLeft, ChevronRight, Copy, Download, ExternalLink, ImageUp, X };
 
   readonly text = signal(SAMPLES[0].text);
   readonly running = signal(false);
@@ -102,7 +137,8 @@ export class Workbench {
   protected readonly limits = signal<LimitInfo[]>([]);
   protected readonly solved = signal<Record<number, string>>({});
   protected readonly twins = signal<Record<number, TwinVerdicts>>({});
-  private readonly howDrawer = viewChild<ElementRef<HTMLElement>>('how');
+  /** The engine's result for each option of an assumption the text leaves open (CONDITIONAL claims). */
+  protected readonly options = signal<Record<number, OptionResult[]>>({});
 
   readonly state = computed<'input' | 'running' | 'reviewed'>(() =>
     this.running() ? 'running' : this.analysed() ? 'reviewed' : 'input',
@@ -177,6 +213,11 @@ export class Workbench {
     const e = this.entries()[i];
     return e ? plainSentence(e, this.direction(e)) : '';
   }
+  /** Panels open in the drawer: the selected claim when it opens. */
+  protected readonly openSteps = signal<number[]>([]);
+  protected stepsOf(e: Entry): StepItem[] {
+    return stepItems(e);
+  }
   protected stepLine(t: { step: string; status: string }): string {
     return plainStep(t);
   }
@@ -185,6 +226,52 @@ export class Workbench {
   }
   protected quantityOf(e: Entry): string {
     return e.kind === 'claim' ? e.claim.quantity : `${WB.progressParagraph} ${e.paragraph}`;
+  }
+  protected directionOf(c: AnalyzedClaim): string {
+    return this.limits().find((l) => l.id === c.limit_id)?.direction ?? 'Max';
+  }
+  protected focus(i: number): OptionResult | null {
+    return focusOption(this.options()[i]);
+  }
+  protected optionList(i: number): OptionResult[] {
+    return this.options()[i] ?? [];
+  }
+  protected claimShown(c: AnalyzedClaim): string {
+    return c.value !== null ? inClaimUnit(c.value, c) : this.claimText(c);
+  }
+  protected boundShown(c: AnalyzedClaim, i: number): string {
+    return boundDisplay(c, this.focus(i)?.result ?? c.result, this.directionOf(c));
+  }
+  protected ratioShown(c: AnalyzedClaim, i: number): string {
+    return ratioDisplay(this.focus(i)?.result ?? c.result) ?? UI.metricNone;
+  }
+  protected optionBound(c: AnalyzedClaim, o: OptionResult): string {
+    return boundDisplay(c, o.result, this.directionOf(c));
+  }
+  protected optionRatio(o: OptionResult): string | null {
+    return ratioDisplay(o.result);
+  }
+  protected optionKind(o: OptionResult): VerdictKind {
+    return o.result.verdict === 'IMPOSSIBLE' ? 'impossible' : o.result.verdict === 'COMPATIBLE' ? 'compatible' : o.result.verdict === 'CONDITIONAL' ? 'conditional' : 'insufficient';
+  }
+  protected optionVerdict(o: OptionResult): string {
+    return STRINGS.verdictLabel[o.result.verdict];
+  }
+  protected values(c: AnalyzedClaim): string {
+    return valuesUsed(c);
+  }
+  protected calc(c: AnalyzedClaim, i: number): string | null {
+    const f = this.focus(i);
+    return calculation(f ? { ...c, result: f.result } : c, this.limit());
+  }
+  protected statement(c: AnalyzedClaim): string {
+    return c.result ? formalStatement(c.result.wording, this.limit()) : '';
+  }
+  protected formula(f: string): string {
+    return prettyFormula(f);
+  }
+  protected doi(ref: string): string | null {
+    return doiUrl(ref);
   }
   protected sci(v: number): string {
     return formatValue(v);
@@ -245,7 +332,9 @@ export class Workbench {
 
   protected canReevaluate(card: NoVerdict): boolean {
     const s = this.supplied();
-    return card.missing.length > 0 && card.missing.every((m) => Number.isFinite(Number(s[m.id])) && (s[m.id] ?? '').trim() !== '');
+    const numbers = card.missing.every((m) => Number.isFinite(Number(s[m.id])) && (s[m.id] ?? '').trim() !== '');
+    const choices = card.assumptions.every((a) => a.options.some((o) => o.id === s[`assumption:${a.id}`]));
+    return card.missing.length + card.assumptions.length > 0 && numbers && choices;
   }
 
   /** POST /v1/evaluate with the traced parameters and the values the user typed; the engine decides. */
@@ -267,7 +356,10 @@ export class Workbench {
         this.api.evaluate({
           limit_id: limitId,
           claim: { value, unit: c.unit },
-          constraints: Object.fromEntries(Object.entries(c.constraints).map(([a, o]) => [a, [o]])),
+          constraints: {
+            ...Object.fromEntries(Object.entries(c.constraints).map(([a, o]) => [a, [o]])),
+            ...Object.fromEntries(card.assumptions.map((a) => [a.id, [s[`assumption:${a.id}`]]])),
+          },
           parameters,
         }),
       );
@@ -277,10 +369,11 @@ export class Workbench {
       const claim: AnalyzedClaim = {
         ...c,
         parameters: { ...c.parameters, ...added },
+        constraints: { ...c.constraints, ...Object.fromEntries(card.assumptions.map((a) => [a.id, s[`assumption:${a.id}`]])) },
         status: 'evaluated',
         result,
         reason: null,
-        trace: [...c.trace, { step: 'evaluation', status: 'done', detail: `${UI.suppliedTrace(card.missing.map((m) => m.id).join(', '))}; engine verdict ${result.verdict}` }],
+        trace: [...c.trace, { step: 'evaluation', status: 'done', detail: `${UI.suppliedTrace([...card.missing.map((m) => m.id), ...card.assumptions.map((a) => a.label)].join(', '))}; engine verdict ${result.verdict}` }],
       };
       this.entries.update((all) => all.map((x, k) => (k === i ? { ...e, claim } : x)));
       this.solved.update((m) => {
@@ -327,8 +420,8 @@ export class Workbench {
     else this.openHow();
   }
   protected openHow(): void {
+    this.openSteps.set([this.selected()]);
     this.howOpen.set(true);
-    setTimeout(() => this.howDrawer()?.nativeElement.focus());
   }
   protected closeHow(): void {
     this.howOpen.set(false);
@@ -359,16 +452,26 @@ export class Workbench {
     event.preventDefault();
   }
 
-  /** The review as Markdown, built and downloaded in the browser. */
-  download(): void {
-    const md = reviewMarkdown(this.entries(), this.parts().length, this.limits(), this.analysedAt());
-    const url = URL.createObjectURL(new Blob([md], { type: 'text/markdown;charset=utf-8' }));
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = UI.reportFile;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url));
-    this.toast.show(UI.downloaded);
+  readonly downloading = signal(false);
+
+  /** The review as a PDF, built in the browser and downloaded. */
+  async download(): Promise<void> {
+    if (this.downloading() || this.entries().length === 0) return;
+    this.downloading.set(true);
+    try {
+      const version = this.entries().flatMap((e) => (e.kind === 'claim' && e.claim.result ? [e.claim.result.engine_version] : []))[0] ?? '';
+      for (let i = 0; i < this.entries().length; i++) await this.enrich(i);
+      const doc = reviewDocument(this.entries(), this.parts().length, this.limits(), this.analysedAt(), version, {
+        solved: this.solved(),
+        options: this.options(),
+      });
+      await this.exporter.download(doc, UI.reportFile);
+      this.toast.show(UI.downloaded);
+    } catch {
+      this.toast.show(UI.downloadFailed, 'error');
+    } finally {
+      this.downloading.set(false);
+    }
   }
 
   protected copyQuote(text: string): void {
@@ -387,33 +490,82 @@ export class Workbench {
     this.log.update((l) => l.map((x, i) => (i === index ? { text: text ?? x.text, status } : x)));
   }
 
-  /** Reads an image dropped or pasted on the input, through the vision model. */
-  protected async takeImage(file: File | null | undefined, event: Event): Promise<void> {
-    if (!file || !file.type.startsWith('image/')) return;
-    event.preventDefault();
-    if (!this.status.vision()) {
-      this.toast.show(WB.inputNoImage, 'error');
+  /** State of the image reader shown in the drop zone. */
+  readonly imageState = signal<'idle' | 'dragging' | 'reading' | 'done' | 'error'>('idle');
+  readonly imageName = signal('');
+  readonly imageMessage = signal('');
+  protected readonly imageTypes = IMAGE_TYPES.join(',');
+  private dragDepth = 0;
+
+  /** Reads an image chosen, dropped or pasted; its text replaces the text box. */
+  async takeImage(file: File | null | undefined, event?: Event): Promise<void> {
+    if (!file) return;
+    event?.preventDefault();
+    if (this.imageState() === 'reading') return;
+    const problem = imageProblem(file);
+    if (problem) {
+      this.imageFailed(problem === 'type' ? UI.imageWrongType : UI.imageEmpty);
       return;
     }
-    const base64 = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result).replace(/^data:[^,]*,/, ''));
-      reader.onerror = () => reject(reader.error);
-      reader.readAsDataURL(file);
-    });
+    if (!this.status.vision()) {
+      this.imageFailed(WB.inputNoImage);
+      return;
+    }
+    this.imageName.set(file.name || UI.imagePasted);
+    this.imageMessage.set('');
+    this.imageState.set('reading');
     const line = this.push({ text: WB.imageRead, status: 'running' });
     try {
-      const r = await firstValueFrom(this.analysis.transcribe(file.type, base64));
+      const image = await prepareImage(file);
+      const r = await firstValueFrom(this.analysis.transcribe(image.mime, image.base64));
+      if (!r.text.trim()) throw new Error('empty');
       this.text.set(r.text);
       this.settle(line, 'done', WB.imageRead);
+      this.imageState.set('done');
+      this.toast.show(UI.imageReadToast);
     } catch {
       this.settle(line, 'failed', WB.imageFailed);
-      this.toast.show(UI.toastImage, 'error');
+      this.imageFailed(UI.imageUnreadable);
     }
   }
 
+  private imageFailed(message: string): void {
+    this.imageMessage.set(message);
+    this.imageState.set('error');
+    this.toast.show(message, 'error');
+  }
+
+  protected onFileChosen(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    void this.takeImage(input.files?.[0]);
+    input.value = '';
+  }
+
+  protected onDragEnter(event: DragEvent): void {
+    if (!Array.from(event.dataTransfer?.types ?? []).includes('Files')) return;
+    event.preventDefault();
+    this.dragDepth += 1;
+    if (this.imageState() !== 'reading') this.imageState.set('dragging');
+  }
+
+  protected onDragLeave(): void {
+    this.dragDepth = Math.max(0, this.dragDepth - 1);
+    if (this.dragDepth === 0 && this.imageState() === 'dragging') this.imageState.set('idle');
+  }
+
   protected onDrop(event: DragEvent): void {
-    void this.takeImage(event.dataTransfer?.files?.[0], event);
+    this.dragDepth = 0;
+    if (this.imageState() === 'dragging') this.imageState.set('idle');
+    const files = Array.from(event.dataTransfer?.files ?? []);
+    const file = files.find((f) => f.type.startsWith('image/')) ?? files[0];
+    if (file) void this.takeImage(file, event);
+  }
+
+  /** An image pasted anywhere on the input screen is read too (the text box handles its own paste). */
+  @HostListener('document:paste', ['$event'])
+  protected onDocumentPaste(event: ClipboardEvent): void {
+    if (this.state() !== 'input' || (event.target as HTMLElement | null)?.id === 'wb-text') return;
+    this.onPaste(event);
   }
 
   protected onPaste(event: ClipboardEvent): void {
@@ -441,6 +593,7 @@ export class Workbench {
     this.entries.set([]);
     this.solved.set({});
     this.twins.set({});
+    this.options.set({});
     this.selected.set(0);
     this.filter.set(null);
     this.sourceOpen.set(false);
@@ -554,6 +707,23 @@ export class Workbench {
           continue;
         }
       }
+    }
+    if (verdict === 'CONDITIONAL' && this.options()[i] === undefined) {
+      const limit = this.limits().find((l) => l.id === c.limit_id);
+      const open = missingAssumptions(c, limit)[0];
+      const parameters = Object.fromEntries(known.map(([id, p]) => [id, { value: p.value as number, unit: p.unit }]));
+      const found: OptionResult[] = [];
+      for (const o of open?.options ?? []) {
+        try {
+          const result = await firstValueFrom(
+            this.api.evaluate({ limit_id: c.limit_id, claim: { value: c.value, unit: c.unit }, constraints: { ...constraints, [open.id]: [o.id] }, parameters }),
+          );
+          found.push({ assumption: open.label, option: o.label, result });
+        } catch {
+          continue;
+        }
+      }
+      this.options.update((m) => ({ ...m, [i]: found }));
     }
     if (c.limit_id === 'cop' && !c.constraints['mode']) {
       const parameters = Object.fromEntries(known.map(([id, p]) => [id, { value: p.value as number, unit: p.unit }]));
