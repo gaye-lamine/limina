@@ -11,7 +11,7 @@
   "tolerance": 0.005,
   "validity": ["m_initial > 0", "m_final > 0"],
   "references": [
-    "Einstein, A., Ist die Traegheit eines Koerpers von seinem Energieinhalt abhaengig?, Annalen der Physik 323(13), 639-641 (1905), doi:10.1002/andp.19053231314",
+    "Einstein, A., Ist die Trägheit eines Körpers von seinem Energieinhalt abhängig?, Annalen der Physik 323(13), 639-641 (1905), doi:10.1002/andp.19053231314",
     "Krane, K. S., Introductory Nuclear Physics, 3rd ed., Wiley (1988)",
     "CODATA 2022 recommended value of the speed of light in vacuum, https://physics.nist.gov/cgi-bin/cuu/Value?c"
   ],

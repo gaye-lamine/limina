@@ -9,8 +9,8 @@
   "formula": "hbar/(2*dp)",
   "validity": [],
   "references": [
-    "Heisenberg, W., Ueber den anschaulichen Inhalt der quantentheoretischen Kinematik und Mechanik, Zeitschrift fuer Physik 43(3-4), 172-198 (1927), doi:10.1007/BF01397280",
-    "Kennard, E. H., Zur Quantenmechanik einfacher Bewegungstypen, Zeitschrift fuer Physik 44, 326-352 (1927), doi:10.1007/BF01391200",
+    "Heisenberg, W., Über den anschaulichen Inhalt der quantentheoretischen Kinematik und Mechanik, Zeitschrift für Physik 43(3-4), 172-198 (1927), doi:10.1007/BF01397280",
+    "Kennard, E. H., Zur Quantenmechanik einfacher Bewegungstypen, Zeitschrift für Physik 44, 326-352 (1927), doi:10.1007/BF01391200",
     "Griffiths, D. J. and Schroeter, D. F., Introduction to Quantum Mechanics, 3rd ed., Cambridge University Press (2018)"
   ],
   "status": "draft",

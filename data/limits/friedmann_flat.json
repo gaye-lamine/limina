@@ -10,7 +10,7 @@
   "tolerance": 0.005,
   "validity": ["rho > 0"],
   "references": [
-    "Friedmann, A., Ueber die Kruemmung des Raumes, Zeitschrift fuer Physik 10, 377-386 (1922), doi:10.1007/BF01332580",
+    "Friedmann, A., Über die Krümmung des Raumes, Zeitschrift für Physik 10, 377-386 (1922), doi:10.1007/BF01332580",
     "Ryden, B., Introduction to Cosmology, 2nd ed., Cambridge University Press"
   ],
   "status": "draft",

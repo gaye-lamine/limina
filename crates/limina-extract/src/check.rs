@@ -155,19 +155,36 @@ fn resolve_built_in(
 }
 
 /// The sentence of `text` around a character span: from just after the
-/// previous sentence end (". ", "! ", "? " or a line break) to the next one.
+/// previous sentence end (". ", "! ", "? " or a blank line) to the next one.
+/// A single line break is a wrapped line (text read from an image), not an end.
 pub(crate) fn sentence_around(text: &str, span: &Span) -> String {
     let chars: Vec<char> = text.chars().collect();
     let ends = |i: usize| {
         matches!(chars.get(i), Some('.' | '!' | '?'))
             && chars.get(i + 1).is_none_or(|c| c.is_whitespace())
     };
+    // A blank line: this line break and the next non-space character is another line break.
+    let blank = |i: usize| {
+        chars.get(i) == Some(&'\n')
+            && chars[i + 1..]
+                .iter()
+                .find(|c| !matches!(c, ' ' | '\t' | '\r'))
+                .is_some_and(|c| *c == '\n')
+    };
+    let blank_before = |i: usize| {
+        chars.get(i) == Some(&'\n')
+            && chars[..i]
+                .iter()
+                .rev()
+                .find(|c| !matches!(c, ' ' | '\t' | '\r'))
+                .is_some_and(|c| *c == '\n')
+    };
     let mut a = span.start.min(chars.len());
-    while a > 0 && chars[a - 1] != '\n' && !ends(a - 1) {
+    while a > 0 && !blank_before(a - 1) && !ends(a - 1) {
         a -= 1;
     }
     let mut b = span.end.min(chars.len());
-    while b < chars.len() && chars[b] != '\n' && !ends(b) {
+    while b < chars.len() && !blank(b) && !ends(b) {
         b += 1;
     }
     chars[a..(b + 1).min(chars.len())].iter().collect()
@@ -176,12 +193,22 @@ pub(crate) fn sentence_around(text: &str, span: &Span) -> String {
 /// Every number of `sentence` immediately followed by a unit symbol the
 /// core parses, with the quotation "number unit" as written.
 pub(crate) fn numbers_with_units(sentence: &str) -> Vec<(f64, String, String)> {
+    numbers_with_units_at(sentence)
+        .into_iter()
+        .map(|(v, u, q, _)| (v, u, q))
+        .collect()
+}
+
+/// Like [`numbers_with_units`], with the character offset of each number
+/// in `sentence`. The number and its unit may be separated by any
+/// whitespace, a line break included (a wrapped line).
+pub(crate) fn numbers_with_units_at(sentence: &str) -> Vec<(f64, String, String, usize)> {
     let chars: Vec<char> = sentence.chars().collect();
     let mut out = Vec::new();
     for (value, start, end) in scan_numbers(sentence) {
         // The words right after the number: one, else two ("kg m/s").
         let rest: String = chars[end.min(chars.len())..].iter().collect();
-        if !rest.starts_with(' ') && !rest.starts_with('\u{a0}') {
+        if !rest.starts_with(char::is_whitespace) {
             continue;
         }
         let words: Vec<&str> = rest.split_whitespace().take(2).collect();
@@ -193,7 +220,7 @@ pub(crate) fn numbers_with_units(sentence: &str) -> Vec<(f64, String, String)> {
             let unit = trim(&unit_words.join(" "));
             if !unit.is_empty() && limina_core::parse_unit(&unit).is_ok() {
                 let number: String = chars[start..end].iter().collect();
-                out.push((value, unit.clone(), format!("{number} {unit}")));
+                out.push((value, unit.clone(), format!("{number} {unit}"), start));
                 break;
             }
         }
@@ -225,6 +252,81 @@ pub fn unique_number_in_units(
     }
 }
 
+/// Words that name a parameter in a sentence, by parameter name. Only
+/// used to choose between several numbers of the same unit.
+const PARAMETER_CUES: &[(&str, &[&str])] = &[
+    (
+        "Th",
+        &["hot", "source", "high temperature", "hot side", "warm"],
+    ),
+    (
+        "Tc",
+        &[
+            "cold",
+            "sink",
+            "low temperature",
+            "cold side",
+            "ground",
+            "outside",
+            "outdoor",
+        ],
+    ),
+    ("wavelength", &["wavelength", "light"]),
+    ("aperture", &["aperture", "na"]),
+    ("dp", &["momentum"]),
+    ("T", &["temperature"]),
+];
+
+/// Whether the words between the previous number of the sentence and the
+/// number at `at` name the parameter `name` (whole words, case ignored).
+fn names_parameter(
+    sentence: &str,
+    at: usize,
+    name: &str,
+    found: &[(f64, String, String, usize)],
+) -> bool {
+    let Some((_, cues)) = PARAMETER_CUES.iter().find(|(n, _)| *n == name) else {
+        return false;
+    };
+    let from = found
+        .iter()
+        .map(|(_, _, q, s)| s + q.chars().count())
+        .filter(|e| *e <= at)
+        .max()
+        .unwrap_or(0);
+    let before: String = sentence
+        .chars()
+        .skip(from)
+        .take(at.saturating_sub(from))
+        .collect();
+    let words = format!(
+        " {} ",
+        before
+            .to_lowercase()
+            .split(|c: char| !c.is_alphanumeric())
+            .filter(|w| !w.is_empty())
+            .collect::<Vec<_>>()
+            .join(" ")
+    );
+    cues.iter().any(|c| words.contains(&format!(" {c} ")))
+}
+
+/// The character range `[start, end)` of the sentence of `text` around `span`.
+fn sentence_bounds(text: &str, span: &Span) -> (usize, usize) {
+    let sentence = sentence_around(text, span);
+    let n = sentence.chars().count();
+    let chars: Vec<char> = text.chars().collect();
+    // The sentence contains the span; search its start at or before the span.
+    let first = span.start.min(chars.len());
+    for start in (0..=first).rev() {
+        if start + n <= chars.len() && chars[start..start + n].iter().copied().eq(sentence.chars())
+        {
+            return (start, start + n);
+        }
+    }
+    (0, chars.len())
+}
+
 /// Note added to a claim whose parameter was read from its own sentence.
 pub const READ_FROM_SENTENCE: &str = "read from the same sentence by its unit";
 
@@ -239,8 +341,16 @@ fn fill_parameters_from_sentence(claim: &mut CheckedClaim, text: &str, catalog: 
     let Some(limit) = catalog.limit(&id) else {
         return;
     };
-    let sentence = sentence_around(text, &span);
-    let found = numbers_with_units(&sentence);
+    let (s_start, s_end) = sentence_bounds(text, &span);
+    let sentence: String = text.chars().skip(s_start).take(s_end - s_start).collect();
+    let found = numbers_with_units_at(&sentence);
+    // Numbers already used: the claim's own and the traced parameters'.
+    let used: Vec<f64> = claim
+        .parameters
+        .values()
+        .filter_map(|p| p.value)
+        .chain(std::iter::once(claim.raw_value))
+        .collect();
     for p in &limit.parameters {
         if claim
             .parameters
@@ -249,15 +359,33 @@ fn fill_parameters_from_sentence(claim: &mut CheckedClaim, text: &str, catalog: 
         {
             continue;
         }
-        let matches: Vec<&(f64, String, String)> = found
+        let in_unit: Vec<&(f64, String, String, usize)> = found
             .iter()
-            .filter(|(_, u, _)| p.units.iter().any(|pu| same_unit(pu, u)))
+            .filter(|(_, u, _, _)| p.units.iter().any(|pu| same_unit(pu, u)))
             .collect();
-        let [(value, unit, quote)] = matches.as_slice() else {
+        let free = in_unit
+            .iter()
+            .copied()
+            .filter(|(v, _, _, _)| !used.iter().any(|x| same(*x, *v)));
+        // One number in the unit: that one. Several (two temperatures): only the one
+        // the words before it name ("cold reservoir at 273 K"); never by elimination,
+        // so a hot and a cold temperature are never swapped.
+        let chosen: Vec<&(f64, String, String, usize)> = if in_unit.len() > 1 {
+            free.filter(|(_, _, _, at)| names_parameter(&sentence, *at, &p.name, &found))
+                .collect()
+        } else {
+            free.collect()
+        };
+        let [(value, unit, quote, at)] = chosen.as_slice() else {
             continue;
         };
-        let Some(evidence) = locate(text, quote) else {
+        let Some(inner) = locate(&sentence.chars().skip(*at).collect::<String>(), quote) else {
             continue;
+        };
+        let evidence = Span {
+            text: inner.text,
+            start: s_start + at + inner.start,
+            end: s_start + at + inner.end,
         };
         claim.parameters.insert(
             p.name.clone(),
@@ -661,18 +789,52 @@ fn stated(text: &str, limit: &CatalogLimit, assumption: &str, option: &str) -> b
     .any(|needle| !needle.is_empty() && haystack.contains(needle.as_str()))
 }
 
-/// The evidence as a character span of the text, when it is an exact substring.
+/// The evidence as a character span of the text, when it is a substring of
+/// it. Runs of whitespace match any run of whitespace, so a quotation with
+/// a space is found where the text wraps the line; the span then holds the
+/// text as written there. Nothing else is relaxed.
 pub fn locate(text: &str, evidence: &str) -> Option<Span> {
-    if evidence.is_empty() {
+    if evidence.trim().is_empty() {
         return None;
     }
-    let byte = text.find(evidence)?;
-    let start = text[..byte].chars().count();
-    Some(Span {
-        text: evidence.to_string(),
-        start,
-        end: start + evidence.chars().count(),
-    })
+    if let Some(byte) = text.find(evidence) {
+        let start = text[..byte].chars().count();
+        return Some(Span {
+            text: evidence.to_string(),
+            start,
+            end: start + evidence.chars().count(),
+        });
+    }
+    let chars: Vec<char> = text.chars().collect();
+    let want: Vec<char> = evidence.trim().chars().collect();
+    'outer: for start in 0..chars.len() {
+        let (mut i, mut j) = (start, 0usize);
+        while j < want.len() {
+            if want[j].is_whitespace() {
+                if i >= chars.len() || !chars[i].is_whitespace() {
+                    continue 'outer;
+                }
+                while j < want.len() && want[j].is_whitespace() {
+                    j += 1;
+                }
+                while i < chars.len() && chars[i].is_whitespace() {
+                    i += 1;
+                }
+            } else {
+                if i >= chars.len() || chars[i] != want[j] {
+                    continue 'outer;
+                }
+                i += 1;
+                j += 1;
+            }
+        }
+        return Some(Span {
+            text: chars[start..i].iter().collect(),
+            start,
+            end: i,
+        });
+    }
+    None
 }
 
 /// Whether `value` is one of the numbers written in `evidence`. A decimal
@@ -1287,6 +1449,73 @@ mod tests {
             r#"{"claims":[{"limit_id":null,"quantity":"figure of merit","value":14.5,"unit":"dimensionless","evidence":"figure of merit of 14.5","constraints":{},"parameters":{}}],"missing":[]}"#,
         )[0];
         assert_eq!(c.not_evaluable_reason(), Some(LIMIT_NOT_RECOGNIZED));
+    }
+
+    /// The text of an image wraps "308" and "K" across two lines; the model
+    /// quotes "308 K" with a space and gives no evidence for Tc.
+    #[test]
+    fn a_wrapped_line_keeps_its_sentence_and_the_cold_reservoir_is_read_by_its_word() {
+        let text = "The Boreal heat pump delivers heat with a COP of 4.0, hot reservoir at 308\nK, cold reservoir at 273 K.";
+        let c = &checked(
+            text,
+            r#"{"claims":[{"limit_id":"cop","quantity":"coefficient of performance","value":4.0,"unit":"dimensionless","evidence":"COP of 4.0","constraints":{},"parameters":{
+                "Th":{"value":308,"unit":"K","evidence":"hot reservoir at 308 K"},
+                "Tc":{"value":273,"unit":"K","evidence":"cold reservoir 273 K"}}}],"missing":[]}"#,
+        )[0];
+        assert_eq!(
+            c.parameters["Th"].value,
+            Some(308.0),
+            "{:?}",
+            c.parameters["Th"]
+        );
+        assert_eq!(
+            c.parameters["Th"]
+                .evidence
+                .as_ref()
+                .map(|e| e.text.as_str()),
+            Some("hot reservoir at 308\nK")
+        );
+        assert_eq!(
+            c.parameters["Tc"].value,
+            Some(273.0),
+            "{:?}",
+            c.parameters["Tc"]
+        );
+        let tc = c.parameters["Tc"].evidence.as_ref().expect("Tc evidence");
+        let chars: Vec<char> = text.chars().collect();
+        assert_eq!(chars[tc.start..tc.end].iter().collect::<String>(), tc.text);
+        assert_eq!(tc.text, "273 K");
+        assert!(c.evaluable());
+    }
+
+    #[test]
+    fn two_temperatures_with_no_naming_word_are_left_alone() {
+        let text = "The pump works between 308 K and 273 K with a COP of 4.0.";
+        let c = &checked(
+            text,
+            r#"{"claims":[{"limit_id":"cop","quantity":"COP","value":4.0,"unit":"dimensionless","evidence":"COP of 4.0","constraints":{},"parameters":{}}],"missing":[]}"#,
+        )[0];
+        assert_eq!(c.parameters.get("Th").and_then(|p| p.value), None);
+        assert_eq!(c.parameters.get("Tc").and_then(|p| p.value), None);
+    }
+
+    #[test]
+    fn a_blank_line_still_ends_the_sentence() {
+        let text = "A pump has a COP of 4.0\n\nThe cold reservoir is at 273 K.";
+        let c = &checked(
+            text,
+            r#"{"claims":[{"limit_id":"cop","quantity":"COP","value":4.0,"unit":"dimensionless","evidence":"COP of 4.0","constraints":{},"parameters":{}}],"missing":[]}"#,
+        )[0];
+        assert_eq!(c.parameters.get("Tc").and_then(|p| p.value), None);
+    }
+
+    #[test]
+    fn a_quote_is_found_across_a_line_break_only() {
+        let text = "hot reservoir at 308\nK, cold";
+        let s = locate(text, "308 K").expect("found");
+        assert_eq!((s.start, s.end, s.text.as_str()), (17, 22, "308\nK"));
+        assert!(locate(text, "308K").is_none());
+        assert!(locate(text, "309 K").is_none());
     }
 
     #[test]

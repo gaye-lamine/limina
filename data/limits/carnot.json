@@ -13,7 +13,7 @@
   "formula": "1 - Tc/Th",
   "validity": ["Tc > 0", "Th > Tc"],
   "references": [
-    "Carnot, S., Reflexions sur la puissance motrice du feu, Bachelier, Paris (1824)",
+    "Carnot, S., Réflexions sur la puissance motrice du feu, Bachelier, Paris (1824)",
     "Callen, H. B., Thermodynamics and an Introduction to Thermostatistics, 2nd ed., Wiley (1985)"
   ],
   "status": "draft",
