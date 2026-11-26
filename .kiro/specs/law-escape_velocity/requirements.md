@@ -9,7 +9,7 @@ Status: v1, frozen. Base: `limit-dsl` and `decision-engine` (unchanged). Definit
 - Validity conditions: r > 0
 - Variables:
 - `M`: Mass of the attracting body (kg, g)
-- `r`: Distance from its centre (m, km)
+- `r`: Distance from its centre (m, km, au)
 
 ## Limits of application
 - Newtonian: not valid near a black hole

@@ -14,7 +14,7 @@
     "CODATA 2022 values of the Planck constant and the speed of light in vacuum (both exact in the 2019 SI), https://physics.nist.gov/cgi-bin/cuu/Value?h"
   ],
   "status": "draft",
-  "epistemic_status": "model_bound",
+  "epistemic_status": "theorem",
   "classification": "fundamental_law",
   "validity_domain": "Energy E = h c / lambda of one photon of vacuum wavelength lambda.",
   "limitations": [

@@ -189,15 +189,33 @@ async fn an_untraceable_temperature_is_dropped_and_reported_missing_by_the_engin
 }
 
 #[tokio::test]
-async fn a_celsius_temperature_is_not_guessed() {
+async fn a_celsius_temperature_is_converted_explicitly_with_a_note() {
+    // 327 °C and 27 °C are absolute temperatures: T_K = T_C + 273.15, noted;
+    // the Carnot bound is 1 - 300.15/600.15 = 0.4999, so 40 % is within it.
     let text = "heat engine between 327 °C and 27 °C at 40% efficiency";
     let mock = Arc::new(MockProvider::new());
     mock.push_content(r#"{"claims":[{"limit_id":"carnot","quantity":"efficiency","value":40,"unit":"%","evidence":"40% efficiency","constraints":{},"parameters":{"Th":{"value":327,"unit":"°C","evidence":"327 °C"},"Tc":{"value":27,"unit":"°C","evidence":"27 °C"}}}],"missing":[]}"#);
     let (_, body) = analyze(state(&mock), text).await;
     let claim = &body["claims"][0];
-    assert_eq!(claim["status"], "needs_input");
-    assert_eq!(claim["reason"], "unit not understood");
-    assert_eq!(claim["result"], Value::Null);
+    assert_eq!(claim["status"], "evaluated", "{claim}");
+    assert_eq!(claim["parameters"]["Th"]["value"], 600.15);
+    assert_eq!(claim["parameters"]["Th"]["raw_value"], 327.0);
+    assert_eq!(claim["parameters"]["Th"]["unit"], "K");
+    let notes = claim["notes"].to_string();
+    assert!(notes.contains("Th = 327 °C becomes 600.15 K"), "{notes}");
+    assert_eq!(claim["result"]["verdict"], "COMPATIBLE");
+}
+
+#[tokio::test]
+async fn a_celsius_difference_is_never_taken_as_a_temperature() {
+    let text =
+        "heat engine with a temperature rise of 300 °C and a cold side at 27 °C at 40% efficiency";
+    let mock = Arc::new(MockProvider::new());
+    mock.push_content(r#"{"claims":[{"limit_id":"carnot","quantity":"efficiency","value":40,"unit":"%","evidence":"40% efficiency","constraints":{},"parameters":{"Th":{"value":300,"unit":"°C","evidence":"a temperature rise of 300 °C"},"Tc":{"value":27,"unit":"°C","evidence":"27 °C"}}}],"missing":[]}"#);
+    let (_, body) = analyze(state(&mock), text).await;
+    let claim = &body["claims"][0];
+    assert!(claim["parameters"]["Th"]["value"].is_null(), "{claim}");
+    assert_ne!(claim["result"]["verdict"], "IMPOSSIBLE", "{claim}");
 }
 
 #[tokio::test]

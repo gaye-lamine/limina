@@ -427,14 +427,22 @@ pub fn check_parameters(
             if let Some(u) = written.filter(|u| !crate::check::same_unit(u, &found.unit)) {
                 found.unit = u;
             }
-            let allowed = w
-                .units
-                .iter()
-                .any(|u| crate::check::same_unit(u, &found.unit));
-            match traced {
-                None => found.flags.push(crate::check::NOT_TRACEABLE.into()),
-                Some(_) if !allowed => found.flags.push(crate::check::UNIT_NOT_UNDERSTOOD.into()),
-                Some(v) => found.value = Some(v),
+            // As written, or converted (°C, solar masses, years) to a unit the law takes.
+            let fitted = traced.and_then(|v| {
+                crate::check::fit_unit(
+                    v,
+                    &found.unit,
+                    &w.units,
+                    p.evidence.as_deref().unwrap_or(""),
+                )
+            });
+            match (traced, fitted) {
+                (None, _) => found.flags.push(crate::check::NOT_TRACEABLE.into()),
+                (Some(_), None) => found.flags.push(crate::check::UNIT_NOT_UNDERSTOOD.into()),
+                (Some(_), Some((v, u, _))) => {
+                    found.value = Some(v);
+                    found.unit = u;
+                }
             }
             found
         })

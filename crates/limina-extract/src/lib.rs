@@ -23,6 +23,7 @@ pub mod parse;
 pub mod prompt;
 pub mod provider;
 pub mod testing;
+pub mod units;
 
 pub use author::{author_limit, author_system_prompt, AuthorError, AuthoredLimit};
 pub use catalog::{Catalog, CatalogAssumption, CatalogLimit, CatalogOption, CatalogParameter};

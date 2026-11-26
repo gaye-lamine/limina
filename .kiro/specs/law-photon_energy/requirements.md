@@ -3,7 +3,7 @@ Status: v1, frozen. Base: `limit-dsl` and `decision-engine` (unchanged). Definit
 ## Facts
 - Name: Photon energy from frequency. Kind: equality (predicted value, relative tolerance 0.005). Bounded quantity dimension: `J`.
 - Equation: `h*f`
-- Classification: `fundamental_law`. Epistemic status: `model_bound`.
+- Classification: `fundamental_law`. Epistemic status: `theorem` (aligned with the classification `fundamental_law` on 2026-11-26, as mass_energy and power_conservation).
 - Validity domain: Energy E = h f of one photon of frequency f in vacuum (Planck-Einstein relation).
 - Validity conditions: f > 0
 - Variables:

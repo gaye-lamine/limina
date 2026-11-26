@@ -8,7 +8,7 @@ Status: v1, frozen. Base: `limit-dsl` and `decision-engine` (unchanged). Definit
 - Validity domain: Orbital period T = 2 pi sqrt(a^3 / (G (m1 + m2))) of an isolated two-body system under Newtonian gravity, with semi-major axis a.
 - Validity conditions: a > 0
 - Variables:
-- `a`: Semi-major axis of the relative orbit (m, km)
+- `a`: Semi-major axis of the relative orbit (m, km, au)
 - `m1`: Mass of the first body (kg, g)
 - `m2`: Mass of the second body (kg, g)
 

@@ -9,8 +9,8 @@ Status: v1, frozen. Base: `limit-dsl` and `decision-engine` (unchanged). Definit
 - Validity conditions: none in the DSL
 - Variables:
 - `ve`: Effective exhaust speed relative to the rocket (m/s, km/s)
-- `m0`: Initial total mass (kg, g)
-- `mf`: Final total mass after the burn (kg, g)
+- `m0`: Initial total mass (kg, g, t)
+- `mf`: Final total mass after the burn (kg, g, t)
 
 ## Limits of application
 - Gravity, drag and any other external force lower the achievable change of speed below this value

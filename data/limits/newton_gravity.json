@@ -6,7 +6,7 @@
   "parameters": [
     { "name": "m1", "dimension": "kg", "units": ["kg", "g"], "test_range": [1, 1e30] },
     { "name": "m2", "dimension": "kg", "units": ["kg", "g"], "test_range": [1, 1e30] },
-    { "name": "r", "dimension": "m", "units": ["m", "km"], "test_range": [1e-2, 1e12] }
+    { "name": "r", "dimension": "m", "units": ["m", "km", "au"], "test_range": [1e-2, 1e12] }
   ],
   "formula": "G*m1*m2/r^2",
   "tolerance": 0.005,

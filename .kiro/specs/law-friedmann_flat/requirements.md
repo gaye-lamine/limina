@@ -7,7 +7,7 @@ Status: v1, frozen. Base: `limit-dsl` and `decision-engine` (unchanged). Definit
 - Validity domain: Expansion rate H of a homogeneous, isotropic (FLRW) universe with zero spatial curvature (k = 0), H^2 = 8 pi G rho / 3, where rho is the total mass-energy density of all components divided by c^2, including dark energy treated as an effective density.
 - Validity conditions: rho > 0
 - Variables:
-- `rho`: Total mass-energy density divided by c squared (kg/m^3)
+- `rho`: Total mass-energy density divided by c squared (kg/m^3, g/cm^3)
 ## Limits of application
 - Flat universe only: for k not zero the term -k c^2 / a^2 is not included, so the law does not apply
 - rho is the total density of every component (matter, radiation, dark energy as an effective density); the value of a single component is not enough

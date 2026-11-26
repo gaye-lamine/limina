@@ -5,7 +5,7 @@
   "bounded_dimension": "m/s",
   "parameters": [
     { "name": "M", "dimension": "kg", "units": ["kg", "g"], "test_range": [1e20, 1e32] },
-    { "name": "r", "dimension": "m", "units": ["m", "km"], "test_range": [1e5, 1e9] }
+    { "name": "r", "dimension": "m", "units": ["m", "km", "au"], "test_range": [1e5, 1e9] }
   ],
   "formula": "sqrt(2*G*M/r)",
   "tolerance": 0.005,

@@ -5,8 +5,8 @@
   "bounded_dimension": "m/s",
   "parameters": [
     { "name": "ve", "dimension": "m/s", "units": ["m/s", "km/s"], "test_range": [1e3, 5e3] },
-    { "name": "m0", "dimension": "kg", "units": ["kg", "g"], "test_range": [2e3, 1e6] },
-    { "name": "mf", "dimension": "kg", "units": ["kg", "g"], "test_range": [1e3, 1e5] }
+    { "name": "m0", "dimension": "kg", "units": ["kg", "g", "t"], "test_range": [2e3, 1e6] },
+    { "name": "mf", "dimension": "kg", "units": ["kg", "g", "t"], "test_range": [1e3, 1e5] }
   ],
   "formula": "ve*ln(max(m0, mf)/min(m0, mf))",
   "validity": [],

@@ -6,7 +6,7 @@
   "parameters": [
     { "name": "q1", "dimension": "C", "units": ["C", "mC", "uC", "nC"], "test_range": [1e-9, 1e-3] },
     { "name": "q2", "dimension": "C", "units": ["C", "mC", "uC", "nC"], "test_range": [1e-9, 1e-3] },
-    { "name": "r", "dimension": "m", "units": ["m", "cm", "mm"], "test_range": [1e-3, 10] }
+    { "name": "r", "dimension": "m", "units": ["m", "cm", "mm", "um", "nm", "pm"], "test_range": [1e-3, 10] }
   ],
   "formula": "abs(q1*q2)/(4*pi*eps0*r^2)",
   "tolerance": 0.005,
@@ -17,7 +17,7 @@
     "CODATA 2022 recommended value of the vacuum electric permittivity, https://physics.nist.gov/cgi-bin/cuu/Value?ep0"
   ],
   "status": "draft",
-  "epistemic_status": "model_bound",
+  "epistemic_status": "theorem",
   "classification": "fundamental_law",
   "validity_domain": "Magnitude of the electrostatic force between two point charges at rest in vacuum, separated by r.",
   "limitations": [

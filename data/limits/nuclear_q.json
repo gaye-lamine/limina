@@ -16,7 +16,7 @@
     "CODATA 2022 recommended value of the speed of light in vacuum, https://physics.nist.gov/cgi-bin/cuu/Value?c"
   ],
   "status": "draft",
-  "epistemic_status": "model_bound",
+  "epistemic_status": "theorem",
   "classification": "fundamental_law",
   "validity_domain": "Magnitude of the energy Q = |sum of initial masses - sum of final masses| c^2 released or absorbed by a nuclear reaction, the masses being the total rest masses on each side.",
   "limitations": [

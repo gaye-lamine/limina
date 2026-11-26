@@ -10,7 +10,7 @@ Status: v1, frozen. Base: `limit-dsl` and `decision-engine` (unchanged). Definit
 - Variables:
 - `m1`: First mass (kg, g)
 - `m2`: Second mass (kg, g)
-- `r`: Distance between the centres (m, km)
+- `r`: Distance between the centres (m, km, au)
 
 ## Limits of application
 - An approximation of general relativity: not valid near compact objects or for precision orbital work

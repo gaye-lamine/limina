@@ -4,7 +4,7 @@
   "direction": "equal",
   "bounded_dimension": "s",
   "parameters": [
-    { "name": "tau", "dimension": "s", "units": ["s", "ms"], "test_range": [1e-9, 1e9] },
+    { "name": "tau", "dimension": "s", "units": ["s", "ms", "us", "µs", "ns"], "test_range": [1e-9, 1e9] },
     { "name": "v", "dimension": "m/s", "units": ["m/s", "km/s"], "test_range": [1e3, 2.5e8] }
   ],
   "formula": "tau/sqrt(1 - (v/c)^2)",

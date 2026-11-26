@@ -4,7 +4,7 @@
   "direction": "equal",
   "bounded_dimension": "Hz",
   "parameters": [
-    { "name": "rho", "dimension": "kg/m^3", "units": ["kg/m^3"], "test_range": [1e-30, 1e-20] }
+    { "name": "rho", "dimension": "kg/m^3", "units": ["kg/m^3", "g/cm^3"], "test_range": [1e-30, 1e-20] }
   ],
   "formula": "sqrt(8*pi*G*rho/3)",
   "tolerance": 0.005,

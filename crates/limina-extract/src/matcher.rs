@@ -782,7 +782,10 @@ fn dimension(unit: &str) -> Option<[i8; 7]> {
     if u.is_empty() || u == "%" || u.eq_ignore_ascii_case("dimensionless") {
         return Some([0; 7]);
     }
-    limina_core::parse_unit(u)
+    // A unit converted on reading (arcsec, years, solar masses) has the
+    // dimension of its core unit; a temperature in °C is a temperature.
+    let core = crate::units::core_unit(u)?;
+    limina_core::parse_unit(&core)
         .ok()
         .map(|p| p.dimension.exponents())
 }
@@ -804,7 +807,7 @@ fn states_a_parameter(limit: &CatalogLimit, sentence: Option<&str>) -> bool {
     limit.parameters.iter().any(|p| {
         found
             .iter()
-            .any(|(_, u, _)| p.units.iter().any(|pu| same_unit(pu, u)))
+            .any(|(_, u, _)| crate::check::unit_fits(&p.units, u))
     })
 }
 

@@ -3,13 +3,13 @@ Status: v1, frozen. Base: `limit-dsl` and `decision-engine` (unchanged). Definit
 ## Facts
 - Name: Coulomb force. Kind: equality (predicted value, relative tolerance 0.005). Bounded quantity dimension: `N`.
 - Equation: `abs(q1*q2)/(4*pi*eps0*r^2)`
-- Classification: `fundamental_law`. Epistemic status: `model_bound`.
+- Classification: `fundamental_law`. Epistemic status: `theorem` (aligned with the classification `fundamental_law` on 2026-11-26, as mass_energy and power_conservation).
 - Validity domain: Magnitude of the electrostatic force between two point charges at rest in vacuum, separated by r.
 - Validity conditions: r > 0
 - Variables:
 - `q1`: Magnitude of the first charge (C, mC, uC, nC)
 - `q2`: Magnitude of the second charge (C, mC, uC, nC)
-- `r`: Distance between the charges (m, cm, mm)
+- `r`: Distance between the charges (m, cm, mm, um, nm, pm)
 ## Limits of application
 - Point charges at rest in vacuum; moving charges need the full Maxwell equations
 - In a dielectric medium the force is divided by the relative permittivity, which is not included

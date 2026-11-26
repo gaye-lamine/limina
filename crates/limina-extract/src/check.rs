@@ -254,7 +254,7 @@ pub(crate) fn numbers_with_units_at(sentence: &str) -> Vec<(f64, String, String,
                 continue;
             };
             let unit = trim(&unit_words.join(" "));
-            if !unit.is_empty() && limina_core::parse_unit(&unit).is_ok() {
+            if !unit.is_empty() && crate::units::known_in_text(&unit) {
                 let number: String = chars[start..end].iter().collect();
                 out.push((value, unit.clone(), format!("{number} {unit}"), start));
                 break;
@@ -367,6 +367,10 @@ fn non_negative(v: f64) -> bool {
     v >= 0.0
 }
 
+fn whole_positive(v: f64) -> bool {
+    v >= 1.0 && v.fract() == 0.0
+}
+
 /// Dimensionless parameters that may be read from the text without the
 /// model: the phrases that name each one, and the condition its value must
 /// meet for the law (the bound divides by the numerical aperture; a power
@@ -395,6 +399,31 @@ const UNITLESS_CUES: &[UnitlessCue] = &[
             "rapport signal/bruit",
         ],
         non_negative,
+    ),
+    // Faraday: number of turns of the coil, a whole number >= 1.
+    (
+        "n_turns",
+        &["turns", "coil turns", "number of turns", "windings"],
+        whole_positive,
+    ),
+    // Hydrogen: principal quantum number, a whole number >= 1.
+    (
+        "n",
+        &["level", "quantum number", "n =", "n="],
+        whole_positive,
+    ),
+    // Decay: initial number of nuclei, > 0.
+    (
+        "n0",
+        &[
+            "initial nuclei",
+            "initial atoms",
+            "n0",
+            "n0 =",
+            "n0=",
+            "n_0",
+        ],
+        positive,
     ),
 ];
 
@@ -430,7 +459,22 @@ fn cue_before(chars: &[char], start: usize, cues: &[&str]) -> Option<usize> {
         return None;
     }
     let mut before = lower.trim_end().to_string();
-    if let Some(link) = CUE_LINKS.iter().find(|l| ends_with_phrase(&before, l)) {
+    // A phrase that holds its own link ("n =") is tried before the link is cut.
+    if let Some(cue) = cues
+        .iter()
+        .find(|c| c.ends_with('=') && ends_with_phrase(&before, c))
+    {
+        return Some(before.chars().count() - cue.chars().count());
+    }
+    // A symbol link may touch the phrase ("turns: 150"); a word link may not.
+    let is_link = |b: &str, l: &str| {
+        if l.chars().all(|c| !c.is_alphanumeric()) {
+            b.ends_with(l)
+        } else {
+            ends_with_phrase(b, l)
+        }
+    };
+    if let Some(link) = CUE_LINKS.iter().find(|l| is_link(&before, l)) {
         before.truncate(before.len() - link.len());
         before = before.trim_end().to_string();
     }
@@ -776,7 +820,7 @@ fn fill_parameters_from_sentence(claim: &mut CheckedClaim, text: &str, catalog: 
         }
         let in_unit: Vec<&(f64, String, String, usize)> = found
             .iter()
-            .filter(|(_, u, _, _)| p.units.iter().any(|pu| same_unit(pu, u)))
+            .filter(|(_, u, _, _)| unit_fits(&p.units, u))
             .collect();
         let free = in_unit
             .iter()
@@ -811,13 +855,20 @@ fn fill_parameters_from_sentence(claim: &mut CheckedClaim, text: &str, catalog: 
             start: s_start + at + inner.start,
             end: s_start + at + inner.end,
         };
+        // A unit the core does not parse is converted now; the words up to
+        // the number tell a temperature difference from an absolute one.
+        let context: String = sentence.chars().take(*at + quote.chars().count()).collect();
+        let Some((si_value, si_unit, conversion)) = fit_unit(*value, unit, &p.units, &context)
+        else {
+            continue;
+        };
         used.push(*value);
         claim.parameters.insert(
             p.name.clone(),
             CheckedParameter {
-                value: Some(*value),
+                value: Some(si_value),
                 raw_value: *value,
-                unit: unit.clone(),
+                unit: si_unit,
                 evidence: Some(evidence),
                 flags: Vec::new(),
             },
@@ -828,6 +879,9 @@ fn fill_parameters_from_sentence(claim: &mut CheckedClaim, text: &str, catalog: 
             short_number(*value),
             unit
         ));
+        if let Some(c) = conversion {
+            claim.notes.push(format!("{} = {c}", p.name));
+        }
     }
     if !claim
         .parameters
@@ -1086,10 +1140,11 @@ fn check_claim(claim: &ModelClaim, text: &str, catalog: &Catalog) -> CheckedClai
         .parameters
         .iter()
         .map(|(name, p)| {
-            let checked = check_parameter(name, p, text, limit);
+            let (checked, note) = check_parameter(name, p, text, limit);
             if checked.flags.iter().any(|f| f == UNIT_NOT_UNDERSTOOD) {
                 push_once(&mut flags, UNIT_NOT_UNDERSTOOD);
             }
+            notes.extend(note);
             (name.clone(), checked)
         })
         .collect();
@@ -1125,7 +1180,7 @@ fn check_parameter(
     p: &ModelParameter,
     text: &str,
     limit: Option<&CatalogLimit>,
-) -> CheckedParameter {
+) -> (CheckedParameter, Option<String>) {
     let mut flags = Vec::new();
     let evidence = locate(text, &p.evidence);
     let traced = evidence.is_some() && number_in(&p.evidence, p.value);
@@ -1133,21 +1188,85 @@ fn check_parameter(
         push_once(&mut flags, NOT_TRACEABLE);
     }
     let declared = limit.and_then(|l| l.parameter(name));
-    let allowed =
-        |spec: &crate::catalog::CatalogParameter| spec.units.iter().any(|u| same_unit(u, &p.unit));
+    // The unit as read, or its conversion (°C, solar masses, years...) when
+    // the law takes the converted unit; the quotation tells a temperature
+    // difference from an absolute temperature.
+    let fitted = declared.and_then(|spec| fit_unit(p.value, &p.unit, &spec.units, &p.evidence));
     match declared {
         None if limit.is_some() => push_once(&mut flags, PARAMETER_NOT_DECLARED),
-        Some(spec) if !allowed(spec) => push_once(&mut flags, UNIT_NOT_UNDERSTOOD),
+        Some(_) if fitted.is_none() => push_once(&mut flags, UNIT_NOT_UNDERSTOOD),
         _ => {}
     }
-    let ok = traced && declared.is_some_and(allowed);
-    CheckedParameter {
-        value: ok.then_some(p.value),
-        raw_value: p.value,
-        unit: p.unit.clone(),
-        evidence: if traced { evidence } else { None },
-        flags,
+    let (value, unit, note) = match fitted {
+        Some((v, u, note)) if traced => (Some(v), u, note),
+        _ => (None, p.unit.clone(), None),
+    };
+    (
+        CheckedParameter {
+            value,
+            raw_value: p.value,
+            unit,
+            evidence: if traced { evidence } else { None },
+            flags,
+        },
+        note.map(|n| format!("{name} = {n}")),
+    )
+}
+
+/// `value` in `unit` as a parameter that takes `allowed` units: as it is
+/// when `unit` is allowed, else converted (see [`crate::units`]) when the
+/// converted unit is allowed, with its note. `context` is the quotation, so
+/// that a temperature difference is never converted as absolute.
+pub(crate) fn fit_unit(
+    value: f64,
+    unit: &str,
+    allowed: &[String],
+    context: &str,
+) -> Option<(f64, String, Option<String>)> {
+    if accepts(allowed, unit) {
+        return Some((value, unit.trim().to_string(), None));
     }
+    let (v, target, note) = crate::units::convert(value, unit, context)?;
+    accepts(allowed, &target).then_some((v, target, Some(note)))
+}
+
+/// Whether a number written in `unit` can be a parameter taking `allowed`
+/// units, as written or once converted.
+pub(crate) fn unit_fits(allowed: &[String], unit: &str) -> bool {
+    accepts(allowed, unit)
+        || crate::units::core_unit(unit).is_some_and(|t| t != unit.trim() && accepts(allowed, &t))
+}
+
+/// Whether a parameter that declares `allowed` units takes a value in
+/// `unit` (a unit the core parses): one of them, or any unit of the same
+/// physical dimension (a length in cm, ft or au for a length). Three
+/// distinctions the dimension alone would lose are kept:
+/// - bit, rad and sr: the core gives all three the dimension 1, but an
+///   information quantity, a plane angle and a solid angle are not
+///   interchangeable, nor with a plain ratio (see [`same_unit`]);
+/// - a plain ratio takes only "dimensionless" (no dB: a decibel value is
+///   not the linear ratio a law like Shannon-Hartley needs);
+/// - an absolute temperature reaches the engine in K only (a °C or °F
+///   value is converted to K first).
+fn accepts(allowed: &[String], unit: &str) -> bool {
+    let unit = unit.trim();
+    if allowed.iter().any(|u| same_unit(u, unit)) {
+        return true;
+    }
+    let Ok(given) = limina_core::parse_unit(unit) else {
+        return false;
+    };
+    let temperature = given.dimension.exponents() == [0, 0, 0, 0, 1, 0, 0];
+    let dimensionless = given.dimension.exponents() == [0; 7];
+    if temperature || dimensionless {
+        return false;
+    }
+    allowed.iter().any(|a| {
+        limina_core::parse_unit(a).is_ok_and(|declared| {
+            declared.dimension == given.dimension
+                && named_dimensionless(a) == named_dimensionless(unit)
+        })
+    })
 }
 
 /// The value in the limit's claim unit, the unit, and a note when converted.
@@ -1157,6 +1276,20 @@ fn normalize_claim_unit(
     unit: &str,
     value: f64,
 ) -> Option<(f64, String, Option<String>)> {
+    // A unit the core does not parse (arcsec, years, solar luminosities...):
+    // converted first, then like any core unit; both notes are kept. A
+    // claimed temperature is never a bounded quantity here: no °C claim.
+    if let Some((v, target, first)) = crate::units::convert(value, unit, "") {
+        if crate::units::special(unit).is_some_and(|c| c.temperature) {
+            return None;
+        }
+        let (v2, u2, second) = normalize_claim_unit(limit, &target, v)?;
+        let note = match second {
+            Some(s) => format!("{first}, then {s}"),
+            None => first,
+        };
+        return Some((v2, u2, Some(note)));
+    }
     let unit = unit.trim();
     let dimensionless = limit.claim_unit == "dimensionless";
     if unit == limit.claim_unit
@@ -1852,9 +1985,10 @@ mod tests {
 
     #[test]
     fn a_unit_the_limit_does_not_allow_is_flagged_not_guessed() {
+        // A temperature difference is never converted as an absolute temperature.
         let c = &checked(
-            "a heat engine between 327 °C and 27 °C at 40%",
-            r#"{"claims":[{"limit_id":"carnot","quantity":"efficiency","value":40,"unit":"%","evidence":"40%","constraints":{},"parameters":{"Th":{"value":327,"unit":"°C","evidence":"327 °C"}}}],"missing":[]}"#,
+            "a heat engine whose temperature rises by 300 °C at 40%",
+            r#"{"claims":[{"limit_id":"carnot","quantity":"efficiency","value":40,"unit":"%","evidence":"40%","constraints":{},"parameters":{"Th":{"value":300,"unit":"°C","evidence":"rises by 300 °C"}}}],"missing":[]}"#,
         )[0];
         assert!(c.flags.iter().any(|f| f == UNIT_NOT_UNDERSTOOD));
         assert_eq!(c.parameters["Th"].value, None);
@@ -2091,6 +2225,202 @@ mod tests {
         );
         let a = out[0].parameters.get("aperture")?;
         Some((a.value?, a.evidence.as_ref()?.text.clone()))
+    }
+
+    /// The value read for the only (dimensionless) parameter `param` of a
+    /// law `id`, when the model gives the claim and no parameter.
+    fn unitless_read(id: &str, param: &str, claim: (f64, &str, &str), text: &str) -> Option<f64> {
+        let catalog = Catalog {
+            limits: vec![CatalogLimit {
+                id: id.into(),
+                title: id.into(),
+                formula: String::new(),
+                claim_unit: claim.1.into(),
+                parameters: vec![crate::catalog::CatalogParameter {
+                    name: param.into(),
+                    units: vec!["dimensionless".into()],
+                }],
+                assumptions: vec![],
+            }],
+        };
+        let json = serde_json::json!({"claims": [{"limit_id": id, "quantity": "q", "value": claim.0,
+            "unit": claim.1, "evidence": claim.2, "constraints": {}, "parameters": {}}], "missing": []})
+        .to_string();
+        let out = check(&parse_model_output(&json).expect("json"), text, &catalog);
+        out[0].parameters.get(param)?.value
+    }
+
+    #[test]
+    fn turns_levels_and_initial_nuclei_are_read_only_when_named_next_to_the_number() {
+        let emf = (5.0, "V", "5 V");
+        assert_eq!(
+            unitless_read(
+                "faraday_emf",
+                "n_turns",
+                emf,
+                "A coil of 200 turns gives 5 V."
+            ),
+            Some(200.0)
+        );
+        assert_eq!(
+            unitless_read(
+                "faraday_emf",
+                "n_turns",
+                emf,
+                "The coil turns: 150, and it gives 5 V."
+            ),
+            Some(150.0)
+        );
+        // A bare number, a fraction of a turn: never.
+        assert_eq!(
+            unitless_read(
+                "faraday_emf",
+                "n_turns",
+                emf,
+                "The Model 2000 coil gives 5 V."
+            ),
+            None
+        );
+        assert_eq!(
+            unitless_read(
+                "faraday_emf",
+                "n_turns",
+                emf,
+                "A coil of 12.5 turns gives 5 V."
+            ),
+            None
+        );
+        let level = (1.51, "eV", "1.51 eV");
+        assert_eq!(
+            unitless_read(
+                "hydrogen_levels",
+                "n",
+                level,
+                "The n = 3 level of hydrogen is bound by 1.51 eV."
+            ),
+            Some(3.0)
+        );
+        assert_eq!(
+            unitless_read(
+                "hydrogen_levels",
+                "n",
+                level,
+                "Hydrogen in level 3 is bound by 1.51 eV."
+            ),
+            Some(3.0)
+        );
+        assert_eq!(
+            unitless_read(
+                "hydrogen_levels",
+                "n",
+                level,
+                "In 1913, hydrogen was bound by 1.51 eV."
+            ),
+            None
+        );
+        let decay = (2.5e5, "dimensionless", "2.5e5 nuclei remain");
+        assert_eq!(
+            unitless_read(
+                "radioactive_decay",
+                "n0",
+                decay,
+                "From N0 = 1e6, 2.5e5 nuclei remain after 2 h."
+            ),
+            Some(1e6)
+        );
+        assert_eq!(
+            unitless_read(
+                "radioactive_decay",
+                "n0",
+                decay,
+                "From 1e6 initial nuclei, 2.5e5 nuclei remain after 2 h."
+            ),
+            Some(1e6)
+        );
+        assert_eq!(
+            unitless_read(
+                "radioactive_decay",
+                "n0",
+                decay,
+                "Sample 1e6 of batch 7: 2.5e5 nuclei remain after 2 h."
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn a_parameter_in_a_converted_unit_is_read_from_the_sentence() {
+        // The model leaves out the mass; "10 solar masses" is converted to kg.
+        let catalog = Catalog {
+            limits: vec![CatalogLimit {
+                id: "schwarzschild_radius".into(),
+                title: "Schwarzschild radius".into(),
+                formula: "2*G*M/c^2".into(),
+                claim_unit: "m".into(),
+                parameters: vec![crate::catalog::CatalogParameter {
+                    name: "M".into(),
+                    units: vec!["kg".into(), "g".into()],
+                }],
+                assumptions: vec![],
+            }],
+        };
+        let text = "A black hole of 10 solar masses has an event horizon radius of 29.5 km.";
+        let json = r#"{"claims":[{"limit_id":"schwarzschild_radius","quantity":"event horizon radius","value":29.5,"unit":"km","evidence":"29.5 km","constraints":{},"parameters":{}}],"missing":[]}"#;
+        let c = &check(&parse_model_output(json).expect("json"), text, &catalog)[0];
+        let m = &c.parameters["M"];
+        assert_eq!(m.unit, "kg");
+        assert_eq!(m.raw_value, 10.0);
+        assert!(
+            m.value
+                .is_some_and(|v| (v / 1.988_41e31 - 1.0).abs() < 1e-5),
+            "{m:?}"
+        );
+        assert!(
+            c.notes
+                .iter()
+                .any(|n| n.contains("10 solar masses becomes")),
+            "{:?}",
+            c.notes
+        );
+    }
+
+    #[test]
+    fn a_parameter_takes_any_unit_of_its_dimension_with_the_guards_kept() {
+        let units = |u: &[&str]| u.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        let length = units(&["m", "km"]);
+        // Core units of the same dimension pass as written; the engine converts them.
+        assert_eq!(
+            fit_unit(5.0, "cm", &length, "").map(|x| x.1),
+            Some("cm".to_string())
+        );
+        assert_eq!(
+            fit_unit(1.0, "au", &length, "").map(|x| x.1),
+            Some("au".to_string())
+        );
+        assert_eq!(
+            fit_unit(2.0, "t", &units(&["kg"]), "").map(|x| x.1),
+            Some("t".to_string())
+        );
+        // Units the core does not parse are converted to a core unit first.
+        let ft = fit_unit(10.0, "ft", &length, "").expect("ft");
+        assert!((ft.0 - 3.048).abs() < 1e-12 && ft.1 == "m" && ft.2.is_some());
+        let hp = fit_unit(150.0, "hp", &units(&["W", "kW"]), "").expect("hp");
+        assert!((hp.0 - 150.0 * 745.699_871_582_270_2).abs() < 1e-6 && hp.1 == "W");
+        let lb = fit_unit(1.0, "lb", &units(&["kg"]), "").expect("lb");
+        assert!((lb.0 - 0.453_592_37).abs() < 1e-15);
+        let th = fit_unit(620.0, "°F", &units(&["K"]), "boiler at 620 °F").expect("°F");
+        assert!((th.0 - 599.816_666_666_666_6).abs() < 1e-9 && th.1 == "K");
+        // Guards: another dimension; dB for a linear ratio; rad, sr and bit
+        // kept apart; a temperature other than K or a converted one; a
+        // temperature difference.
+        assert!(fit_unit(5.0, "m", &units(&["kg"]), "").is_none());
+        assert!(fit_unit(20.0, "dB", &units(&["dimensionless"]), "").is_none());
+        assert!(fit_unit(1.0, "rad", &units(&["sr"]), "").is_none());
+        assert!(fit_unit(1.0, "sr", &units(&["rad"]), "").is_none());
+        assert!(fit_unit(1.0, "bit", &units(&["dimensionless"]), "").is_none());
+        assert!(fit_unit(1.0, "rad", &units(&["dimensionless"]), "").is_none());
+        assert!(fit_unit(300.0, "mK", &units(&["K"]), "").is_none());
+        assert!(fit_unit(20.0, "°C", &units(&["K"]), "a temperature drop of 20 °C").is_none());
     }
 
     #[test]

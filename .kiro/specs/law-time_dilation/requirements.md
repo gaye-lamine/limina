@@ -8,7 +8,7 @@ Status: v1, frozen. Base: `limit-dsl` and `decision-engine` (unchanged). Definit
 - Validity domain: Interval measured by an inertial observer for a clock moving at constant speed v < c, given its proper time tau.
 - Validity conditions: v < c
 - Variables:
-- `tau`: Proper time measured by the moving clock (s, ms)
+- `tau`: Proper time measured by the moving clock (s, ms, us, µs, ns)
 - `v`: Speed of the clock in the observer frame (m/s, km/s)
 
 ## Limits of application

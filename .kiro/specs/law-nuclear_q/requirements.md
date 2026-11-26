@@ -3,7 +3,7 @@ Status: v1, frozen. Base: `limit-dsl` and `decision-engine` (unchanged). Definit
 ## Facts
 - Name: Energy released by a nuclear reaction. Kind: equality (predicted value, relative tolerance 0.005). Bounded quantity dimension: `J`.
 - Equation: `abs(m_initial - m_final)*c^2`
-- Classification: `fundamental_law`. Epistemic status: `model_bound`.
+- Classification: `fundamental_law`. Epistemic status: `theorem` (aligned with the classification `fundamental_law` on 2026-11-26, as mass_energy and power_conservation).
 - Validity domain: Magnitude of the energy Q = |sum of initial masses - sum of final masses| c^2 released or absorbed by a nuclear reaction, the masses being the total rest masses on each side.
 - Validity conditions: m_initial > 0, m_final > 0
 - Variables:

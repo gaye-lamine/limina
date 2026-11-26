@@ -3,14 +3,14 @@ Status: v1, frozen. Base: `limit-dsl` and `decision-engine` (unchanged). Definit
 ## Facts
 - Name: Faraday induced EMF. Kind: equality (predicted value, relative tolerance 0.005). Bounded quantity dimension: `V`.
 - Equation: `n_turns*area*abs(dB)/dt`
-- Classification: `fundamental_law`. Epistemic status: `model_bound`.
+- Classification: `fundamental_law`. Epistemic status: `theorem` (aligned with the classification `fundamental_law` on 2026-11-26, as mass_energy and power_conservation).
 - Validity domain: Magnitude of the EMF induced in a coil of n_turns turns of area `area`, fixed and perpendicular to a uniform field whose magnitude changes by dB at a constant rate over a time dt.
 - Validity conditions: dt > 0
 - Variables:
 - `n_turns`: Number of turns of the coil (dimensionless)
 - `area`: Area of one turn (m^2, cm^2)
 - `dB`: Change of the field magnitude (T, mT)
-- `dt`: Duration of the change (s, ms)
+- `dt`: Duration of the change (s, ms, us, µs, ns)
 ## Limits of application
 - Fixed loop, uniform field perpendicular to the loop, constant rate of change: an average EMF over dt otherwise
 - Magnitude only: the sign (Lenz's law) is not decided

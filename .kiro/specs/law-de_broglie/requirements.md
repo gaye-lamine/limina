@@ -3,7 +3,7 @@ Status: v1, frozen. Base: `limit-dsl` and `decision-engine` (unchanged). Definit
 ## Facts
 - Name: de Broglie wavelength. Kind: equality (predicted value, relative tolerance 0.005). Bounded quantity dimension: `m`.
 - Equation: `h/p`
-- Classification: `fundamental_law`. Epistemic status: `model_bound`.
+- Classification: `fundamental_law`. Epistemic status: `theorem` (aligned with the classification `fundamental_law` on 2026-11-26, as mass_energy and power_conservation).
 - Validity domain: Wavelength associated with a free particle of momentum magnitude p: lambda = h / p.
 - Validity conditions: p > 0
 - Variables:
