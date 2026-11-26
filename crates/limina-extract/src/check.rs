@@ -360,6 +360,46 @@ fn written_unit(text: &str, evidence: &str, value: f64) -> Option<String> {
     }
 }
 
+/// Whether `read` is the written unit divided or multiplied by another one
+/// ("kWh/kg" for "kWh"): a quotient the sentence states in words ("5 kWh
+/// in a mass of 1 kg"), kept as the model read it.
+fn extends(read: &str, written: &str) -> bool {
+    let read = read.trim();
+    read.len() > written.len()
+        && read.starts_with(written)
+        && matches!(
+            read[written.len()..].chars().next(),
+            Some('/' | '*' | '·' | ' ')
+        )
+}
+
+/// The percentage written in the sentence of `evidence` ("75%" or "75 %")
+/// whose hundredth is `value`, when the text does not write `value` itself
+/// there; None otherwise. Nothing else is converted.
+fn percent_as_written(text: &str, evidence: &str, value: f64) -> Option<f64> {
+    let span = locate(text, evidence)?;
+    let sentence = sentence_around(text, &span);
+    let chars: Vec<char> = sentence.chars().collect();
+    let found = scan_numbers(&sentence);
+    if found.iter().any(|(v, _, _)| same(*v, value)) {
+        return None;
+    }
+    let pcts: Vec<f64> = found
+        .into_iter()
+        .filter(|(v, _, end)| {
+            let next = chars[(*end).min(chars.len())..]
+                .iter()
+                .find(|c| !matches!(c, ' ' | '\u{a0}' | '\u{202f}'));
+            next == Some(&'%') && same(*v / 100.0, value)
+        })
+        .map(|(v, _, _)| v)
+        .collect();
+    match pcts.as_slice() {
+        [p] => Some(*p),
+        _ => None,
+    }
+}
+
 /// The claim with each unit as the text writes it next to its number. A
 /// model may drop a prefix ("10 Mbit/s" read as bit/s) or name another
 /// unit ("1e-5 rad" read as m); the text wins, with a note. Nothing is
@@ -367,8 +407,21 @@ fn written_unit(text: &str, evidence: &str, value: f64) -> Option<String> {
 fn units_as_written(claim: &ModelClaim, text: &str) -> (ModelClaim, Vec<String>) {
     let mut out = claim.clone();
     let mut notes = Vec::new();
+    // "75%" read as the fraction 0.75: the text writes a percentage.
+    let plain = matches!(claim.unit.trim(), "" | "dimensionless" | "1");
+    if plain {
+        if let Some(pct) = percent_as_written(text, &claim.evidence, claim.value) {
+            notes.push(format!(
+                "{UNIT_FROM_TEXT} {} % (the reading said {})",
+                short_number(pct),
+                short_number(claim.value)
+            ));
+            out.value = pct;
+            out.unit = "%".to_string();
+        }
+    }
     if let Some(u) = written_unit(text, &claim.evidence, claim.value) {
-        if !same_unit(&u, &claim.unit) {
+        if !same_unit(&u, &claim.unit) && !extends(&claim.unit, &u) {
             notes.push(format!(
                 "{UNIT_FROM_TEXT} {} {u} (the reading said {})",
                 short_number(claim.value),
@@ -379,7 +432,7 @@ fn units_as_written(claim: &ModelClaim, text: &str) -> (ModelClaim, Vec<String>)
     }
     for (name, p) in out.parameters.iter_mut() {
         if let Some(u) = written_unit(text, &p.evidence, p.value) {
-            if !same_unit(&u, &p.unit) {
+            if !same_unit(&u, &p.unit) && !extends(&p.unit, &u) {
                 notes.push(format!(
                     "{UNIT_FROM_TEXT} {name} = {} {u} (the reading said {})",
                     short_number(p.value),

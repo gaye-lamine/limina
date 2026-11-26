@@ -320,6 +320,49 @@ async fn the_reactor_is_checked_against_mass_energy_equivalence() {
 }
 
 #[tokio::test]
+async fn a_percentage_read_as_a_fraction_is_taken_as_written() {
+    // Seen live: "75%" given as 0.75 with no unit.
+    let text = "The Titan heat engine reaches an efficiency of 75% with a hot reservoir at\n600 K and a cold reservoir at 300 K.";
+    let body = analyze(
+        answer(vec![claim(
+            "efficiency",
+            0.75,
+            "dimensionless",
+            "efficiency of 75%",
+            json!({"Th": {"value": 600, "unit": "K", "evidence": "hot reservoir at\n600 K"},
+                   "Tc": {"value": 300, "unit": "K", "evidence": "cold reservoir at 300 K"}}),
+        )]),
+        text,
+    )
+    .await;
+    let (c, law, verdict) = single(&body);
+    assert_eq!(
+        (law.as_str(), verdict.as_str()),
+        ("carnot", "IMPOSSIBLE"),
+        "{c}"
+    );
+    assert_eq!(c["raw_unit"], "%", "{c}");
+}
+
+#[tokio::test]
+async fn a_quotient_unit_the_model_read_is_kept_over_its_written_numerator() {
+    // Seen in the smoke test: "5 kWh ... in a mass of 1 kg" read as 5 kWh/kg.
+    let body = analyze(
+        answer(vec![claim(
+            "specific energy",
+            5.0,
+            "kWh/kg",
+            "5 kWh of energy",
+            json!({}),
+        )]),
+        "The Volta cell stores 5 kWh of energy in a mass of 1 kg.",
+    )
+    .await;
+    let (c, _, _) = single(&body);
+    assert_eq!(c["raw_unit"], "kWh/kg", "{c}");
+}
+
+#[tokio::test]
 async fn the_pico_sensor_is_compatible_with_heisenberg() {
     let body = analyze(
         answer(vec![claim(
