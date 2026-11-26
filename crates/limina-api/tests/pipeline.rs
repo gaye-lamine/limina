@@ -27,7 +27,7 @@ fn landauer(formula: &str) -> String {
 }
 
 fn extraction() -> String {
-    json!({"claims": [{"limit_id": null, "quantity": "energy per erased bit", "value": 1e-22,
+    json!({"claims": [{"limit_id": null, "quantity": "Quanta dissipation figure", "value": 1e-22,
         "unit": "J", "evidence": "dissipating 1e-22 J", "constraints": {}, "parameters": {}}],
         "missing": []})
     .to_string()
@@ -208,6 +208,32 @@ async fn a_built_in_id_that_does_not_exist_gives_no_verdict() {
         .contains("built-in law that does not exist"));
     assert_eq!(m.b.inner.calls(), 0);
 }
+#[tokio::test]
+async fn a_disputed_law_reports_each_candidate_bound_at_the_claim_parameters() {
+    let m = mocks();
+    m.a.push_content(&extraction());
+    m.a.push_content(LAW);
+    m.a.push_content(&landauer("kB*T*ln2"));
+    m.b.inner.push_content(&landauer("kB*T"));
+    let claim = analyze(&m.state).await;
+    assert_eq!(claim["law"]["source"], "draft_disputed");
+    let attempts = claim["law"]["attempts"].as_array().expect("attempts");
+    // T = 300 K is the only temperature of the sentence; the engine computes each bound.
+    let kb = 1.380_649e-23_f64;
+    let a = attempts[0]["bound_at_claim"].as_f64().expect("bound a");
+    let b = attempts[1]["bound_at_claim"].as_f64().expect("bound b");
+    assert!(
+        (a / (kb * 300.0 * std::f64::consts::LN_2) - 1.0).abs() < 1e-9,
+        "{a}"
+    );
+    assert!((b / (kb * 300.0) - 1.0).abs() < 1e-9, "{b}");
+    assert!(attempts[0]["bound_note"].is_null());
+    assert!(
+        claim["result"].is_null(),
+        "still no verdict from a disputed law"
+    );
+}
+
 #[tokio::test]
 async fn disputed_laws_give_no_verdict_and_are_not_served() {
     let m = mocks();

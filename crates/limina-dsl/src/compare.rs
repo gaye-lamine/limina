@@ -159,6 +159,28 @@ fn decisive_bound(
     out.ok_or(EngineError::EmptyConfigurationSet)
 }
 
+/// The decisive bound of `limit` (largest upper end for a Max law, smallest
+/// lower end for a Min law, over every configuration) at the given SI
+/// parameter values, computed by the engine as in [`compare_limits`]. An
+/// error names the first parameter missing or the engine error.
+pub fn decisive_bound_at(
+    limit: &DeclarativeLimit,
+    values: &BTreeMap<String, f64>,
+) -> Result<f64, String> {
+    let mut map = BTreeMap::new();
+    for p in limit.parameters() {
+        let name = p.id.as_str();
+        let Some(v) = values.get(name) else {
+            return Err(format!("parameter {name} not read from the text"));
+        };
+        let iv = Interval::point(*v).map_err(|e| format!("{name} = {v}: {e}"))?;
+        map.insert(ParameterId::new(name.to_string()), iv);
+    }
+    let set =
+        ConfigurationSet::build(limit, &ConstraintsMap::new(), 1024).map_err(|e| e.to_string())?;
+    decisive_bound(limit, &set, &ParameterEnclosure::new(map)).map_err(|e| e.to_string())
+}
+
 /// Compares `a` and `b` on `samples` points drawn with `seed`, each
 /// parameter inside the intersection of the two ranges.
 pub fn compare_limits(

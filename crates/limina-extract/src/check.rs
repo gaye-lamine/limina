@@ -111,7 +111,12 @@ pub fn check(output: &ModelOutput, text: &str, catalog: &Catalog) -> Vec<Checked
     let claims = output
         .claims
         .iter()
-        .map(|c| check_claim(c, text, catalog))
+        .map(|c| {
+            let (resolved, note) = resolve_built_in(c, text, catalog);
+            let mut checked = check_claim(&resolved, text, catalog);
+            checked.notes.extend(note);
+            checked
+        })
         .collect();
     let mut claims = attach_parameter_claims(claims, catalog);
     for c in &mut claims {
@@ -120,9 +125,38 @@ pub fn check(output: &ModelOutput, text: &str, catalog: &Catalog) -> Vec<Checked
     merge_quotient_claims(claims, text)
 }
 
+/// Note prefix of a claim whose built-in law was chosen by the deterministic matcher.
+pub const MATCHED_BUILT_IN: &str = "built-in law matched by quantity and dimension:";
+
+/// The claim with the built-in law the deterministic matcher chooses; the
+/// model's `limit_id` is only a hint (see [`crate::matcher`]). A note says
+/// when the matcher chose a law other than the model's, or one the model
+/// did not give.
+fn resolve_built_in(
+    claim: &ModelClaim,
+    text: &str,
+    catalog: &Catalog,
+) -> (ModelClaim, Option<String>) {
+    let Some(m) = crate::matcher::match_built_in(claim, text, catalog) else {
+        return (claim.clone(), None);
+    };
+    if claim.limit_id.as_deref() == Some(m.id.as_str()) {
+        return (claim.clone(), None);
+    }
+    let why = match m.by {
+        crate::matcher::MatchedBy::Keyword(k) => format!("keyword \"{k}\""),
+        crate::matcher::MatchedBy::Hint => "model hint".to_string(),
+    };
+    let hint = claim.limit_id.as_deref().unwrap_or("none");
+    let note = format!("{MATCHED_BUILT_IN} {} ({why}; model hint: {hint})", m.id);
+    let mut resolved = claim.clone();
+    resolved.limit_id = Some(m.id);
+    (resolved, Some(note))
+}
+
 /// The sentence of `text` around a character span: from just after the
 /// previous sentence end (". ", "! ", "? " or a line break) to the next one.
-fn sentence_around(text: &str, span: &Span) -> String {
+pub(crate) fn sentence_around(text: &str, span: &Span) -> String {
     let chars: Vec<char> = text.chars().collect();
     let ends = |i: usize| {
         matches!(chars.get(i), Some('.' | '!' | '?'))
@@ -141,7 +175,7 @@ fn sentence_around(text: &str, span: &Span) -> String {
 
 /// Every number of `sentence` immediately followed by a unit symbol the
 /// core parses, with the quotation "number unit" as written.
-fn numbers_with_units(sentence: &str) -> Vec<(f64, String, String)> {
+pub(crate) fn numbers_with_units(sentence: &str) -> Vec<(f64, String, String)> {
     let chars: Vec<char> = sentence.chars().collect();
     let mut out = Vec::new();
     for (value, start, end) in scan_numbers(sentence) {
@@ -165,6 +199,30 @@ fn numbers_with_units(sentence: &str) -> Vec<(f64, String, String)> {
         }
     }
     out
+}
+
+/// The only number of the sentence around `[start, end)` (characters of
+/// `text`) written in one of `units`, with its unit as written; None when
+/// there is none or more than one. Nothing is computed or converted.
+pub fn unique_number_in_units(
+    text: &str,
+    start: usize,
+    end: usize,
+    units: &[String],
+) -> Option<(f64, String)> {
+    let span = Span {
+        text: String::new(),
+        start,
+        end,
+    };
+    let found: Vec<(f64, String, String)> = numbers_with_units(&sentence_around(text, &span))
+        .into_iter()
+        .filter(|(_, u, _)| units.iter().any(|pu| same_unit(pu, u)))
+        .collect();
+    match found.as_slice() {
+        [(v, u, _)] => Some((*v, u.clone())),
+        _ => None,
+    }
 }
 
 /// Note added to a claim whose parameter was read from its own sentence.
@@ -1225,10 +1283,45 @@ mod tests {
     #[test]
     fn an_unknown_limit_is_flagged_and_not_evaluated() {
         let c = &checked(
+            "a figure of merit of 14.5",
+            r#"{"claims":[{"limit_id":null,"quantity":"figure of merit","value":14.5,"unit":"dimensionless","evidence":"figure of merit of 14.5","constraints":{},"parameters":{}}],"missing":[]}"#,
+        )[0];
+        assert_eq!(c.not_evaluable_reason(), Some(LIMIT_NOT_RECOGNIZED));
+    }
+
+    #[test]
+    fn a_built_in_law_is_matched_when_the_model_gives_no_limit() {
+        let c = &checked(
             "a COP of 14.5",
             r#"{"claims":[{"limit_id":null,"quantity":"COP","value":14.5,"unit":"dimensionless","evidence":"COP of 14.5","constraints":{},"parameters":{}}],"missing":[]}"#,
         )[0];
-        assert_eq!(c.not_evaluable_reason(), Some(LIMIT_NOT_RECOGNIZED));
+        assert_eq!(c.limit_id.as_deref(), Some("cop"));
+        assert!(
+            !c.flags.iter().any(|f| f == LIMIT_NOT_RECOGNIZED),
+            "{:?}",
+            c.flags
+        );
+        assert!(
+            c.notes.iter().any(|n| n.starts_with(MATCHED_BUILT_IN)),
+            "{:?}",
+            c.notes
+        );
+    }
+
+    #[test]
+    fn the_model_hint_is_overridden_by_a_keyword_and_kept_when_it_agrees() {
+        // The model says Carnot for a COP: the keyword and the dimension choose cop.
+        let c = &checked(
+            "a COP of 14.5",
+            r#"{"claims":[{"limit_id":"carnot","quantity":"coefficient of performance","value":14.5,"unit":"dimensionless","evidence":"COP of 14.5","constraints":{},"parameters":{}}],"missing":[]}"#,
+        )[0];
+        assert_eq!(c.limit_id.as_deref(), Some("cop"));
+        let agreed = &checked(
+            "a COP of 14.5",
+            r#"{"claims":[{"limit_id":"cop","quantity":"COP","value":14.5,"unit":"dimensionless","evidence":"COP of 14.5","constraints":{},"parameters":{}}],"missing":[]}"#,
+        )[0];
+        assert_eq!(agreed.limit_id.as_deref(), Some("cop"));
+        assert!(agreed.notes.is_empty(), "{:?}", agreed.notes);
     }
 
     #[test]

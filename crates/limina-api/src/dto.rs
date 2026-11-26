@@ -297,6 +297,11 @@ pub struct LawAttemptDto {
     pub errors: Vec<String>,
     /// The definition, when it passed.
     pub definition: Option<limina_dsl::LimitDefinition>,
+    /// The decisive bound of this definition at the claim's parameters, in SI
+    /// units, computed by the engine; null when it cannot be computed.
+    pub bound_at_claim: Option<f64>,
+    /// Why the bound at the claim was not computed; null when it was.
+    pub bound_note: Option<String>,
 }
 
 /// The law of a claim.

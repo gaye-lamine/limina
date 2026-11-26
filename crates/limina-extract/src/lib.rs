@@ -17,6 +17,7 @@ pub mod error;
 pub mod extractor;
 pub mod fallback;
 pub mod law;
+pub mod matcher;
 pub mod openai;
 pub mod parse;
 pub mod prompt;

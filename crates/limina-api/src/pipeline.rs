@@ -185,19 +185,22 @@ fn merge_duplicates(claims: &mut Vec<AnalyzedClaimDto>) {
     let mut merged = vec![0usize; claims.len()];
     let mut as_parameter = vec![0usize; claims.len()];
     for i in 0..claims.len() {
-        if built_in(&claims[i]).is_some() {
-            continue;
-        }
+        let own = built_in(&claims[i]);
+        // A built-in claim is a twin only of an earlier reading of the same law.
         let twin = (0..claims.len()).find(|&j| {
             j != i
                 && !drop[j]
                 && built_in(&claims[j]).is_some()
+                && (own.is_none() || (j < i && built_in(&claims[j]) == own))
                 && claims[j].raw_value == claims[i].raw_value
                 && overlaps(&claims[j].evidence, &claims[i].evidence)
         });
         if let Some(j) = twin {
             drop[i] = true;
             merged[j] += 1;
+            continue;
+        }
+        if own.is_some() {
             continue;
         }
         // A parameter of a built-in claim read again as a claim of its own:
@@ -229,7 +232,7 @@ fn merge_duplicates(claims: &mut Vec<AnalyzedClaimDto>) {
             claim.trace.push(step(
                 "deduplication",
                 DONE,
-                format!("{n} other reading(s) of the same number at the same place, without a known limit, merged into this claim"),
+                format!("{n} other reading(s) of the same number at the same place merged into this claim"),
             ));
         }
         if p > 0 {
@@ -242,15 +245,70 @@ fn merge_duplicates(claims: &mut Vec<AnalyzedClaimDto>) {
     }
 }
 
-fn attempt_dto(a: &ModelAttempt) -> LawAttemptDto {
+/// The claim's traced parameters in SI units, for the engine.
+fn si_parameters(claim: &AnalyzedClaimDto) -> BTreeMap<String, f64> {
+    claim
+        .parameters
+        .iter()
+        .filter_map(|(k, p)| {
+            let v = p.value?;
+            let unit = p.unit.trim();
+            Some((k.clone(), v * si_factor(unit)?))
+        })
+        .collect()
+}
+
+/// A unit factor to SI; 1 for a dimensionless or empty unit.
+fn si_factor(unit: &str) -> Option<f64> {
+    let unit = unit.trim();
+    if unit.is_empty() || unit == "dimensionless" {
+        Some(1.0)
+    } else {
+        limina_core::parse_unit(unit).ok().map(|u| u.factor_to_si)
+    }
+}
+
+/// The claim's parameters for one candidate definition, in SI units: the
+/// traced ones, then each missing one read from the claim's sentence when
+/// exactly one number there is in a unit of that parameter.
+fn candidate_parameters(
+    claim: &AnalyzedClaimDto,
+    text: &str,
+    definition: &limina_dsl::LimitDefinition,
+) -> BTreeMap<String, f64> {
+    let mut values = si_parameters(claim);
+    let Some(ev) = claim.evidence.as_ref() else {
+        return values;
+    };
+    for p in &definition.parameters {
+        if values.contains_key(&p.name) {
+            continue;
+        }
+        let read = limina_extract::check::unique_number_in_units(text, ev.start, ev.end, &p.units);
+        if let Some((v, u)) = read {
+            if let Some(f) = si_factor(&u) {
+                values.insert(p.name.clone(), v * f);
+            }
+        }
+    }
+    values
+}
+
+fn attempt_dto(a: &ModelAttempt, claim: &AnalyzedClaimDto, text: &str) -> LawAttemptDto {
     match &a.result {
-        Ok(x) => LawAttemptDto {
-            model: a.model.clone(),
-            ok: true,
-            attempts: x.attempts,
-            errors: x.errors.clone(),
-            definition: Some(x.definition.clone()),
-        },
+        Ok(x) => {
+            let values = candidate_parameters(claim, text, &x.definition);
+            let at = limina_dsl::decisive_bound_at(&x.limit, &values);
+            LawAttemptDto {
+                model: a.model.clone(),
+                ok: true,
+                attempts: x.attempts,
+                errors: x.errors.clone(),
+                definition: Some(x.definition.clone()),
+                bound_at_claim: at.as_ref().ok().copied(),
+                bound_note: at.err(),
+            }
+        }
         Err(AuthorError::NotAuthored {
             attempts, errors, ..
         }) => LawAttemptDto {
@@ -259,6 +317,8 @@ fn attempt_dto(a: &ModelAttempt) -> LawAttemptDto {
             attempts: *attempts,
             errors: errors.clone(),
             definition: None,
+            bound_at_claim: None,
+            bound_note: None,
         },
         Err(e) => LawAttemptDto {
             model: a.model.clone(),
@@ -266,6 +326,8 @@ fn attempt_dto(a: &ModelAttempt) -> LawAttemptDto {
             attempts: 0,
             errors: vec![e.to_string()],
             definition: None,
+            bound_at_claim: None,
+            bound_note: None,
         },
     }
 }
@@ -431,7 +493,10 @@ async fn law_pipeline(state: &AppState, text: &str, claim: &mut AnalyzedClaimDto
         source: law.status.as_str(),
         limit_id: agreed.as_ref().map(|a| a.definition.id.clone()),
         sentence: Some(sentence),
-        attempts: vec![attempt_dto(&law.a), attempt_dto(&law.b)],
+        attempts: vec![
+            attempt_dto(&law.a, claim, text),
+            attempt_dto(&law.b, claim, text),
+        ],
         comparison: law.comparison.as_ref().map(|c| ComparisonDto {
             samples: c.samples,
             max_relative_difference: c.max_relative_difference,
