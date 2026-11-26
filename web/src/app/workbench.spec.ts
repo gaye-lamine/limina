@@ -140,7 +140,7 @@ describe('Workbench', { timeout: 30_000 }, () => {
       'specific energy 60.0 %',
     ]);
     expect(el.querySelector('.inst-pill')?.textContent).toContain('IMPOSSIBLE');
-    expect(el.querySelector('.inst-sentence')?.textContent).toBe('The claim is 1.20× what the law allows.');
+    expect(el.querySelector('.inst-sentence')?.textContent).toBe('The claim is 1.2 times what the law allows.');
     const tiles = Array.from(el.querySelectorAll('.tile-n')).map((t) => t.textContent?.trim());
     // In the unit the text uses (75 % reads as a percentage, not 0.750).
     expect(tiles).toEqual(['60.0 %', '50.0 %', '1.20×']);
@@ -230,7 +230,7 @@ describe('Workbench', { timeout: 30_000 }, () => {
     const text = JSON.stringify(saved[0].doc.content);
     expect(text).toContain('Physics review');
     expect(text).toContain('4 claims checked in 3 paragraphs.');
-    expect(text).toContain('The claim is 1.20× what the law allows.');
+    expect(text).toContain('The claim is 1.2 times what the law allows.');
     expect(TestBed.inject(ToastService).toasts().map((t) => t.text)).toContain('Review downloaded as PDF');
   });
 

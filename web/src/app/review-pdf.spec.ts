@@ -22,7 +22,7 @@ describe('the PDF review', () => {
     expect(text).toContain('2 claims checked in 2 paragraphs.');
     expect(text).toContain('How to read this review');
     expect(text).toContain('1. efficiency · 60.0 %');
-    expect(text).toContain('The claim is 1.20× what the law allows.');
+    expect(text).toContain('The claim is 1.2 times what the law allows.');
     expect(text).toContain('2. specific energy · 60.0 %');
     expect(text).toContain('Our library of 2 laws of physics: none applies to this quantity');
     const footer = (doc.footer as (p: number, n: number) => unknown)(1, 3);
@@ -44,8 +44,8 @@ describe('the PDF review', () => {
     };
     const limits = LIMITS.map((l) => (l.id === 'carnot' ? { ...l, references: ['Landauer, R., Irreversibility, doi:10.1147/rd.53.0183'] } : l));
     const d = JSON.stringify(reviewDocument([withParams], 1, limits, 'd', '0.1.0').content);
-    expect(d).toContain('Th = 600 K, Tc = 300 K');
-    expect(d).toContain('1 − 300/600 = 50.0 %');
+    expect(d).toContain('Th = 600 K');
+    expect(d).toContain('1 − 300 K/600 K = 50.0 %');
     expect(d).toContain('≤');
     expect(d).not.toContain('<=');
     expect(d).toContain('"link":"https://doi.org/10.1147/rd.53.0183"');

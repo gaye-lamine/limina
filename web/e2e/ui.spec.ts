@@ -176,7 +176,8 @@ for (const size of SIZES) {
     if (hit) await page.mouse.move(hit.x + hit.width * 0.4, hit.y + hit.height / 2);
     await expect(page.locator('.readout')).toContainText('bound');
     await page.screenshot({ path: join(OUT, `reviewed-explorer-${size.name}.png`) });
-    await page.evaluate(() => scrollTo(0, 0));
+    // The sticky instrument head covers content scrolled under it by design: check at the top.
+    await page.evaluate(() => { scrollTo(0, 0); document.querySelectorAll('.inst').forEach((e) => (e.scrollTop = 0)); });
     await checks(page, 'reviewed', size.desktop);
     await checks(page, 'instrument', false);
 
@@ -186,7 +187,8 @@ for (const size of SIZES) {
     await expect(page.locator('app-explorer')).toHaveCount(0);
     await page.waitForTimeout(800);
     await page.screenshot({ path: join(OUT, `reviewed-apparatus-${size.name}.png`) });
-    await page.evaluate(() => scrollTo(0, 0));
+    // The sticky instrument head covers content scrolled under it by design: check at the top.
+    await page.evaluate(() => { scrollTo(0, 0); document.querySelectorAll('.inst').forEach((e) => (e.scrollTop = 0)); });
     await checks(page, 'reviewed', size.desktop);
     await checks(page, 'instrument', false);
 
@@ -197,7 +199,8 @@ for (const size of SIZES) {
     await expect(page.locator('.visual')).toHaveCount(0);
     await page.waitForTimeout(400);
     await page.screenshot({ path: join(OUT, `reviewed-noverdict-${size.name}.png`) });
-    await page.evaluate(() => scrollTo(0, 0));
+    // The sticky instrument head covers content scrolled under it by design: check at the top.
+    await page.evaluate(() => { scrollTo(0, 0); document.querySelectorAll('.inst').forEach((e) => (e.scrollTop = 0)); });
     await checks(page, 'reviewed', size.desktop);
     await checks(page, 'instrument', false);
   });

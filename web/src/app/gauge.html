@@ -24,7 +24,9 @@
     }
     @for (t of scale(); track t.value) {
       <line class="gauge-scale-tick" [attr.x1]="t.a.x" [attr.y1]="t.a.y" [attr.x2]="t.b.x" [attr.y2]="t.b.y" />
-      <text class="gauge-scale-label" text-anchor="middle" [attr.x]="t.l.x" [attr.y]="t.l.y + 4" [attr.font-size]="font.scale">{{ scaleLabel(t.label, t.value, $index) }}</text>
+      @if ($first || $last) {
+        <text class="gauge-scale-label" text-anchor="middle" [attr.x]="t.e.x" [attr.y]="cy + 20" [attr.font-size]="font.scale">{{ scaleLabel(t.label, t.value, 0) }}</text>
+      }
     }
     @for (t of boundMarks(); track t.value) {
       <line class="gauge-bound-tick" [attr.x1]="t.a.x" [attr.y1]="t.a.y" [attr.x2]="t.b.x" [attr.y2]="t.b.y" />

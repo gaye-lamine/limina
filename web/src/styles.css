@@ -2172,6 +2172,23 @@ app-root {
   min-height: 100%;
   animation: crossfade var(--dur-fast) var(--ease) both;
 }
+/* The verdict and the title stay in view while the instrument scrolls. */
+.inst-head {
+  position: sticky;
+  top: calc(-1 * var(--space-5));
+  z-index: 2;
+  margin: calc(-1 * var(--space-5)) calc(-1 * var(--space-5)) 0;
+  padding: var(--space-5) var(--space-5) var(--space-3);
+  background: var(--surface-1);
+  border-bottom: 1px solid var(--border);
+}
+@media (max-width: 1023px) {
+  .inst-head {
+    top: calc(-1 * var(--space-4));
+    margin: calc(-1 * var(--space-4)) calc(-1 * var(--space-4)) 0;
+    padding: var(--space-4) var(--space-4) var(--space-3);
+  }
+}
 @keyframes crossfade {
   from {
     opacity: 0;
@@ -2188,7 +2205,7 @@ app-root {
   max-width: 680px;
 }
 .visual--gauge .gauge svg {
-  max-height: min(40vh, 380px);
+  max-height: min(30vh, 260px);
 }
 .visual--explorer {
   flex: 1 0 auto;

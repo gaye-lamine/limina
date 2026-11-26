@@ -104,11 +104,11 @@ describe('CarnotApparatus', () => {
   it('states the numbers in its text alternative', async () => {
     const el = (await render('600', '300', '0.6')).nativeElement as HTMLElement;
     const desc = el.querySelector('svg desc')?.textContent ?? '';
-    expect(desc).toContain('Qh = 1');
-    expect(desc).toContain('at most 0.500');
-    expect(desc).toContain('Qc 0.500');
-    expect(desc).toContain('Claimed work 0.600');
-    expect(desc).toContain('leaving rejected heat 0.400');
+    expect(desc).toContain('Qh = 100 %');
+    expect(desc).toContain('at most 50 %');
+    expect(desc).toContain('Qc 50 %');
+    expect(desc).toContain('Claimed work 60 %');
+    expect(desc).toContain('leaving rejected heat 40 %');
     expect(desc).toContain('below the minimum Tc/Th');
   });
 
@@ -129,7 +129,7 @@ describe('CarnotApparatus', () => {
     const xs = (p: string | null | undefined) => (p ?? '').split(' ').map((q) => Number(q.split(',')[0]));
     expect(Math.min(...xs(claimed))).toBeGreaterThan(Math.max(...xs(minimum)));
     const label = el.querySelector('.reject-claimed-label')?.textContent?.replace(/\s+/g, '');
-    expect(label).toBe('Qc=0.400');
+    expect(label).toBe('Qc=40%');
     const texts = Array.from(el.querySelectorAll('svg text')).map((t) => t.textContent?.trim());
     expect(texts).toContain('claimed');
   });
@@ -139,7 +139,7 @@ describe('CarnotApparatus', () => {
     const minimum = el.querySelector('polygon.reject-minimum')?.getAttribute('points');
     const claimed = el.querySelector('polygon.reject-claimed')?.getAttribute('points');
     expect(shaftWidth(claimed, 'x')).toBeGreaterThan(shaftWidth(minimum, 'x'));
-    expect(el.querySelector('.reject-claimed-label')?.textContent?.replace(/\s+/g, '')).toBe('Qc=0.600');
+    expect(el.querySelector('.reject-claimed-label')?.textContent?.replace(/\s+/g, '')).toBe('Qc=60%');
   });
 
   it('labels each reservoir once, inside its block', async () => {
@@ -216,6 +216,6 @@ describe('CarnotApparatus', () => {
     const el = (await render('600', '300', '0,60')).nativeElement as HTMLElement;
     expect((el.querySelector('#claim-value') as HTMLInputElement).value).toBe('0,60');
     expect(el.querySelector('.callout')).not.toBeNull();
-    expect(el.querySelector('svg desc')?.textContent).toContain('Claimed work 0.600');
+    expect(el.querySelector('svg desc')?.textContent).toContain('Claimed work 60 %');
   });
 });

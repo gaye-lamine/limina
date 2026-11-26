@@ -2,13 +2,16 @@ import { EvaluateResponse } from './api.models';
 import {
   boundDisplay,
   calculation,
+  decisive,
   doiUrl,
   focusOption,
   formalStatement,
   inClaimUnit,
   missingAssumptions,
+  plainNumber,
   prettyFormula,
   ratioDisplay,
+  readableAssumptions,
   stateAssumptions,
   toCanonical,
   valuesUsed,
@@ -28,7 +31,7 @@ describe('display of engine results', () => {
 
   it('names the law in the formal statement instead of its id, keeping the wording', () => {
     expect(formalStatement('inconsistent with limit carnot under assumptions cycle model = ideal', carnot)).toBe(
-      'inconsistent with the Carnot limit under assumptions cycle model = ideal',
+      'inconsistent with the Carnot limit under assumptions cycle model: ideal',
     );
   });
 
@@ -50,7 +53,7 @@ describe('display of engine results', () => {
     });
     expect(valuesUsed(c)).toBe('Th = 600 K, Tc = 300 K');
     const withFormula = { ...carnot, formula: 'efficiency <= 1 - Tc/Th' };
-    expect(calculation(c, withFormula)).toBe('1 − 300/600 = 50.0 %');
+    expect(calculation(c, withFormula)).toBe('1 − 300 K/600 K = 50.0 %');
     // A parameter without value: no calculation is shown.
     expect(calculation(claimOf({ parameters: {} }), withFormula)).toBeNull();
   });
@@ -69,8 +72,49 @@ describe('display of engine results', () => {
     expect(focus.option).toBe('conventional far-field imaging');
     const c = claimOf({ raw_unit: 'nm', unit: 'm' });
     expect(boundDisplay(c, focus.result, 'Min')).toBe('250 nm');
-    expect(ratioDisplay(focus.result)).toBe('0.600×');
+    expect(ratioDisplay(c, focus.result, 'Min')).toBe('0.600×');
     expect(boundDisplay(c, options[0].result, 'Min')).toBe('no limit');
+  });
+
+  it('shows one decisive bound out of a range, never "0 – x"', () => {
+    const range = (verdict: EvaluateResponse['verdict'], lo: number, hi: number, low: number | null, high: number | null): EvaluateResponse => ({
+      ...claimOf().result!,
+      verdict,
+      bounds: {
+        permissive: { b_min: lo, b_max: hi, margin: low === null ? null : { low, high: high ?? low } },
+        restrictive: { b_min: lo, b_max: hi, margin: null },
+      },
+    });
+    const c = claimOf({ value: 1e-5, raw_value: 1e-5, raw_unit: 'rad', unit: 'rad' });
+    // A minimum met by the strictest assumption: the strictest bound.
+    const ok = range('COMPATIBLE', 5.2085e-6, 6.71e-6, 1.49, 1.92);
+    expect(decisive(c, ok, 'Min')).toEqual({ bound: 6.71e-6, ratio: 1.49 });
+    // A minimum broken under every assumption: the loosest bound, still broken.
+    const bad = range('IMPOSSIBLE', 5.2085e-6, 6.71e-6, 0.745, 0.96);
+    expect(decisive(c, bad, 'Min')).toEqual({ bound: 5.2085e-6, ratio: 0.96 });
+    // A zero lower end means no limit: the other end, and the ratio from the values.
+    const abbe = range('CONDITIONAL', 0, 2e-5, null, null);
+    expect(decisive(c, abbe, 'Min')).toEqual({ bound: 2e-5, ratio: 0.5 });
+    // A maximum: the strictest bound is the lower end.
+    const p = claimOf({ value: 120, raw_value: 120, raw_unit: 'W', unit: 'W' });
+    expect(boundDisplay(p, range('CONDITIONAL', 100, 1e32, 1.2e-30, 1.2), 'Max')).toBe('100 W');
+  });
+
+  it('reads the assumptions of a statement in words', () => {
+    expect(readableAssumptions('inconsistent with the Mass-energy equivalence under assumptions none')).toBe('inconsistent with the Mass-energy equivalence');
+    expect(readableAssumptions('inconsistent with X under assumptions imaging method = conventional imaging')).toBe('inconsistent with X under assumptions imaging method: conventional imaging');
+    expect(readableAssumptions('under assumptions resolution criterion in {Rayleigh criterion, Sparrow criterion}')).toBe(
+      'under assumptions resolution criterion: Rayleigh criterion or Sparrow criterion',
+    );
+  });
+
+  it('writes numbers without reading noise and with their units in the calculation', () => {
+    expect(plainNumber(1.0000000000000001e-24)).toBe('1e-24');
+    expect(plainNumber(300)).toBe('300');
+    const c = claimOf({
+      parameters: { B: { value: 1, raw_value: 1, unit: 'MHz', evidence: null, flags: [] }, snr: { value: 15, raw_value: 15, unit: 'dimensionless', evidence: null, flags: [] } },
+    });
+    expect(valuesUsed(c, { ...carnot, parameter_labels: { B: 'bandwidth', snr: 'signal-to-noise ratio' } })).toBe('bandwidth B = 1 MHz, signal-to-noise ratio snr = 15');
   });
 
   it('links a reference to its DOI', () => {

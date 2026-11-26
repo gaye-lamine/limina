@@ -56,13 +56,14 @@ export class Gauge {
     return start > 0 ? sectorPath(CX, CY, R, R0, start, 0) : null;
   });
 
-  /** Graduations on the inner edge of the band, labelled inside the dial. */
+  /** Graduations on the inner edge of the band; the end values are written under the dial. */
   protected readonly scale = computed(() =>
     this.g().scaleTicks.map((t) => {
       const a = polar(CX, CY, R0, t.angle);
       const b = polar(CX, CY, R0 + 8, t.angle);
-      const l = polar(CX, CY, R0 - 38, t.angle);
-      return { ...t, a, b, l };
+      // Only the two ends are labelled, under the dial, so the needle never crosses a label.
+      const e = polar(CX, CY, (R + R0) / 2, t.angle);
+      return { ...t, a, b, e };
     }),
   );
 

@@ -5,7 +5,7 @@
  * here decides a verdict.
  */
 import { AnalyzedClaim, LawAttempt } from './analysis.models';
-import { MissingAssumption, missingAssumptions, stateAssumptions } from './review-format';
+import { decisive, MissingAssumption, missingAssumptions, stateAssumptions } from './review-format';
 import { ApiFailure, LimitInfo } from './api.models';
 import { formatValue } from './chart-geometry';
 import { UI, WB } from './strings';
@@ -57,21 +57,59 @@ export function ratioText(c: AnalyzedClaim): string | null {
   return m.low === m.high ? `${formatValue(m.low)}×` : `${formatValue(m.low)}–${formatValue(m.high)}×`;
 }
 
+/** A ratio in words: "2.5", "1.49"; at most three significant digits. */
+function ratioWords(r: number): string {
+  return String(Number(r.toPrecision(r >= 10 ? 2 : 3)));
+}
+
+/** How far a claim is from a bound, in one plain sentence. */
+export function ratioSentence(ratio: number, direction: 'Max' | 'Min' | 'Equal', impossible: boolean): string {
+  if (direction === 'Min') {
+    if (ratio >= 1) return UI.aboveMinimum(ratioWords(ratio));
+    if (ratio < 0.5) return UI.belowMinimumTimes(ratioWords(1 / ratio));
+    return UI.belowMinimumPercent(String(Math.round((1 - ratio) * 100)));
+  }
+  if (impossible || ratio > 1) return UI.aboveMaximum(ratioWords(ratio));
+  return UI.withinMaximum(String(Number((ratio * 100).toPrecision(3))));
+}
+
+/** "super-resolution techniques or near-field methods": the options under which a CONDITIONAL claim holds. */
+export function conditionalOptions(c: AnalyzedClaim, limit: LimitInfo | null | undefined): string | null {
+  const configs = c.result?.configurations ?? [];
+  const labels = [
+    ...new Set(
+      configs.flatMap((k) =>
+        Object.entries(k.assumptions)
+          .filter(([a]) => !c.constraints[a])
+          .map(([, o]) => limit?.option_labels[o] ?? o.replace(/_/g, ' ')),
+      ),
+    ),
+  ];
+  return labels.length ? labels.join(` ${UI.or} `) : null;
+}
+
+/** Names of the missing values, as people say them. */
+function missingNames(c: AnalyzedClaim, limit: LimitInfo | null | undefined): string {
+  return (c.result?.missing_parameters ?? []).map((p) => limit?.parameter_labels[p.id] ?? p.id).join(', ');
+}
+
 /** One plain sentence from engine data only. */
-export function plainSentence(e: Entry, direction: 'Max' | 'Min' | 'Equal'): string {
+export function plainSentence(e: Entry, direction: 'Max' | 'Min' | 'Equal', limit?: LimitInfo | null): string {
   if (e.kind === 'failure') return UI.failedSentence();
   const c = e.claim;
   if (c.law?.source === 'draft_disputed') return UI.disputedSentence;
   const r = c.result;
   if (!r) return c.reason ? UI.noVerdictBecause(c.reason) : UI.noVerdict;
-  const m = r.bounds?.permissive.margin ?? null;
-  if ((r.verdict === 'IMPOSSIBLE' || r.verdict === 'COMPATIBLE') && m) {
-    const ratio = formatValue(m.low);
-    if (direction === 'Min') return r.verdict === 'IMPOSSIBLE' ? UI.belowMinimum(ratio) : UI.aboveMinimum(ratio);
-    return r.verdict === 'IMPOSSIBLE' ? UI.aboveMaximum(ratio) : UI.withinMaximum(ratio);
+  if (r.verdict === 'IMPOSSIBLE' || r.verdict === 'COMPATIBLE') {
+    const d = decisive(c, r, direction);
+    if (d?.ratio != null) return ratioSentence(d.ratio, direction, r.verdict === 'IMPOSSIBLE');
+    return r.verdict === 'IMPOSSIBLE' ? UI.impossibleSentence : UI.compatibleSentence;
   }
-  if (r.verdict === 'INSUFFICIENT_DATA') return UI.missing(r.missing_parameters.map((p) => p.id).join(', '));
-  if (r.verdict === 'CONDITIONAL') return UI.conditional(r.wording);
+  if (r.verdict === 'INSUFFICIENT_DATA') return UI.missing(missingNames(c, limit));
+  if (r.verdict === 'CONDITIONAL') {
+    const options = conditionalOptions(c, limit);
+    return options ? UI.conditionalWith(options) : UI.conditional(r.wording);
+  }
   return r.wording;
 }
 
@@ -421,5 +459,10 @@ export function step(visible: number[], current: number, by: 1 | -1): number {
 
 /** Title of an entry in lists: "speed of a massive body · 3.60e+8 m/s". */
 export function entryTitle(e: Entry): string {
-  return e.kind === 'claim' ? `${e.claim.quantity} · ${readValueText(e.claim)}` : `${WB.progressParagraph} ${e.paragraph}`;
+  return e.kind === 'claim' ? `${quantityName(e.claim)} · ${readValueText(e.claim)}` : `${WB.progressParagraph} ${e.paragraph}`;
+}
+
+/** The claim's quantity in plain words: the law's name for it, else the reading's. */
+export function quantityName(c: AnalyzedClaim): string {
+  return (c.limit_id ? UI.quantityName[c.limit_id] : undefined) ?? c.quantity;
 }

@@ -112,7 +112,8 @@ describe('Gauge', () => {
   it('graduates the scale with readable numbers inside the dial', async () => {
     const el = await render(0.7, [0.5]);
     const labels = Array.from(el.querySelectorAll('.gauge-scale-label')).map((t) => t.textContent?.trim());
-    expect(labels).toEqual(['0', '0.2', '0.4', '0.6', '0.8']);
+    // Only the two ends are written, under the dial, so the needle crosses no label.
+    expect(labels).toEqual(['0', '0.8']);
   });
 
   it('has a text alternative with the claim, the bounds and the position', async () => {
@@ -120,14 +121,14 @@ describe('Gauge', () => {
     for (const text of [el.querySelector('svg desc')?.textContent, el.querySelector('.gauge-alt')?.textContent]) {
       expect(text).toContain('claim 0.700');
       expect(text).toContain('bounds 0.500');
-      expect(text).toContain('beyond the largest bound');
+      expect(text).toContain('beyond the limit, in the shaded zone');
     }
     expect(el.querySelector('svg')?.getAttribute('role')).toBe('img');
   });
 
   it('says when the claim is not beyond the largest bound, and numbers its caption', async () => {
     const el = await render(14.5, [14, 15], 2);
-    expect(el.querySelector('.gauge-alt')?.textContent).toContain('not beyond the largest bound');
+    expect(el.querySelector('.gauge-alt')?.textContent).toContain('within the limit');
     expect(el.querySelector('.fig-caption')?.textContent).toMatch(/^Fig\. 2:/);
   });
 });

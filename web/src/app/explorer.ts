@@ -12,7 +12,8 @@ import { AnalyzedClaim, CurveResponse, SurfaceResponse } from './analysis.models
 import { AnalysisService } from './analysis.service';
 import { ApiFailure, LimitInfo } from './api.models';
 import { formatValue, summarizeBounds } from './chart-geometry';
-import { comparisonScale, graphGeometry, heatGeometry } from './graph-geometry';
+import { comparisonScale, graphGeometry, heatGeometry, xPosition } from './graph-geometry';
+import { quantityName } from './review-logic';
 import { WB } from './strings';
 import { PLOT, rememberDirection } from './workbench-logic';
 
@@ -112,9 +113,22 @@ export class Explorer implements OnDestroy {
     const c = this.curve();
     const v = this.values()[this.free()];
     if (!c || v === undefined) return null;
-    const [lo, hi] = c.range;
-    if (v < lo || v > hi) return null;
-    return PLOT.left + ((v - lo) / (hi - lo || 1)) * (PLOT.width - PLOT.left - PLOT.right);
+    return xPosition(c, v);
+  });
+
+  /** Axis titles: what each axis shows, its unit, and whether it is logarithmic. */
+  protected readonly axisTitles = computed(() => {
+    const g = this.geometry();
+    const free = this.free();
+    const l = this.limit();
+    const unit = (u: string) => (u && u !== 'dimensionless' ? ` (${u})` : '');
+    const log = (on: boolean | undefined) => (on ? `, ${WB.explorerLogScale}` : '');
+    const freeUnit = this.sliders().find((s) => s.id === free)?.unit ?? '';
+    const c = this.claim();
+    return {
+      x: `${l?.parameter_labels[free] ?? free}${unit(freeUnit)}${log(g?.logX)}`,
+      y: `${WB.explorerBoundOf} ${quantityName(c)}${unit(c.unit)}${log(g?.logY)}`,
+    };
   });
 
   protected readonly alt = computed(() => {

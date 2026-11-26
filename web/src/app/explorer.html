@@ -303,6 +303,8 @@
               {{ t.label }}
             </text>
           }
+          <text class="fig-label explorer-axis-title" [attr.x]="plot.left" y="11" text-anchor="start">{{ axisTitles().y }}</text>
+          <text class="fig-label explorer-axis-title" [attr.x]="plot.width - plot.right" [attr.y]="plot.height - 4" text-anchor="end">{{ axisTitles().x }}</text>
           <path class="explorer-bound" [attr.d]="g.line" />
           @if (g.claimY !== null) {
             <line

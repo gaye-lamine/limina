@@ -21,8 +21,19 @@ export function prettyFormula(f: string): string {
 
 /** The engine's formal statement, with the law named by its title instead of its id. */
 export function formalStatement(wording: string, limit: LimitInfo | null | undefined): string {
-  if (!limit) return wording;
-  return wording.replace(new RegExp(`\\blimit ${limit.id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`), `the ${limit.title}`);
+  const named = limit ? wording.replace(new RegExp(`\\blimit ${limit.id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`), `the ${limit.title}`) : wording;
+  return readableAssumptions(named);
+}
+
+/**
+ * The assumptions part of a statement in words: "under assumptions none"
+ * is dropped, "a = x" reads "a: x" and "a in {x, y}" reads "a: x or y".
+ */
+export function readableAssumptions(s: string): string {
+  return s
+    .replace(/ under assumptions none\b/, '')
+    .replace(/ in \{([^}]*)\}/g, (_, list: string) => `: ${list.split(/,\s*/).join(` ${UI.or} `)}`)
+    .replace(/ = /g, ': ');
 }
 
 const PREFIX: Record<string, number> = { p: 1e-12, n: 1e-9, u: 1e-6, µ: 1e-6, m: 1e-3, c: 1e-2, k: 1e3, M: 1e6, G: 1e9, T: 1e12 };
@@ -43,17 +54,31 @@ export function inClaimUnit(v: number, c: AnalyzedClaim): string {
   return c.unit && c.unit !== 'dimensionless' ? `${formatValue(v)} ${c.unit}` : formatValue(v);
 }
 
-/** The parameters the engine used: "Th = 600 K, Tc = 300 K". */
-export function valuesUsed(c: AnalyzedClaim): string {
+/** The parameters the engine used: "hot reservoir temperature Th = 600 K, cold reservoir temperature Tc = 300 K". */
+export function valuesUsed(c: AnalyzedClaim, limit?: LimitInfo | null): string {
   return Object.entries(c.parameters)
     .filter(([, p]) => p.value !== null)
-    .map(([id, p]) => `${id} = ${formatValue(p.raw_value ?? (p.value as number))}${p.unit && p.unit !== 'dimensionless' ? ` ${p.unit}` : ''}`)
+    .map(([id, p]) => {
+      const label = limit?.parameter_labels[id];
+      const name = !label || label === id ? id : label.split(/\s+/).includes(id) ? label : `${label} ${id}`;
+      return `${name} = ${withUnitText(plainNumber(p.raw_value ?? (p.value as number)), p.unit)}`;
+    })
     .join(', ');
 }
 
-/** A number as written in a calculation: "300", "1.2", "1e-24". */
-function plainNumber(v: number): string {
-  return Math.abs(v) >= 1e-3 && Math.abs(v) < 1e6 ? String(Number(v.toPrecision(6))) : v.toExponential().replace('e+', 'e');
+function withUnitText(v: string, unit: string | undefined): string {
+  return unit && unit !== 'dimensionless' ? `${v} ${unit}` : v;
+}
+
+/** A number as written in a calculation: "300", "1.2", "1e-24"; ten significant digits at most, so reading noise ("1.0000000000000001e-24") never shows. */
+export function plainNumber(v: number): string {
+  const n = Number(v.toPrecision(10));
+  return Math.abs(n) >= 1e-3 && Math.abs(n) < 1e6 ? String(n) : n.toExponential().replace('e+', 'e');
+}
+
+/** Whether a bound stands for "no limit": 0 for a minimum, or a huge stand-in for a maximum. */
+function noLimit(v: number, other: number, direction: string): boolean {
+  return direction === 'Min' ? v === 0 : other > 0 && v / other >= 1e20;
 }
 
 /** The right-hand side of each piece of a formula: "1 - Tc/Th" from "efficiency <= 1 - Tc/Th". */
@@ -76,8 +101,7 @@ export function calculation(c: AnalyzedClaim, limit: LimitInfo | null | undefine
   const values = new Map<string, string>();
   for (const [id, p] of Object.entries(c.parameters)) {
     if (p.value === null) continue;
-    // Numbers only: their units are listed on the "values used" line.
-    values.set(id, plainNumber(p.raw_value ?? p.value));
+    values.set(id, withUnitText(plainNumber(p.raw_value ?? p.value), p.unit));
   }
   const ids = limit.parameters.map((p) => p.id).sort((a, b) => b.length - a.length);
   const pieces = rightSides(limit.formula).map((rhs) => {
@@ -94,8 +118,13 @@ export function calculation(c: AnalyzedClaim, limit: LimitInfo | null | undefine
   });
   if (pieces.some((p) => p === null)) return null;
   const b = c.result.bounds.permissive;
-  const single = b.b_min === b.b_max && pieces.length === 1;
-  return single ? `${pieces[0]} = ${inClaimUnit(b.b_min, c)}` : (pieces as string[]).join('; ');
+  if (pieces.length !== 1) return (pieces as string[]).join('; ');
+  if (b.b_min === b.b_max) return `${pieces[0]} = ${inClaimUnit(b.b_min, c)}`;
+  // A range whose other end means "no limit": the shared formula gives the real end.
+  const direction = limit.direction;
+  if (noLimit(b.b_min, b.b_max, direction)) return `${pieces[0]} = ${inClaimUnit(b.b_max, c)}`;
+  if (direction === 'Max' && noLimit(b.b_max, b.b_min, direction)) return `${pieces[0]} = ${inClaimUnit(b.b_min, c)}`;
+  return pieces[0] as string;
 }
 
 /** The engine's result for one option of an assumption the text does not state. */
@@ -111,19 +140,51 @@ export function focusOption(options: OptionResult[] | undefined): OptionResult |
   return options.find((o) => o.result.verdict === 'IMPOSSIBLE') ?? options[0];
 }
 
-/** The bound of a result in the claim's unit; "no limit" for a lower bound of zero. */
-export function boundDisplay(c: AnalyzedClaim, r: EvaluateResponse | null | undefined, direction: string): string {
-  const b = r?.bounds?.permissive;
-  if (!b) return UI.metricNone;
-  if (direction === 'Min' && b.b_max === 0) return UI.optionNoBound;
-  return b.b_min === b.b_max ? inClaimUnit(b.b_min, c) : `${inClaimUnit(b.b_min, c)} – ${inClaimUnit(b.b_max, c)}`;
+/** The bound that decides the verdict, and the claim over it. */
+export interface Decisive {
+  bound: number;
+  ratio: number | null;
 }
 
-/** The claim over the bound, as computed by the engine; null without a margin. */
-export function ratioDisplay(r: EvaluateResponse | null | undefined): string | null {
-  const m = r?.bounds?.permissive.margin ?? null;
-  if (!m) return null;
-  return m.low === m.high ? `${formatValue(m.low)}×` : `${formatValue(m.low)}–${formatValue(m.high)}×`;
+/**
+ * One bound out of the engine's range (the range spans the law's
+ * assumptions): for IMPOSSIBLE the loosest one, which the claim still
+ * breaks; otherwise the strictest one, which the claim still meets. A
+ * bound that stands for "no limit" (0 for a minimum) is never chosen when
+ * another exists. The ratio is the engine's margin at that end; without one
+ * it is the claim value over that bound.
+ */
+export function decisive(c: AnalyzedClaim, r: EvaluateResponse | null | undefined, direction: string): Decisive | null {
+  const b = r?.bounds?.permissive;
+  if (!b) return null;
+  const m = b.margin ?? null;
+  const low = { bound: b.b_max, ratio: m?.low ?? null };
+  const high = { bound: b.b_min, ratio: m?.high ?? null };
+  let pick: { bound: number; ratio: number | null };
+  if (b.b_min === b.b_max) pick = low;
+  else if (direction === 'Min') pick = r?.verdict === 'IMPOSSIBLE' && b.b_min > 0 ? high : low;
+  else pick = r?.verdict === 'IMPOSSIBLE' ? low : high;
+  const ratio =
+    pick.ratio !== null && Number.isFinite(pick.ratio)
+      ? pick.ratio
+      : c.value !== null && pick.bound !== 0
+        ? c.value / pick.bound
+        : null;
+  return { bound: pick.bound, ratio };
+}
+
+/** The bound of a result in the claim's unit; "no limit" for a lower bound of zero. */
+export function boundDisplay(c: AnalyzedClaim, r: EvaluateResponse | null | undefined, direction: string): string {
+  const d = decisive(c, r, direction);
+  if (!d) return UI.metricNone;
+  if (direction === 'Min' && d.bound === 0) return UI.optionNoBound;
+  return inClaimUnit(d.bound, c);
+}
+
+/** The claim over the decisive bound: "2.50×"; null without one. */
+export function ratioDisplay(c: AnalyzedClaim, r: EvaluateResponse | null | undefined, direction: string): string | null {
+  const d = decisive(c, r, direction);
+  return d?.ratio != null ? `${formatValue(d.ratio)}×` : null;
 }
 
 /** The web address of a reference's DOI, or null. */

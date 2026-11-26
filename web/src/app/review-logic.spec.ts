@@ -5,6 +5,7 @@ import {
   filtered,
   noVerdict,
   plainSentence,
+  ratioSentence,
   readNumber,
   readingSentences,
   sentenceRanges,
@@ -48,9 +49,13 @@ describe('verdict kinds and labels', () => {
   });
 
   it('writes one plain sentence from engine data', () => {
-    expect(plainSentence(entry('IMPOSSIBLE'), 'Max')).toBe('The claim is 1.20× what the law allows.');
-    expect(plainSentence(entry('IMPOSSIBLE'), 'Min')).toBe('The claim is 1.20× the minimum the law requires.');
-    expect(plainSentence(entry('COMPATIBLE'), 'Max')).toBe('The claim is 1.20× what the law allows, within the bound.');
+    expect(plainSentence(entry('IMPOSSIBLE'), 'Max')).toBe('The claim is 1.2 times what the law allows.');
+    // How far from the bound, in words people use.
+    expect(ratioSentence(0.75, 'Max', false)).toBe('The claim is 75 % of what the law allows, within the bound.');
+    expect(ratioSentence(2.5, 'Max', true)).toBe('The claim is 2.5 times what the law allows.');
+    expect(ratioSentence(0.0348, 'Min', true)).toBe('The claim is about 29 times below the minimum the law requires.');
+    expect(ratioSentence(0.7156, 'Min', true)).toBe('The claim is 28 % below the minimum the law requires.');
+    expect(ratioSentence(1.49, 'Min', false)).toBe('The claim is 1.49 times the minimum the law requires, within the bound.');
     expect(plainSentence(entry('CONDITIONAL'), 'Max')).toBe('Possible only if mode = heating.');
     expect(plainSentence(entry('INSUFFICIENT_DATA'), 'Max')).toBe('A value the text does not give is needed: Tc.');
     expect(plainSentence(noLaw, 'Max')).toBe('No verdict: no established law identified for this quantity.');

@@ -2,7 +2,6 @@ import { Component, computed, input, output } from '@angular/core';
 import { arrowDown, arrowRight } from './arrows';
 import { BENCH_FIGURE_STYLES, MIN_FIGURE_SCALE } from './bench-figure';
 import { carnotArrows, carnotFlows } from './carnot-geometry';
-import { formatValue } from './chart-geometry';
 import { parseDecimal } from './decimal';
 import { STRINGS } from './strings';
 import { Thermometer } from './thermometer';
@@ -13,7 +12,12 @@ export const VIEW_HEIGHT = 500;
 /** The figure is never drawn narrower than this (CSS min-width), so text keeps its size. */
 export const MIN_RENDER_WIDTH = Math.ceil(VIEW_WIDTH * MIN_FIGURE_SCALE);
 /** Font sizes in viewBox units; at MIN_RENDER_WIDTH none renders below 12 px. */
-export const FONT = { label: 15, symbol: 20, sub: 15, value: 15 } as const;
+export const FONT = { label: 17, symbol: 22, sub: 16, value: 17 } as const;
+
+/** A share of the heat taken in (Qh = 100 %): "75 %". */
+export function share(f: number): string {
+  return `${Number((f * 100).toPrecision(3))} %`;
+}
 
 const CX = 190;
 const HOT_BOTTOM = 84;
@@ -105,10 +109,10 @@ export class CarnotApparatus {
     const f = this.flows();
     if (!f) return null;
     return {
-      work: formatValue(f.boundWork),
-      reject: formatValue(f.minReject),
-      claimWork: f.claimWork === null ? null : formatValue(f.claimWork),
-      claimReject: f.claimReject === null ? null : formatValue(f.claimReject),
+      work: share(f.boundWork),
+      reject: share(f.minReject),
+      claimWork: f.claimWork === null ? null : share(f.claimWork),
+      claimReject: f.claimReject === null ? null : share(f.claimReject),
     };
   });
 

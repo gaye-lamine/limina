@@ -221,7 +221,7 @@
                     <button type="button" class="icon-btn" (click)="move(-1)" [attr.aria-label]="u.previous">
                       <lucide-icon [img]="icons.ChevronLeft" [size]="16" aria-hidden="true" />
                     </button>
-                    <span class="num inst-pos">{{ selected() + 1 }} / {{ entries().length }}</span>
+                    <span class="num inst-pos">{{ positionText() }}</span>
                     <button type="button" class="icon-btn" (click)="move(1)" [attr.aria-label]="u.next">
                       <lucide-icon [img]="icons.ChevronRight" [size]="16" aria-hidden="true" />
                     </button>
@@ -367,7 +367,7 @@
                         @for (o of optionList(selected()); track o.option) {
                           <li class="byopt-item">
                             <span class="byopt-name">{{ o.option }}</span>
-                            <span class="byopt-vals num">{{ u.optionBound(optionBound(c, o)) }}@if (optionRatio(o); as r) { · {{ u.optionRatio(r) }}}</span>
+                            <span class="byopt-vals num">{{ u.optionBound(optionBound(c, o)) }}@if (optionRatio(c, o); as r) { · {{ u.optionRatio(r) }}}</span>
                             <span class="pill pill--{{ optionKind(o) }}">{{ optionVerdict(o) }}</span>
                           </li>
                         }
@@ -378,7 +378,7 @@
                     <div class="visual visual--{{ visual() }}">
                       @switch (visual()) {
                         @case ('gauge') {
-                          <app-gauge [claim]="c.value ?? 0" [bounds]="gaugeBounds()" [unit]="c.unit === 'dimensionless' ? '' : c.unit" />
+                          <app-gauge [claim]="gaugeClaim()" [bounds]="gaugeBounds()" [unit]="gaugeUnit()" />
                         }
                         @case ('explorer') {
                           <app-explorer [claim]="c" [limit]="limit()" />

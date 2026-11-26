@@ -27,6 +27,7 @@ import {
   missingAssumptions,
   prettyFormula,
   ratioDisplay,
+  toCanonical,
   valuesUsed,
 } from './review-format';
 import { reviewDocument } from './review-pdf';
@@ -42,12 +43,11 @@ import {
   StepItem,
   readingSentences,
   shortLabel,
-  boundText,
   claimValueText,
   entryTitle,
   filtered,
   plainSentence,
-  ratioText,
+  quantityName,
   step,
   summary,
   verdictKind,
@@ -158,6 +158,12 @@ export class Workbench {
   });
   protected readonly board = computed(() => summary(this.entries(), this.parts().length));
   protected readonly visible = computed(() => filtered(this.entries(), this.filter()));
+  /** "2 / 3": the selected claim's place among the claims the filter shows. */
+  protected readonly positionText = computed(() => {
+    const shown = this.visible();
+    const at = shown.indexOf(this.selected());
+    return at < 0 ? `${this.selected() + 1} / ${this.entries().length}` : `${at + 1} / ${shown.length}`;
+  });
   protected readonly reading = computed<ReadingParagraph[]>(() => {
     const claims = this.entries().flatMap((e, index) => (e.kind === 'claim' ? [{ index, claim: e.claim }] : []));
     return this.parts().map((p) => ({
@@ -173,9 +179,23 @@ export class Workbench {
     if (l.parameters.length === 0) return l.direction === 'Max' && c.value !== null && c.result.bounds ? 'gauge' : 'none';
     return 'explorer';
   });
+  /** Factor from the law's unit to the unit the text uses (km/s for m/s), for the dial; 1 when unknown. */
+  private readonly gaugeFactor = computed(() => {
+    const c = this.claim();
+    return c ? (toCanonical(c.raw_unit, c.unit) ?? 1) : 1;
+  });
   protected readonly gaugeBounds = computed(() => {
     const b = this.claim()?.result?.bounds;
-    return b ? Array.from(new Set([b.permissive.b_max, b.restrictive.b_max])) : [];
+    const k = this.gaugeFactor();
+    return b ? Array.from(new Set([b.permissive.b_max, b.restrictive.b_max])).map((v) => v / k) : [];
+  });
+  /** The claim on the dial, in the unit the text uses. */
+  protected readonly gaugeClaim = computed(() => (this.claim()?.value ?? 0) / this.gaugeFactor());
+  protected readonly gaugeUnit = computed(() => {
+    const c = this.claim();
+    if (!c) return '';
+    const unit = this.gaugeFactor() === 1 ? c.unit : c.raw_unit;
+    return unit === 'dimensionless' ? '' : unit;
   });
   protected readonly charCount = computed(() => Array.from(this.text()).length);
 
@@ -211,7 +231,7 @@ export class Workbench {
   }
   protected sentenceOf(i: number): string {
     const e = this.entries()[i];
-    return e ? plainSentence(e, this.direction(e)) : '';
+    return e ? plainSentence(e, this.direction(e), e.kind === 'claim' ? this.limits().find((l) => l.id === e.claim.limit_id) : null) : '';
   }
   /** Panels open in the drawer: the selected claim when it opens. */
   protected readonly openSteps = signal<number[]>([]);
@@ -225,7 +245,7 @@ export class Workbench {
     return entryTitle(e);
   }
   protected quantityOf(e: Entry): string {
-    return e.kind === 'claim' ? e.claim.quantity : `${WB.progressParagraph} ${e.paragraph}`;
+    return e.kind === 'claim' ? quantityName(e.claim) : `${WB.progressParagraph} ${e.paragraph}`;
   }
   protected directionOf(c: AnalyzedClaim): string {
     return this.limits().find((l) => l.id === c.limit_id)?.direction ?? 'Max';
@@ -243,13 +263,13 @@ export class Workbench {
     return boundDisplay(c, this.focus(i)?.result ?? c.result, this.directionOf(c));
   }
   protected ratioShown(c: AnalyzedClaim, i: number): string {
-    return ratioDisplay(this.focus(i)?.result ?? c.result) ?? UI.metricNone;
+    return ratioDisplay(c, this.focus(i)?.result ?? c.result, this.directionOf(c)) ?? UI.metricNone;
   }
   protected optionBound(c: AnalyzedClaim, o: OptionResult): string {
     return boundDisplay(c, o.result, this.directionOf(c));
   }
-  protected optionRatio(o: OptionResult): string | null {
-    return ratioDisplay(o.result);
+  protected optionRatio(c: AnalyzedClaim, o: OptionResult): string | null {
+    return ratioDisplay(c, o.result, this.directionOf(c));
   }
   protected optionKind(o: OptionResult): VerdictKind {
     return o.result.verdict === 'IMPOSSIBLE' ? 'impossible' : o.result.verdict === 'COMPATIBLE' ? 'compatible' : o.result.verdict === 'CONDITIONAL' ? 'conditional' : 'insufficient';
@@ -258,7 +278,7 @@ export class Workbench {
     return STRINGS.verdictLabel[o.result.verdict];
   }
   protected values(c: AnalyzedClaim): string {
-    return valuesUsed(c);
+    return valuesUsed(c, this.limit());
   }
   protected calc(c: AnalyzedClaim, i: number): string | null {
     const f = this.focus(i);
@@ -289,10 +309,10 @@ export class Workbench {
     return claimValueText(c);
   }
   protected bound(c: AnalyzedClaim): string {
-    return boundText(c);
+    return boundDisplay(c, c.result, this.directionOf(c));
   }
   protected ratio(c: AnalyzedClaim): string {
-    return ratioText(c) ?? UI.metricNone;
+    return ratioDisplay(c, c.result, this.directionOf(c)) ?? UI.metricNone;
   }
   protected badgeOf(c: AnalyzedClaim): string {
     return badge(c);

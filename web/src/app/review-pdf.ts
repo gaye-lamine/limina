@@ -97,7 +97,7 @@ function claimBlock(e: Entry, i: number, limits: LimitInfo[], extras: ReviewExtr
       ],
       columnGap: 12,
     },
-    { text: plainSentence(e, limit?.direction ?? 'Max'), style: 'sentence' },
+    { text: plainSentence(e, limit?.direction ?? 'Max', limit), style: 'sentence' },
   ];
   const quote = e.kind === 'claim' ? e.claim.evidence?.text : e.text;
   if (quote) {
@@ -119,12 +119,12 @@ function claimBlock(e: Entry, i: number, limits: LimitInfo[], extras: ReviewExtr
         [
           [UI.metricClaim, c.value !== null ? inClaimUnit(c.value, c) : `${c.raw_value} ${c.raw_unit}`],
           [UI.metricBound, boundDisplay(c, shown, direction), focus?.option],
-          [UI.metricRatio, ratioDisplay(shown) ?? UI.metricNone, focus?.option],
+          [UI.metricRatio, ratioDisplay(c, shown, direction) ?? UI.metricNone, focus?.option],
         ],
         kind,
       ),
     );
-    const used = valuesUsed(c);
+    const used = valuesUsed(c, limit);
     if (used) parts.push(labelled(UI.valuesUsed, used));
     const calc = calculation(focus ? { ...c, result: focus.result } : c, limit);
     if (calc) parts.push(labelled(UI.calculation, calc));
@@ -132,7 +132,7 @@ function claimBlock(e: Entry, i: number, limits: LimitInfo[], extras: ReviewExtr
     if (options.length) {
       parts.push({ text: `${UI.byAssumption} · ${options[0].assumption}`, bold: true, color: MUTED, fontSize: 9, margin: [0, 5, 0, 1] });
       for (const o of options) {
-        const r = ratioDisplay(o.result);
+        const r = ratioDisplay(c, o.result, direction);
         parts.push({
           text: [
             { text: `${o.option}: `, fontSize: 9, color: INK },

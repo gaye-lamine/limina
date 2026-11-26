@@ -93,7 +93,31 @@ function between<T extends CurvePoint>(
  * intervals where the law says nothing. Null when fewer than two points are
  * defined.
  */
-export function graphGeometry(curve: CurveResponse, claim: number | null): GraphGeometry | null {
+/**
+ * The bound drawn at a point: the engine's decisive bound, except when it
+ * stands for "no limit" (0 for a minimum, a stand-in a factor 1e20 or more
+ * above the other end for a maximum); then the strictest bound of the
+ * point, as on the metric tile.
+ */
+export function shownBound(p: CurvePoint, direction: 'Max' | 'Min'): number | null {
+  const d = p.decisive;
+  if (d === null) return null;
+  if (direction === 'Min' && d === 0 && p.b_max !== null && p.b_max > 0) return p.b_max;
+  if (direction === 'Max' && p.b_min !== null && p.b_min > 0 && d / p.b_min >= 1e20) return p.b_min;
+  return d;
+}
+
+/** Where a value of the free parameter sits on the x axis (linear or logarithmic, as the curve). */
+export function xPosition(curve: CurveResponse, v: number): number | null {
+  const [lo, hi] = curve.range;
+  if (v < lo || v > hi) return null;
+  const { w } = inner();
+  if (curve.spacing === 'log' && lo > 0) return PLOT.left + (Math.log(v / lo) / Math.log(hi / lo || 1)) * w;
+  return PLOT.left + ((v - lo) / (hi - lo || 1)) * w;
+}
+
+export function graphGeometry(raw: CurveResponse, claim: number | null): GraphGeometry | null {
+  const curve = raw.kind === 'equality' ? raw : { ...raw, points: raw.points.map((p) => ({ ...p, decisive: shownBound(p, raw.direction) })) };
   const equality = curve.kind === 'equality' && !!curve.lower;
   const upper = (p: CurvePoint) => p.decisive;
   const lowerPoints = curve.lower ?? [];
