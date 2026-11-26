@@ -261,7 +261,25 @@ pub fn library_answer(answer: &str, catalog: &Catalog) -> Result<LawAnswer, Extr
                 "the answer names a built-in law that does not exist",
             ));
     }
+    if let Some(id) = line.and_then(|l| copied_library_entry(l, catalog)) {
+        return Ok(LawAnswer::BuiltIn(id));
+    }
     Ok(law_sentence(answer).map_or(LawAnswer::NoLaw, LawAnswer::Sentence))
+}
+
+/// The id of a library entry the model copied as its answer, as listed in
+/// the prompt: "<id>: <title>" (the formula may follow). Both the id and the
+/// title must match a catalog law exactly (case-insensitive); anything else
+/// is not read as a built-in law.
+fn copied_library_entry(line: &str, catalog: &Catalog) -> Option<String> {
+    let (id, rest) = line.split_once(':')?;
+    let id = id.trim();
+    let rest = rest.trim().to_lowercase();
+    catalog
+        .limits
+        .iter()
+        .find(|l| l.id.eq_ignore_ascii_case(id) && rest.starts_with(&l.title.to_lowercase()))
+        .map(|l| l.id.clone())
 }
 
 /// Like [`identify_law`], with the built-in library offered to the model.

@@ -623,8 +623,10 @@ pub fn number_in(evidence: &str, value: f64) -> bool {
     numbers(evidence).into_iter().any(|n| same(n, value))
 }
 
+/// Equal up to a relative 1e-9. No absolute tolerance: with one, every
+/// very small number (1e-12, 1e-24, 1e-36) would match every other.
 fn same(a: f64, b: f64) -> bool {
-    (a - b).abs() <= 1e-9 * a.abs().max(b.abs()) || (a - b).abs() <= 1e-12
+    a == b || (a - b).abs() <= 1e-9 * a.abs().max(b.abs())
 }
 
 /// Every number written in the text, with its sign when one precedes it.
@@ -888,6 +890,40 @@ mod tests {
             "{:?}",
             c.notes
         );
+    }
+
+    /// A live answer: the model computed the product dx*dp (1e-36), which the
+    /// text does not state, and quoted the whole sentence as evidence.
+    #[test]
+    fn a_value_the_model_computed_is_not_traceable_even_when_very_small() {
+        let text = "The Q-Scope locates an electron within 1e-12 m while its momentum is known to within 1e-24 kg*m/s.";
+        let json = r#"{"claims":[
+            {"limit_id":"heisenberg","quantity":"position-momentum uncertainty product","value":1e-36,"unit":"kg*m/s",
+             "evidence":"The Q-Scope locates an electron within 1e-12 m while its momentum is known to within 1e-24 kg*m/s.",
+             "constraints":{},"parameters":{"dp":{"value":1e-24,"unit":"kg*m/s","evidence":"1e-24 kg*m/s"}}}
+        ],"missing":[]}"#;
+        let output = parse_model_output(json).expect("json");
+        let out = check(&output, text, &heisenberg_catalog());
+        assert_eq!(out.len(), 1, "{out:?}");
+        assert_eq!(out[0].value, None);
+        assert_eq!(out[0].evidence, None);
+        assert!(
+            out[0].flags.iter().any(|f| f == NOT_TRACEABLE),
+            "{:?}",
+            out[0].flags
+        );
+        assert!(!out[0].evaluable());
+        // The whole answer quotes no claim value: the next model is asked and nothing is cached.
+        assert!(crate::extractor::untraceable(
+            &output,
+            text,
+            &heisenberg_catalog()
+        ));
+        // Small numbers are compared relatively, not with an absolute tolerance.
+        assert!(!number_in(text, 1e-36));
+        assert!(!number_in("1e-12", 1e-24));
+        assert!(number_in("1e-24", 1e-24));
+        assert!(number_in("0", 0.0));
     }
 
     #[test]

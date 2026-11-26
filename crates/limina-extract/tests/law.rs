@@ -203,3 +203,35 @@ fn the_library_answer_is_a_checked_built_in_id_a_sentence_or_none() {
         LawAnswer::NoLaw
     );
 }
+
+/// A live answer: the model copied the library line ("<id>: <title> (formula)")
+/// instead of writing "built-in: <id>".
+#[test]
+fn a_copied_library_line_is_read_as_that_built_in_law_only_when_id_and_title_match() {
+    use limina_extract::law::library_answer;
+    use limina_extract::LawAnswer;
+    let catalog = limina_extract::testing::catalog();
+    let carnot = catalog
+        .limits
+        .iter()
+        .find(|l| l.id == "carnot")
+        .expect("carnot in the test catalog");
+    let copied = format!("{}: {} ({})", carnot.id, carnot.title, carnot.formula);
+    assert_eq!(
+        library_answer(&copied, &catalog).expect("ok"),
+        LawAnswer::BuiltIn("carnot".into())
+    );
+    // The id with another title, or a title alone, is not a library line.
+    assert!(matches!(
+        library_answer("carnot: some other law of heat engines", &catalog).expect("ok"),
+        LawAnswer::Sentence(_)
+    ));
+    assert!(!matches!(
+        library_answer(&carnot.title, &catalog).expect("ok"),
+        LawAnswer::BuiltIn(_)
+    ));
+    assert!(!matches!(
+        library_answer(&format!("nonsense: {}", carnot.title), &catalog).expect("ok"),
+        LawAnswer::BuiltIn(_)
+    ));
+}
