@@ -153,9 +153,7 @@
       }
     </div>
     @if (failure(); as f) {
-      <p class="error-block">
-        <span class="mono">{{ f.code }}</span> {{ f.message }}
-      </p>
+      <p class="error-block" [attr.data-code]="f.code">{{ s.chartFailed }}</p>
     }
     @if (view() === 'map') {
       @if (heat(); as hm) {

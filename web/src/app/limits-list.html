@@ -1,14 +1,8 @@
 <section class="panel library" aria-labelledby="limits-title">
   <h2 id="limits-title">{{ s.libraryTitle }}</h2>
   @if (failure(); as f) {
-    <div class="error-block" role="alert">
-      <h3>{{ s.errorTitle }}</h3>
-      <dl class="facts">
-        <dt>{{ s.errorCode }}</dt>
-        <dd class="mono">{{ f.code }}</dd>
-        <dt>{{ s.errorMessage }}</dt>
-        <dd>{{ f.message }}</dd>
-      </dl>
+    <div class="error-block" role="alert" [attr.data-code]="f.code">
+      <p>{{ s.libraryUnavailable }}</p>
     </div>
   } @else if (limits().length === 0) {
     <p class="muted">{{ s.limitsLoading }}</p>

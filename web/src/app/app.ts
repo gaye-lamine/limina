@@ -1,7 +1,7 @@
 import { A11yModule } from '@angular/cdk/a11y';
 import { Overlay, OverlayRef } from '@angular/cdk/overlay';
 import { ComponentPortal } from '@angular/cdk/portal';
-import { Component, ElementRef, HostListener, computed, inject, signal, viewChild } from '@angular/core';
+import { Component, ElementRef, HostListener, inject, signal, viewChild } from '@angular/core';
 import { LucideAngularModule, X } from 'lucide-angular';
 import { ApiFailure, LimitInfo } from './api.models';
 import { ApiService } from './api.service';
@@ -38,13 +38,6 @@ export class App {
   private readonly api = inject(ApiService);
   private readonly overlay = inject(Overlay);
   private paletteRef: OverlayRef | null = null;
-
-  protected readonly statusText = computed(() => {
-    const st = this.status.state();
-    if (st === 'checking') return UI.statusChecking;
-    if (st === 'offline') return UI.statusOffline;
-    return `${UI.statusOnline}, ${this.status.extraction() ? UI.extractionOn : UI.extractionOff}`;
-  });
 
   constructor() {
     this.api.getLimits().subscribe({

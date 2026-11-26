@@ -23,11 +23,11 @@ describe('App', () => {
     return { http, fixture, el: fixture.nativeElement as HTMLElement };
   }
 
-  it('shows the top bar with the wordmark, the engine status, the links and the Ctrl+K hint', async () => {
+  it('shows the top bar with the wordmark, the links and the Ctrl+K hint, and no technical status', async () => {
     const { el } = await start();
     expect(el.querySelector('.wordmark')?.textContent).toContain('Limina');
-    expect(el.querySelector('.status')?.textContent).toContain('Engine online, extraction available');
-    expect(el.querySelector('.status--online')).not.toBeNull();
+    expect(el.querySelector('.status')).toBeNull();
+    expect(el.querySelector('.topbar')?.textContent).not.toMatch(/engine|extraction|online|offline/i);
     expect(el.querySelector('.topbar-library')?.textContent).toContain('Library');
     expect(el.querySelector('.topbar-how')?.textContent).toContain('How it works');
     expect(el.querySelector('.kbd-hint')?.textContent).toContain('Ctrl');
@@ -35,10 +35,10 @@ describe('App', () => {
     expect(el.querySelector('#limit')).toBeNull();
   });
 
-  it('marks extraction unavailable in the status', async () => {
+  it('says in plain words when free text cannot be checked', async () => {
     const { el } = await start(false);
-    expect(el.querySelector('.status')?.textContent).toContain('extraction unavailable');
-    expect(el.querySelector('.status--degraded')).not.toBeNull();
+    expect(el.querySelector('.notice')?.textContent).toContain('Free text cannot be checked right now');
+    expect(el.textContent).not.toMatch(/(?<!heat )\b(extraction|engine)\b/i);
   });
 
   it('opens the Library drawer from the top bar and closes it with Escape', async () => {
@@ -81,7 +81,7 @@ describe('App', () => {
     expect(drawer.querySelector('#drawer-title')?.textContent).toContain('How it works');
   });
 
-  it('shows the error block in the Library and the offline status when the API is down', async () => {
+  it('shows plain messages in the Library and on the page when the service is down', async () => {
     const http = TestBed.inject(HttpTestingController);
     const fixture = TestBed.createComponent(App);
     await fixture.whenStable();
@@ -90,7 +90,8 @@ describe('App', () => {
     fixture.detectChanges();
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
-    expect(el.querySelector('.error-block')?.textContent).toContain('NetworkError');
-    expect(el.querySelector('.status--offline')?.textContent).toContain('Engine offline');
+    expect(el.querySelector('.error-block')?.textContent).toContain('The library could not be loaded');
+    expect(el.querySelector('.notice--error')?.textContent).toContain('Limina is unavailable right now');
+    expect(el.textContent).not.toMatch(/NetworkError|API/);
   });
 });

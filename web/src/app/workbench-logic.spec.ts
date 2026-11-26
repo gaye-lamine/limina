@@ -72,7 +72,7 @@ describe('workbench logic', () => {
     });
     landauer.result!.bounds!.permissive.margin = { low: 0.0348, high: 0.0348 };
     expect(explain(landauer)).toEqual([
-      'The law was written by two language models that agree on it; nobody has reviewed it.',
+      'This law was written by AI, twice independently, with the same result; nobody has reviewed it yet.',
       'The claim is 0.0348 of the minimum the law requires.',
     ]);
     const disputed = claimOf({
@@ -81,10 +81,10 @@ describe('workbench logic', () => {
       reason: 'the two models wrote different laws; no verdict is given',
       law: { source: 'draft_disputed', limit_id: null, sentence: 'law', attempts: [], comparison: null },
     });
-    expect(explain(disputed)[0]).toContain('Two models wrote this law differently');
+    expect(explain(disputed)[0]).toContain('Two versions of this law disagree');
     expect(verdictLabel(disputed)).toBe('NEEDS INPUT');
-    expect(badge(disputed)).toBe('disputed between models');
-    expect(badge(claimOf())).toBe('built-in law');
+    expect(badge(disputed)).toBe('two versions disagree');
+    expect(badge(claimOf())).toBe('established law');
   });
 
   it('shows the outside-model-domain status instead of a verdict', () => {
@@ -93,7 +93,7 @@ describe('workbench logic', () => {
       status: 'outside_model_domain',
       reason: 'outside the model domain of kinetic: the condition "v < c" does not hold',
     });
-    expect(verdictLabel(outside)).toBe('OUTSIDE MODEL DOMAIN');
+    expect(verdictLabel(outside)).toBe('OUT OF RANGE');
     expect(explain(outside)[0]).toContain('does not apply to these parameters');
     expect(explain(outside)[0]).toContain('v < c');
   });

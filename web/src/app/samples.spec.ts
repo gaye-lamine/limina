@@ -36,8 +36,8 @@ describe('built-in samples', () => {
     }
     expect(claims[1].parameters['dp'].evidence?.text).toBe('1e-24 kg*m/s');
     expect(claims[3].parameters['Th'].evidence?.start).toBeGreaterThan(claims[3].evidence!.start);
-    expect(claims[0].trace[0]).toEqual({ step: 'extraction', status: 'skipped', detail: expect.stringContaining('no language model') });
+    expect(claims[0].trace[0]).toEqual({ step: 'extraction', status: 'skipped', detail: expect.stringContaining('no AI was needed') });
     expect(claims[5].status).toBe('needs_input');
-    expect(claims[5].reason).toBe('no built-in law covers this quantity');
+    expect(claims[5].reason).toBe('no known law covers this quantity');
   });
 });

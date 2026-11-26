@@ -24,9 +24,9 @@ describe('App "How it works"', () => {
     const how = el.querySelector('#how-title')?.closest('section') as HTMLElement;
     expect(how.querySelector('h2')?.textContent).toContain('How it works');
     const text = how.textContent ?? '';
-    expect(text).toContain('deterministic engine');
-    expect(text).toContain('never by a language model');
-    expect(text).toContain('only reads the numbers from the text');
+    expect(text).toContain('exact calculation with an established law of physics');
+    expect(text).toContain('never from an AI guess');
+    expect(text).toContain('only used to find the numbers');
   });
 
   it('credits ONTO Limits as prior art, once, without any external link', async () => {

@@ -290,9 +290,6 @@
                   @if (solved()[selected()]; as sv) {
                     <p class="inst-note inst-solve">{{ sv }}</p>
                   }
-                  @if (c.result) {
-                    <p class="inst-wording"><span class="inst-wording-label">{{ u.engineWording }}</span> <span class="wording">{{ c.result.wording }}</span></p>
-                  }
                   <dl class="tiles">
                     <div class="tile">
                       <dt>{{ u.metricClaim }}</dt>
@@ -341,6 +338,10 @@
                     </button>
                     <div id="source-panel" class="source-panel" [hidden]="!sourceOpen()">
                       <dl class="facts">
+                        @if (c.result) {
+                          <dt>{{ u.engineWording }}</dt>
+                          <dd class="wording">{{ c.result.wording }}</dd>
+                        }
                         <dt>{{ u.sourceDomain }}</dt>
                         <dd>{{ limit()?.validity_domain || u.sourceNone }}</dd>
                         <dt>{{ u.sourceQuote }}</dt>
@@ -355,7 +356,7 @@
                         <dt>{{ u.sourceDate }}</dt>
                         <dd class="num">{{ analysedAt() }}</dd>
                         <dt>{{ u.sourceStatus }}</dt>
-                        <dd>{{ badgeOf(c) }}@if (c.result) {, engine {{ c.result.engine_version }}}</dd>
+                        <dd>{{ badgeOf(c) }}</dd>
                         @if (c.law?.sentence) {
                           <dt>{{ u.sourceLaw }}</dt>
                           <dd>{{ c.law?.sentence }}</dd>
@@ -406,7 +407,7 @@
   <h3 class="drawer-sub">{{ u.runLog }}</h3>
   <ol class="log">
     @for (l of log(); track $index) {
-      <li class="log-line log-line--{{ l.status }}"><span class="log-status">{{ l.status === 'running' ? s.traceRunning : s.traceStatus[l.status] }}</span> {{ l.text }}</li>
+      <li class="log-line log-line--{{ l.status }}">{{ l.text }}</li>
     }
   </ol>
   @for (e of entries(); track $index; let i = $index) {
@@ -417,18 +418,10 @@
       <ol class="trace">
         @if (e.kind === 'claim') {
           @for (t of e.claim.trace; track $index) {
-            <li class="trace-step trace-step--{{ t.status }}">
-              <span class="trace-name">{{ t.step }}</span>
-              <span class="trace-status">{{ s.traceStatus[t.status] }}</span>
-              <span class="trace-detail">{{ t.detail }}</span>
-            </li>
+            <li class="trace-step trace-step--{{ t.status }}">{{ stepLine(t) }}</li>
           }
         } @else {
-          <li class="trace-step trace-step--failed">
-            <span class="trace-name">extraction</span>
-            <span class="trace-status">{{ s.traceStatus['failed'] }}</span>
-            <span class="trace-detail">{{ e.failure.code }}: {{ e.failure.message }} ({{ e.attempts }} answer(s))</span>
-          </li>
+          <li class="trace-step trace-step--failed">{{ stepLine({ step: 'extraction', status: 'failed' }) }}</li>
         }
       </ol>
     </section>

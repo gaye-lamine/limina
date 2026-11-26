@@ -2238,8 +2238,8 @@ app-root {
   gap: 4px;
 }
 .nv-steps {
-  font-family: var(--font-mono);
-  font-size: var(--text-12);
+  font-family: var(--font-sans);
+  font-size: var(--text-13);
 }
 .nv-div {
   margin-top: var(--space-3);

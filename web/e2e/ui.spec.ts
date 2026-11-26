@@ -63,6 +63,13 @@ async function checks(page: Page, state: keyof typeof KEY, desktop: boolean) {
         if (parseFloat(cs.fontSize) < 12) small.add(`${el.tagName}.${el.className} ${cs.fontSize} "${t.slice(0, 30)}"`);
       }
       problems.push(...Array.from(small).map((s) => `text under 12px: ${s}`));
+      // No software vocabulary in the visible text ('heat engine' is physics; SVG labels are drawings).
+      const copy = document.body.cloneNode(true) as HTMLElement;
+      copy.querySelectorAll('svg, [hidden], .sr-only').forEach((x) => x.remove());
+      const visible = document.body.innerText;
+      const words = /(?<!heat )\b(engine|extraction|pipeline|API|server|endpoint|JSON|nvidia|ExtractionFailed|NetworkError|limit_id|built-in)\b/i;
+      const hit = visible.match(words);
+      if (hit && copy.textContent && words.test(copy.textContent)) problems.push(`technical word shown: "${hit[0]}"`);
       // No scroll container inside another scroll container.
       const scrolls = (e: Element) => {
         const cs = getComputedStyle(e);
@@ -113,7 +120,7 @@ for (const size of SIZES) {
       await route.continue();
     });
     await page.goto('/');
-    await expect(page.locator('.status--online')).toBeVisible({ timeout: 20_000 });
+    await page.waitForResponse((r) => r.url().includes('/v1/pipeline'), { timeout: 20_000 }).catch(() => undefined);
     await expect(page.locator('#wb-text')).toBeVisible();
     await page.waitForTimeout(400);
     await page.screenshot({ path: join(OUT, `input-${size.name}.png`) });

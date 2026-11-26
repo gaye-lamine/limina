@@ -56,6 +56,7 @@ fileMatchPattern: "web/**"
 - Carnot and COP apparatus: 1.5px light strokes on the dark surface, and accent flow arrows with a moving dash (direction only, constant speed). Clean mono labels; italic serif only for the symbols T, Q and W. Keep the proportional arrow widths and the text alternatives.
 
 ## Always
+- No software vocabulary is ever shown to the user: no engine or service status, no model names, no error codes, no step ids, no API, server, pipeline, extraction, JSON or version numbers. Say what happened in plain words ("This paragraph could not be read.", "Limina is unavailable right now."). Physics words stay (heat engine, law, bound). Technical details belong in the logs and in the downloaded report only. Unit and e2e tests fail on these words.
 - The verdict is never encoded by color alone: the text label is always shown.
 - WCAG 2.2 AA contrast (tested from the token pairs), full keyboard use, visible focus, labelled fields, aria-live for results.
 - Display the API wording as received; never invent verdict text; never use the words fraud, lie, scam or hoax.

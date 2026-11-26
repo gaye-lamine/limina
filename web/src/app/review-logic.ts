@@ -56,7 +56,7 @@ export function ratioText(c: AnalyzedClaim): string | null {
 
 /** One plain sentence from engine data only. */
 export function plainSentence(e: Entry, direction: 'Max' | 'Min' | 'Equal'): string {
-  if (e.kind === 'failure') return UI.failedSentence(e.failure.code);
+  if (e.kind === 'failure') return UI.failedSentence();
   const c = e.claim;
   if (c.law?.source === 'draft_disputed') return UI.disputedSentence;
   const r = c.result;
@@ -264,15 +264,33 @@ export interface NoVerdict {
 
 function formulaOf(a: LawAttempt): string {
   const d = a.definition;
-  if (!d) return a.errors[a.errors.length - 1] ?? UI.noDefinition;
+  if (!d) return UI.noDefinition;
   if (d.formula) return d.formula;
   const per = (d.assumptions ?? []).flatMap((s) => (s.options ?? []).filter((o) => o.formula).map((o) => `${o.id ?? o.name}: ${o.formula}`));
   return per.length ? per.join('; ') : UI.noDefinition;
 }
 
-/** Steps of the trace, one short line each: "limit: failed, no built-in limit matches this claim". */
+/**
+ * A step of the trace in plain words, without internal ids, model names or
+ * error codes: "Looked for the matching law of physics in our library: no result".
+ */
+export function plainStep(t: { step: string; status: string }): string {
+  const authoring = /^authoring\b/.test(t.step);
+  const name = authoring ? UI.stepNames['authoring'] : (UI.stepNames[t.step] ?? t.step.replace(/_/g, ' '));
+  return `${name}: ${UI.stepStatus[t.status] ?? t.status}`;
+}
+
+/** Steps of the trace, one plain line each. */
+export function plainSteps(c: AnalyzedClaim): string[] {
+  let version = 0;
+  return c.trace.map((t) => {
+    const line = plainStep(t);
+    return /^authoring\b/.test(t.step) ? line.replace(UI.stepNames['authoring'], `${UI.stepNames['authoring']} (${UI.version(version++)})`) : line;
+  });
+}
+
 function triedSteps(c: AnalyzedClaim): string[] {
-  return c.trace.map((t) => `${t.step}: ${t.status}${t.detail ? `, ${t.detail.split(/;|\(cached/)[0].trim()}` : ''}`);
+  return plainSteps(c);
 }
 
 /** What the card says for a claim with no engine verdict; null when there is a verdict. */
@@ -280,8 +298,8 @@ export function noVerdict(e: Entry, limits: LimitInfo[]): NoVerdict | null {
   if (e.kind === 'failure') {
     return {
       kind: 'failed',
-      happened: UI.failedSentence(e.failure.code),
-      tried: [`extraction: failed, ${e.failure.code}: ${e.failure.message} (${e.attempts} answer(s))`],
+      happened: UI.failedSentence(),
+      tried: [plainStep({ step: 'extraction', status: 'failed' })],
       settle: UI.settleFailed,
       candidates: [],
       divergence: null,
@@ -294,8 +312,8 @@ export function noVerdict(e: Entry, limits: LimitInfo[]): NoVerdict | null {
   if (r && r.verdict !== 'INSUFFICIENT_DATA') return null;
   const base = { tried: triedSteps(c), candidates: [] as Candidate[], divergence: null as number | null, missing: [] as MissingInput[], sources: [] as string[] };
   if (c.law?.source === 'draft_disputed') {
-    const candidates = c.law.attempts.map((a) => ({
-      model: a.model,
+    const candidates = c.law.attempts.map((a, n) => ({
+      model: UI.version(n),
       formula: formulaOf(a),
       bound: a.bound_at_claim ?? null,
       note: a.bound_note ?? (a.ok ? '' : UI.noDefinition),
@@ -323,7 +341,7 @@ export function noVerdict(e: Entry, limits: LimitInfo[]): NoVerdict | null {
     };
   }
   const law = c.trace.find((t) => t.step === 'law');
-  const sources = [UI.sourceLibrary(limits.length), law ? `${UI.sourceModel}: ${law.detail}` : UI.sourceNoModel, UI.sourceNoWeb];
+  const sources = [UI.sourceLibrary(limits.length), law ? `${UI.sourceModel}: ${UI.sourceNone}` : UI.sourceNoModel, UI.sourceNoWeb];
   return {
     ...base,
     kind: 'nolaw',
@@ -384,7 +402,7 @@ export function reviewMarkdown(entries: Entry[], paragraphs: number, limits: Lim
     out.push(`- ${UI.reportVerdict}: ${verdictText(e)}`);
     out.push(`- ${UI.reportPlain}: ${plainSentence(e, direction)}`);
     if (e.kind === 'failure') {
-      out.push(`- ${UI.reportQuote}: "${e.text}"`, `- ${UI.reportError}: ${e.failure.code}: ${e.failure.message}`, '');
+      out.push(`- ${UI.reportQuote}: "${e.text}"`, `- ${UI.reportError}: ${UI.paragraphNotRead}`, '');
       return;
     }
     const c = e.claim;

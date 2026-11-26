@@ -18,6 +18,7 @@ import {
   ReadingSentence,
   VerdictKind,
   noVerdict,
+  plainStep,
   readingSentences,
   shortLabel,
   boundText,
@@ -176,6 +177,9 @@ export class Workbench {
     const e = this.entries()[i];
     return e ? plainSentence(e, this.direction(e)) : '';
   }
+  protected stepLine(t: { step: string; status: string }): string {
+    return plainStep(t);
+  }
   protected titleOf(e: Entry): string {
     return entryTitle(e);
   }
@@ -288,7 +292,7 @@ export class Workbench {
       void this.enrich(i);
     } catch (err) {
       const f = err as ApiFailure;
-      this.toast.show(`${f.code}: ${f.message}`, 'error');
+      this.toast.show(f.code === 'NetworkError' ? UI.toastNetwork : UI.checkFailed, 'error');
     } finally {
       this.reevaluating.set(false);
     }
@@ -401,11 +405,10 @@ export class Workbench {
     try {
       const r = await firstValueFrom(this.analysis.transcribe(file.type, base64));
       this.text.set(r.text);
-      this.settle(line, 'done', `${WB.imageRead} ${r.model}`);
-    } catch (e) {
-      const f = e as ApiFailure;
-      this.settle(line, 'failed', `${WB.imageFailed}: ${f.code} ${f.message}`);
-      this.toast.show(`${UI.toastImage}: ${f.code}`, 'error');
+      this.settle(line, 'done', WB.imageRead);
+    } catch {
+      this.settle(line, 'failed', WB.imageFailed);
+      this.toast.show(UI.toastImage, 'error');
     }
   }
 
@@ -471,7 +474,7 @@ export class Workbench {
     const parts = this.parts();
     for (const [k, p] of parts.entries()) {
       const head = `${WB.progressParagraph} ${k + 1} ${WB.progressOf} ${parts.length}`;
-      const line = this.push({ text: `${head}: ${p.text}`, status: 'running' });
+      const line = this.push({ text: head, status: 'running' });
       let attempt = 0;
       for (;;) {
         attempt += 1;
@@ -481,7 +484,7 @@ export class Workbench {
           // An answer with claims carries the server's law identification (its 'limit' step).
           if (claims.some((c) => c.trace.some((t) => t.step === 'limit'))) this.setStep(1, 'active');
           this.entries.update((e) => [...e, ...claims.map((claim) => ({ kind: 'claim' as const, claim, paragraph: k + 1 }))]);
-          this.settle(line, 'done', `${head}: ${claims.length} claim(s), model ${r.extraction.model}`);
+          this.settle(line, 'done', `${head}: ${UI.paragraphRead(claims.length)}`);
           break;
         } catch (e) {
           const f = e as ApiFailure;
@@ -491,8 +494,8 @@ export class Workbench {
           }
           if (f.code === 'NetworkError') this.status.markOffline();
           this.entries.update((x) => [...x, { kind: 'failure', paragraph: k + 1, text: p.text, failure: f, attempts: attempt }]);
-          this.settle(line, 'failed', `${head}: ${f.code}: ${f.message}`);
-          this.toast.show(UI.toastParagraph(k + 1, f.code), 'error');
+          this.settle(line, 'failed', `${head}: ${UI.paragraphNotRead}`);
+          this.toast.show(UI.toastParagraph(k + 1), 'error');
           break;
         }
       }
@@ -513,7 +516,7 @@ export class Workbench {
         } catch (e) {
           const f = e as ApiFailure;
           if (f.code === 'NetworkError') this.status.markOffline();
-          this.toast.show(`${c.quantity}: ${f.code}`, 'error');
+          this.toast.show(`${c.quantity}: ${UI.checkFailed}`, 'error');
         }
       }
       results.push(r);

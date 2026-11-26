@@ -88,7 +88,7 @@ describe('Library', () => {
 
   it('shows a bordered error block when loading failed', async () => {
     const el = await render([], { status: 0, code: 'NetworkError', message: 'unreachable' });
-    expect(el.querySelector('.error-block')?.textContent).toContain('NetworkError');
+    expect(el.querySelector('.error-block')?.textContent).toContain('could not be loaded');
   });
 });
 
