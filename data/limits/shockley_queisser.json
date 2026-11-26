@@ -1,0 +1,29 @@
+{
+  "id": "shockley_queisser",
+  "title": "Shockley-Queisser limit",
+  "direction": "max",
+  "bounded_dimension": "dimensionless",
+  "parameters": [],
+  "assumptions": [
+    { "id": "cell_type", "options": [
+      { "id": "single_junction_one_sun", "formula": "0.337" },
+      { "id": "multi_junction_or_concentrated", "formula": "0.868" }
+    ] }
+  ],
+  "formula": "0.337",
+  "validity": [],
+  "references": [
+    "Shockley, W. and Queisser, H. J., Detailed Balance Limit of Efficiency of p-n Junction Solar Cells, Journal of Applied Physics 32(3), 510-519 (1961), doi:10.1063/1.1736034",
+    "Rühle, S., Tabulated values of the Shockley-Queisser limit for single junction solar cells, Solar Energy 130, 139-147 (2016), doi:10.1016/j.solener.2016.02.015",
+    "De Vos, A., Detailed balance limit of the efficiency of tandem solar cells, Journal of Physics D: Applied Physics 13(5), 839-846 (1980), doi:10.1088/0022-3727/13/5/018"
+  ],
+  "status": "draft",
+  "epistemic_status": "model_bound",
+  "classification": "theoretical_bound",
+  "validity_domain": "Power conversion efficiency of a single-junction solar cell under unconcentrated sunlight (AM1.5G, cell at 300 K): at most 33.7 %, the detailed-balance maximum over all band gaps (reached near 1.34 eV). The limit of any particular material, silicon included, is lower or equal.",
+  "limitations": [
+    "Assumption cell_type: for a single-junction cell under unconcentrated sunlight the bound is 33.7 %; for multi-junction (tandem) cells or concentrated sunlight the bound used is 86.8 %, the detailed-balance limit of an infinite stack of junctions under maximum concentration (De Vos 1980).",
+    "The maximum over band gaps is used, so the bound never exceeds what any single-junction material allows; it is not the lower limit of a specific material",
+    "Hot-carrier, multiple-exciton and up/down-conversion schemes are outside its assumptions"
+  ]
+}

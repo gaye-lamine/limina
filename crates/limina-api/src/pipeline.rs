@@ -177,6 +177,25 @@ fn overlaps(a: &Option<EvidenceDto>, b: &Option<EvidenceDto>) -> bool {
     }
 }
 
+/// The same number read at the same place.
+fn same_reading(kept: &AnalyzedClaimDto, other: &AnalyzedClaimDto) -> bool {
+    kept.raw_value == other.raw_value && overlaps(&kept.evidence, &other.evidence)
+}
+
+/// A reading the text does not write (no evidence) whose number and unit
+/// are exactly the kept claim's value after its unit conversion: the model
+/// wrote "12 km/s" and also "12000 m/s". Both have the same law.
+fn converted_copy(kept: &AnalyzedClaimDto, other: &AnalyzedClaimDto) -> bool {
+    other.evidence.is_none()
+        && other.value.is_none()
+        && kept.evidence.is_some()
+        && built_in(kept) == built_in(other)
+        && kept.unit == other.raw_unit
+        && kept.value.is_some_and(|v| {
+            (v - other.raw_value).abs() <= 1e-9 * v.abs().max(other.raw_value.abs())
+        })
+}
+
 /// A claim with no built-in limit that reads the same number at the same
 /// place as a claim with a built-in limit is the same claim read twice by
 /// the model: it is dropped, and the kept claim says so in its trace.
@@ -192,8 +211,7 @@ fn merge_duplicates(claims: &mut Vec<AnalyzedClaimDto>) {
                 && !drop[j]
                 && built_in(&claims[j]).is_some()
                 && (own.is_none() || (j < i && built_in(&claims[j]) == own))
-                && claims[j].raw_value == claims[i].raw_value
-                && overlaps(&claims[j].evidence, &claims[i].evidence)
+                && (same_reading(&claims[j], &claims[i]) || converted_copy(&claims[j], &claims[i]))
         });
         if let Some(j) = twin {
             drop[i] = true;

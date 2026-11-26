@@ -168,6 +168,26 @@ impl Registry {
                 "tsiolkovsky.json",
                 include_str!("../../../data/limits/tsiolkovsky.json"),
             ),
+            (
+                "escape_speed_min.json",
+                include_str!("../../../data/limits/escape_speed_min.json"),
+            ),
+            (
+                "power_conservation.json",
+                include_str!("../../../data/limits/power_conservation.json"),
+            ),
+            (
+                "shockley_queisser.json",
+                include_str!("../../../data/limits/shockley_queisser.json"),
+            ),
+            (
+                "rayleigh_criterion.json",
+                include_str!("../../../data/limits/rayleigh_criterion.json"),
+            ),
+            (
+                "mass_energy.json",
+                include_str!("../../../data/limits/mass_energy.json"),
+            ),
         ];
         let mut definitions = Vec::new();
         for (name, text) in files {

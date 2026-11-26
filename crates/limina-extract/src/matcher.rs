@@ -366,7 +366,275 @@ const KEYWORDS: &[Keywords] = &[
         ],
         weak: &["time", "duration"],
     },
+    Keywords {
+        id: "escape_speed_min",
+        strong: &[
+            "launch speed",
+            "launch velocity",
+            "initial speed",
+            "initial velocity",
+            "departure speed",
+            "speed at launch",
+            // Also a keyword of escape_velocity; only an object that escapes
+            // (the context below) makes this law win with its context point.
+            "escape speed",
+            "escape velocity",
+        ],
+        weak: &["speed", "velocity"],
+    },
+    Keywords {
+        id: "power_conservation",
+        strong: &[
+            "output power",
+            "power output",
+            "delivered power",
+            "power delivered",
+            "electrical output",
+            "electric output power",
+        ],
+        weak: &[],
+    },
+    Keywords {
+        id: "shockley_queisser",
+        strong: &[
+            "solar cell efficiency",
+            "photovoltaic efficiency",
+            "shockley queisser",
+        ],
+        weak: &[
+            "efficiency",
+            "conversion efficiency",
+            "power conversion efficiency",
+            "cell efficiency",
+        ],
+    },
+    Keywords {
+        id: "rayleigh_criterion",
+        strong: &[
+            "angular resolution",
+            "angular resolving power",
+            "resolution angle",
+            "angular separation",
+            "diffraction limited resolution",
+        ],
+        weak: &["resolution", "resolving power"],
+    },
+    Keywords {
+        id: "mass_energy",
+        strong: &[
+            "energy released",
+            "released energy",
+            "energy produced",
+            "energy output",
+            "energy yield",
+        ],
+        weak: &["energy"],
+    },
 ];
+
+/// Laws that match only when their sentence contains one of these phrases
+/// (whole words). With the phrase present, their weak keywords count as strong
+/// and their score gains two points (more than a strong one-word keyword
+/// scores over a weak one), so they win over a law that only shares
+/// the quantity name.
+const CONTEXT: &[(&str, &[&str])] = &[
+    (
+        "escape_speed_min",
+        &[
+            "escapes",
+            "escaping",
+            "escaped",
+            "to escape",
+            "can escape",
+            "will escape",
+            "break free",
+            "breaks free",
+            "leave the gravity",
+            "leaves the gravity",
+        ],
+    ),
+    (
+        "shockley_queisser",
+        &[
+            "solar cell",
+            "solar cells",
+            "photovoltaic",
+            "pv cell",
+            "solar panel",
+            "solar module",
+        ],
+    ),
+    (
+        "mass_energy",
+        &[
+            "convert",
+            "converts",
+            "converted",
+            "converting",
+            "conversion of",
+            "annihilation",
+            "annihilates",
+            "annihilating",
+        ],
+    ),
+];
+
+/// Cues that state an option of an assumption: every group must have one
+/// phrase in the sentence (whole words, case and punctuation ignored).
+const OPTION_CUES: &[(&str, &[&[&str]])] = &[
+    (
+        "ballistic",
+        &[&[
+            "no further propulsion",
+            "without propulsion",
+            "no propulsion",
+            "ballistic",
+            "unpowered",
+            "coasting",
+            "no engine",
+        ]],
+    ),
+    (
+        "powered",
+        &[&[
+            "powered flight",
+            "under thrust",
+            "with propulsion",
+            "engines firing",
+        ]],
+    ),
+    (
+        "input_only",
+        &[&[
+            "only energy source",
+            "only source of energy",
+            "only power source",
+            "only source of power",
+            "sole energy source",
+            "sole source of energy",
+            "no other energy source",
+            "no other source of energy",
+        ]],
+    ),
+    (
+        "other_sources",
+        &[&[
+            "other energy sources",
+            "additional energy source",
+            "also burns fuel",
+        ]],
+    ),
+    (
+        "single_junction_one_sun",
+        &[
+            &["single junction"],
+            &[
+                "unconcentrated",
+                "non concentrated",
+                "one sun",
+                "1 sun",
+                "am1 5",
+                "am 1 5",
+            ],
+        ],
+    ),
+    (
+        "multi_junction_or_concentrated",
+        &[&[
+            "multi junction",
+            "multijunction",
+            "tandem",
+            "concentrated sunlight",
+            "concentrator",
+            "under concentration",
+        ]],
+    ),
+    (
+        "unshrouded_rotor",
+        &[&[
+            "unshrouded",
+            "open rotor",
+            "bare rotor",
+            "without a duct",
+            "ductless",
+        ]],
+    ),
+    ("shrouded_rotor_area_only", &[&["rotor area only"]]),
+    (
+        "conventional_far_field",
+        &[&[
+            "conventional",
+            "wide field",
+            "widefield",
+            "bright field",
+            "brightfield",
+        ]],
+    ),
+    (
+        "super_resolution",
+        &[&[
+            "sted",
+            "palm",
+            "storm",
+            "super resolution",
+            "structured illumination",
+            "near field",
+            "localization microscopy",
+            "localisation microscopy",
+        ]],
+    ),
+    ("rayleigh", &[&["rayleigh"]]),
+    ("sparrow", &[&["sparrow"]]),
+];
+
+/// The context phrases of a law, when it has some.
+fn context_of(id: &str) -> Option<&'static [&'static str]> {
+    CONTEXT.iter().find(|(k, _)| *k == id).map(|(_, c)| *c)
+}
+
+/// Noun phrases that do not count as context: "Earth's escape velocity is
+/// 11.2 km/s" names a property of a body, not an object that escapes.
+const NOT_CONTEXT: &[&str] = &[
+    "escape speed",
+    "escape velocity",
+    "escape speeds",
+    "escape velocities",
+];
+
+/// Whether the sentence has a context phrase of a law, outside the noun
+/// phrases of [`NOT_CONTEXT`].
+fn in_context(sentence: &str, phrases: &[&str]) -> bool {
+    let mut w = words(sentence);
+    for p in NOT_CONTEXT {
+        w = w.replace(&words(p), " ");
+    }
+    has_any(&w, phrases)
+}
+
+/// Whether a sentence (as words) contains one of these phrases.
+fn has_any(sentence_words: &str, phrases: &[&str]) -> bool {
+    phrases.iter().any(|p| sentence_words.contains(&words(p)))
+}
+
+/// The option of `options` that the sentence states, when exactly one is
+/// stated by its cues; None when none or several are.
+pub fn stated_option<'a>(sentence: &str, options: &[&'a str]) -> Option<&'a str> {
+    let w = words(sentence);
+    let stated: Vec<&'a str> = options
+        .iter()
+        .copied()
+        .filter(|o| {
+            OPTION_CUES
+                .iter()
+                .find(|(id, _)| id == o)
+                .is_some_and(|(_, groups)| groups.iter().all(|g| has_any(&w, g)))
+        })
+        .collect();
+    match stated.as_slice() {
+        [one] => Some(one),
+        _ => None,
+    }
+}
 
 /// How a built-in law was chosen.
 #[derive(Debug, Clone, PartialEq)]
@@ -467,9 +735,18 @@ pub fn match_built_in(claim: &ModelClaim, text: &str, catalog: &Catalog) -> Opti
         if !same_dimension(limit, &claim.unit) {
             continue;
         }
-        let weak_allowed = states_a_parameter(limit, sentence.as_deref());
+        let in_context = match context_of(k.id) {
+            Some(phrases) => {
+                if !sentence.as_deref().is_some_and(|s| in_context(s, phrases)) {
+                    continue;
+                }
+                true
+            }
+            None => false,
+        };
+        let weak_allowed = in_context || states_a_parameter(limit, sentence.as_deref());
         if let Some((score, phrase)) = best_keyword(k, &quantity, weak_allowed) {
-            scored.push((score, k.id, phrase));
+            scored.push((score + 2 * usize::from(in_context), k.id, phrase));
         }
     }
     let hint = claim

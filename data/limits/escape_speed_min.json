@@ -1,0 +1,33 @@
+{
+  "id": "escape_speed_min",
+  "title": "Minimum speed to escape a body's gravity",
+  "direction": "min",
+  "bounded_dimension": "m/s",
+  "parameters": [
+    { "name": "GM", "dimension": "m^3/s^2", "units": ["m^3/s^2"], "test_range": [1e10, 1e21] },
+    { "name": "r", "dimension": "m", "units": ["m", "km"], "test_range": [1e5, 1e9] }
+  ],
+  "assumptions": [
+    { "id": "propulsion", "options": [
+      { "id": "ballistic", "formula": "sqrt(2*GM/r)" },
+      { "id": "powered", "formula": "0*sqrt(2*GM/r)" }
+    ] }
+  ],
+  "formula": "sqrt(2*GM/r)",
+  "validity": [],
+  "references": [
+    "Kleppner, D. and Kolenkow, R. J., An Introduction to Mechanics, 2nd ed., Cambridge University Press (2014)",
+    "IAU 2015 Resolution B3 on recommended nominal conversion constants for selected solar and planetary properties, arXiv:1510.07674"
+  ],
+  "status": "draft",
+  "epistemic_status": "theorem",
+  "classification": "theoretical_bound",
+  "validity_domain": "A body launched at distance r from the centre of a spherically symmetric mass with gravitational parameter GM escapes to infinity only if its launch speed is at least sqrt(2 GM / r), when no further propulsion acts on it (Newtonian gravity, energy conservation).",
+  "limitations": [
+    "Assumption propulsion: under ballistic (no further propulsion) the launch speed must be at least sqrt(2 GM / r); under powered flight this law gives no bound (the bound used is 0).",
+    "Speed in the inertial frame of the body's centre: a launch along the rotation of the body gains its surface speed (about 0.46 km/s at Earth's equator)",
+    "Atmospheric drag and the pull of other bodies are ignored; drag only raises the speed needed",
+    "Newtonian: not valid near a black hole"
+  ],
+  "variables": { "GM": "Gravitational parameter of the body (G times its mass)", "r": "Distance from the body's centre at launch" }
+}

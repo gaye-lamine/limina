@@ -1,0 +1,33 @@
+{
+  "id": "rayleigh_criterion",
+  "title": "Diffraction limit of a circular aperture",
+  "direction": "min",
+  "bounded_dimension": "rad",
+  "parameters": [
+    { "name": "wavelength", "dimension": "m", "units": ["m", "um", "nm"], "test_range": [1e-7, 1e-3] },
+    { "name": "D", "dimension": "m", "units": ["m", "cm", "mm"], "test_range": [1e-3, 1e2] }
+  ],
+  "assumptions": [
+    { "id": "resolution_criterion", "options": [
+      { "id": "rayleigh", "formula": "1.22*wavelength/D" },
+      { "id": "sparrow", "formula": "0.947*wavelength/D" }
+    ] }
+  ],
+  "formula": "1.22*wavelength/D",
+  "validity": [],
+  "references": [
+    "Rayleigh, Lord, Investigations in optics, with special reference to the spectroscope, Philosophical Magazine 8(49), 261-274 (1879), doi:10.1080/14786447908639684",
+    "Sparrow, C. M., On Spectroscopic Resolving Power, Astrophysical Journal 44, 76-86 (1916), doi:10.1086/142271",
+    "Born, M. and Wolf, E., Principles of Optics, 7th ed., Cambridge University Press (1999)"
+  ],
+  "status": "draft",
+  "epistemic_status": "model_bound",
+  "classification": "theoretical_bound",
+  "validity_domain": "Smallest angular separation a diffraction-limited telescope or camera with a single circular aperture of diameter D resolves at wavelength lambda: 1.22 lambda / D by the Rayleigh criterion, 0.947 lambda / D by the stricter Sparrow criterion.",
+  "limitations": [
+    "Assumption resolution_criterion: unstated, the engine takes both; a claim below the Sparrow limit is inconsistent under both criteria, a claim between the two is possible only with the Sparrow criterion.",
+    "Single filled circular aperture: interferometric arrays (baseline instead of diameter), speckle and lucky imaging, and super-resolution post-processing are outside its assumptions",
+    "Diffraction only: atmospheric seeing and optical aberrations make real resolution worse, never better"
+  ],
+  "variables": { "wavelength": "Wavelength of the light", "D": "Diameter of the circular aperture" }
+}

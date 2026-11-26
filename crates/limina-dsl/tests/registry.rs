@@ -29,11 +29,16 @@ fn the_registry_loads_betz_carnot_and_cop_as_drafts() {
             "carnot",
             "cop",
             "eddington_luminosity",
+            "escape_speed_min",
             "heisenberg",
             "landauer",
             "lorentz_force",
             "luminous_efficacy",
+            "mass_energy",
+            "power_conservation",
+            "rayleigh_criterion",
             "shannon_hartley",
+            "shockley_queisser",
             "speed_limit",
             "stefan_boltzmann",
             "tsiolkovsky",
@@ -45,7 +50,7 @@ fn the_registry_loads_betz_carnot_and_cop_as_drafts() {
         assert!(l.definition().has_real_reference(), "{}", l.id());
         assert!(l.definition().classification.is_some(), "{}", l.id());
     }
-    assert_eq!(r.as_limits().len(), 13);
+    assert_eq!(r.as_limits().len(), 18);
 }
 
 #[test]

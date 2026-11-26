@@ -1,0 +1,24 @@
+{
+  "id": "mass_energy",
+  "title": "Mass-energy equivalence",
+  "direction": "max",
+  "bounded_dimension": "J",
+  "parameters": [
+    { "name": "dm", "dimension": "kg", "units": ["kg", "g", "mg"], "test_range": [1e-12, 1e3] }
+  ],
+  "formula": "dm*c^2",
+  "validity": [],
+  "references": [
+    "Einstein, A., Ist die Trägheit eines Körpers von seinem Energieinhalt abhängig?, Annalen der Physik 323(13), 639-641 (1905), doi:10.1002/andp.19053231314",
+    "CODATA 2022 recommended value of the speed of light in vacuum, https://physics.nist.gov/cgi-bin/cuu/Value?c"
+  ],
+  "status": "draft",
+  "epistemic_status": "theorem",
+  "classification": "fundamental_law",
+  "validity_domain": "The energy released by converting a mass dm into energy is at most dm c^2; complete conversion (matter-antimatter annihilation) reaches it, nuclear reactions convert only a fraction of their mass.",
+  "limitations": [
+    "dm is the mass converted (the mass defect), not the mass of the fuel when only part of it is converted",
+    "An upper bound: reactors release a small fraction of it"
+  ],
+  "variables": { "dm": "Mass converted into energy" }
+}

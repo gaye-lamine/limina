@@ -1,0 +1,31 @@
+{
+  "id": "power_conservation",
+  "title": "Conservation of energy (power balance)",
+  "direction": "max",
+  "bounded_dimension": "W",
+  "parameters": [
+    { "name": "P_in", "dimension": "W", "units": ["W", "mW", "kW", "MW", "GW"], "test_range": [1e-3, 1e9] }
+  ],
+  "assumptions": [
+    { "id": "energy_sources", "options": [
+      { "id": "input_only", "formula": "P_in" },
+      { "id": "other_sources", "formula": "1e30*P_in" }
+    ] }
+  ],
+  "formula": "P_in",
+  "validity": [],
+  "references": [
+    "Callen, H. B., Thermodynamics and an Introduction to Thermostatistics, 2nd ed., Wiley (1985)",
+    "Feynman, R. P., Leighton, R. B. and Sands, M., The Feynman Lectures on Physics, Vol. I, chapter 4, Addison-Wesley (1963)"
+  ],
+  "status": "draft",
+  "epistemic_status": "theorem",
+  "classification": "fundamental_law",
+  "validity_domain": "A device in steady state whose only source of energy is the stated input power cannot deliver more output power than it takes in (first law of thermodynamics).",
+  "limitations": [
+    "Assumption energy_sources: when the input is the only energy source, output power is at most the input power; when other sources exist (fuel, stored energy, ambient heat for a heat pump) this law gives no bound; the engine needs a finite number, so 1e30 times the input power stands for no bound.",
+    "Steady state: a device may release stored energy for a short time",
+    "Output and input are compared in the same unit of power"
+  ],
+  "variables": { "P_in": "Input power, the device's only energy source" }
+}

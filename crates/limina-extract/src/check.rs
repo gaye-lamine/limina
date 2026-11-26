@@ -112,8 +112,10 @@ pub fn check(output: &ModelOutput, text: &str, catalog: &Catalog) -> Vec<Checked
         .claims
         .iter()
         .map(|c| {
-            let (resolved, note) = resolve_built_in(c, text, catalog);
+            let (written, unit_notes) = units_as_written(c, text);
+            let (resolved, note) = resolve_built_in(&written, text, catalog);
             let mut checked = check_claim(&resolved, text, catalog);
+            checked.notes.extend(unit_notes);
             checked.notes.extend(note);
             checked
         })
@@ -121,6 +123,8 @@ pub fn check(output: &ModelOutput, text: &str, catalog: &Catalog) -> Vec<Checked
     let mut claims = attach_parameter_claims(claims, catalog);
     for c in &mut claims {
         fill_parameters_from_sentence(c, text, catalog);
+        fill_body_constants(c, text, catalog);
+        fill_options_from_sentence(c, text, catalog);
     }
     merge_quotient_claims(claims, text)
 }
@@ -275,6 +279,15 @@ const PARAMETER_CUES: &[(&str, &[&str])] = &[
     ("aperture", &["aperture", "na"]),
     ("dp", &["momentum"]),
     ("T", &["temperature"]),
+    (
+        "P_in",
+        &["input", "consumes", "consumed", "draws", "supplied", "fed"],
+    ),
+    ("D", &["diameter", "aperture", "mirror", "lens"]),
+    (
+        "dm",
+        &["converting", "convert", "converts", "converted", "mass"],
+    ),
 ];
 
 /// Whether the words between the previous number of the sentence and the
@@ -327,6 +340,158 @@ fn sentence_bounds(text: &str, span: &Span) -> (usize, usize) {
     (0, chars.len())
 }
 
+/// Note prefix of a value whose unit was read from the text.
+pub const UNIT_FROM_TEXT: &str = "unit read from the text:";
+
+/// The unit written right after `value` in the sentence of `evidence`,
+/// when exactly one written unit follows that number there.
+fn written_unit(text: &str, evidence: &str, value: f64) -> Option<String> {
+    let span = locate(text, evidence)?;
+    let sentence = sentence_around(text, &span);
+    let units: Vec<String> = numbers_with_units(&sentence)
+        .into_iter()
+        .filter(|(v, _, _)| same(*v, value))
+        .map(|(_, u, _)| u)
+        .collect();
+    match units.as_slice() {
+        [u] => Some(u.clone()),
+        [u, rest @ ..] if rest.iter().all(|x| same_unit(x, u)) => Some(u.clone()),
+        _ => None,
+    }
+}
+
+/// The claim with each unit as the text writes it next to its number. A
+/// model may drop a prefix ("10 Mbit/s" read as bit/s) or name another
+/// unit ("1e-5 rad" read as m); the text wins, with a note. Nothing is
+/// converted here and a number without a written unit keeps the model's.
+fn units_as_written(claim: &ModelClaim, text: &str) -> (ModelClaim, Vec<String>) {
+    let mut out = claim.clone();
+    let mut notes = Vec::new();
+    if let Some(u) = written_unit(text, &claim.evidence, claim.value) {
+        if !same_unit(&u, &claim.unit) {
+            notes.push(format!(
+                "{UNIT_FROM_TEXT} {} {u} (the reading said {})",
+                short_number(claim.value),
+                claim.unit
+            ));
+            out.unit = u;
+        }
+    }
+    for (name, p) in out.parameters.iter_mut() {
+        if let Some(u) = written_unit(text, &p.evidence, p.value) {
+            if !same_unit(&u, &p.unit) {
+                notes.push(format!(
+                    "{UNIT_FROM_TEXT} {name} = {} {u} (the reading said {})",
+                    short_number(p.value),
+                    p.unit
+                ));
+                p.unit = u;
+            }
+        }
+    }
+    (out, notes)
+}
+
+/// Note prefix of an assumption read from the claim's own sentence.
+pub const OPTION_FROM_TEXT: &str = "assumption stated in the text:";
+
+/// An assumption of the claim's law that the model left out, when its
+/// sentence states exactly one of its options by that option's cues
+/// ([`crate::matcher::stated_option`]). Two options stated, or none: left out.
+fn fill_options_from_sentence(claim: &mut CheckedClaim, text: &str, catalog: &Catalog) {
+    let (Some(id), Some(span)) = (claim.limit_id.clone(), claim.evidence.clone()) else {
+        return;
+    };
+    let Some(limit) = catalog.limit(&id) else {
+        return;
+    };
+    let sentence = sentence_around(text, &span);
+    for a in &limit.assumptions {
+        if claim.constraints.contains_key(&a.id) || a.options.len() < 2 {
+            continue;
+        }
+        let ids: Vec<&str> = a.options.iter().map(|o| o.id.as_str()).collect();
+        if let Some(option) = crate::matcher::stated_option(&sentence, &ids) {
+            claim.constraints.insert(a.id.clone(), option.to_string());
+            let label = a
+                .options
+                .iter()
+                .find(|o| o.id == option)
+                .map_or(option, |o| o.label.as_str());
+            claim.notes.push(format!("{OPTION_FROM_TEXT} {label}"));
+        }
+    }
+}
+
+/// A body named in a sentence, with its nominal gravitational parameter
+/// GM (m^3/s^2) and its nominal equatorial radius (m), from IAU 2015
+/// Resolution B3. Only bodies with IAU nominal values are listed.
+const BODIES: &[(&str, &[&str], f64, f64)] = &[
+    ("Earth", &["earth", "earth s"], 3.986_004e14, 6.378_1e6),
+    (
+        "the Sun",
+        &["sun", "sun s", "solar surface"],
+        1.327_124_4e20,
+        6.957e8,
+    ),
+];
+
+/// Note prefix of parameters taken from a named body's nominal values.
+pub const BODY_CONSTANTS: &str = "values of a named body (IAU 2015 nominal):";
+
+/// GM and r of a law left out by the text, when its sentence names exactly
+/// one body of [`BODIES`] and says the claim starts from its surface: the
+/// body's nominal GM and equatorial radius. Nothing else is filled.
+fn fill_body_constants(claim: &mut CheckedClaim, text: &str, catalog: &Catalog) {
+    let (Some(id), Some(span)) = (claim.limit_id.clone(), claim.evidence.clone()) else {
+        return;
+    };
+    let Some(limit) = catalog.limit(&id) else {
+        return;
+    };
+    let wants = |n: &str| limit.parameters.iter().any(|p| p.name == n);
+    let missing = |n: &str| claim.parameters.get(n).is_none_or(|p| p.value.is_none());
+    if !(wants("GM") && wants("r") && missing("GM") && missing("r")) {
+        return;
+    }
+    let sentence = sentence_around(text, &span).to_lowercase();
+    let w = format!(
+        " {} ",
+        sentence
+            .split(|c: char| !c.is_alphanumeric())
+            .filter(|x| !x.is_empty())
+            .collect::<Vec<_>>()
+            .join(" ")
+    );
+    if !w.contains(" surface ") {
+        return;
+    }
+    let named: Vec<&(&str, &[&str], f64, f64)> = BODIES
+        .iter()
+        .filter(|(_, names, _, _)| names.iter().any(|n| w.contains(&format!(" {n} "))))
+        .collect();
+    let [(name, _, gm, radius)] = named.as_slice() else {
+        return;
+    };
+    for (param, value, unit) in [("GM", *gm, "m^3/s^2"), ("r", *radius, "m")] {
+        claim.parameters.insert(
+            param.to_string(),
+            CheckedParameter {
+                value: Some(value),
+                raw_value: value,
+                unit: unit.to_string(),
+                evidence: None,
+                flags: Vec::new(),
+            },
+        );
+    }
+    claim.notes.push(format!(
+        "{BODY_CONSTANTS} {name}, GM = {} m^3/s^2, r = {} m (equatorial radius at the surface)",
+        short_number(*gm),
+        short_number(*radius)
+    ));
+}
+
 /// Note added to a claim whose parameter was read from its own sentence.
 pub const READ_FROM_SENTENCE: &str = "read from the same sentence by its unit";
 
@@ -345,7 +510,7 @@ fn fill_parameters_from_sentence(claim: &mut CheckedClaim, text: &str, catalog: 
     let sentence: String = text.chars().skip(s_start).take(s_end - s_start).collect();
     let found = numbers_with_units_at(&sentence);
     // Numbers already used: the claim's own and the traced parameters'.
-    let used: Vec<f64> = claim
+    let mut used: Vec<f64> = claim
         .parameters
         .values()
         .filter_map(|p| p.value)
@@ -387,6 +552,7 @@ fn fill_parameters_from_sentence(claim: &mut CheckedClaim, text: &str, catalog: 
             start: s_start + at + inner.start,
             end: s_start + at + inner.end,
         };
+        used.push(*value);
         claim.parameters.insert(
             p.name.clone(),
             CheckedParameter {
@@ -520,15 +686,30 @@ pub fn short_number(v: f64) -> String {
 
 /// Whether two unit symbols are the same unit: written alike, or parsed by
 /// the core to the same dimension and the same factor (`kg·m/s` and
-/// `kg*m/s`). No conversion is ever made.
+/// `kg*m/s`). No conversion is ever made. The core counts bit, rad and sr
+/// as dimensionless, so a unit naming one of them is never the same as a
+/// unit that does not (Mbit/s is not MHz, rad is not a plain number).
 pub fn same_unit(a: &str, b: &str) -> bool {
     if a == b {
         return true;
+    }
+    if named_dimensionless(a) != named_dimensionless(b) {
+        return false;
     }
     match (limina_core::parse_unit(a), limina_core::parse_unit(b)) {
         (Ok(x), Ok(y)) => x == y,
         _ => false,
     }
+}
+
+/// The dimensionless units a symbol names (bit, rad, sr), with any prefix.
+fn named_dimensionless(unit: &str) -> [bool; 3] {
+    let words: Vec<&str> = unit
+        .split(|c: char| !c.is_ascii_alphabetic())
+        .filter(|w| !w.is_empty())
+        .collect();
+    let names = |n: &str| words.iter().any(|w| w.ends_with(n));
+    [names("bit"), names("rad"), names("sr")]
 }
 
 /// Note added to a claim that received a parameter read as a separate claim.
@@ -1203,14 +1384,24 @@ mod tests {
             "{:?}",
             c.notes
         );
+        // A wrong unit from the model: the unit written in the text wins, with a note.
         for wrong in ["s", "°C", "furlong"] {
             let j = json.replace(r#""unit":"nm""#, &format!(r#""unit":"{wrong}""#));
             let c = &check(&parse_model_output(&j).expect("json"), text, &catalog)[0];
             assert!(
-                c.value.is_none() && c.flags.iter().any(|f| f == UNIT_NOT_UNDERSTOOD),
-                "{wrong}"
+                c.value.is_some_and(|v| (v - 1e-7).abs() < 1e-20)
+                    && c.notes.iter().any(|n| n.starts_with(UNIT_FROM_TEXT)),
+                "{wrong}: {c:?}"
             );
         }
+        // Without a unit written in the text, a wrong unit is not understood.
+        let bare = "The Lumen microscope resolves details of 100 with light.";
+        let j = r#"{"claims":[{"limit_id":"abbe_limit","quantity":"resolved size","value":100,"unit":"furlong","evidence":"details of 100","constraints":{},"parameters":{}}],"missing":[]}"#;
+        let c = &check(&parse_model_output(j).expect("json"), bare, &catalog)[0];
+        assert!(
+            c.value.is_none() && c.flags.iter().any(|f| f == UNIT_NOT_UNDERSTOOD),
+            "{c:?}"
+        );
     }
 
     const QSCOPE: &str = "The Q-Scope locates an electron within 1e-12 m while its momentum is known to within 1e-24 kg*m/s.";
@@ -1560,5 +1751,111 @@ mod tests {
         assert_eq!(fraction_text(1.0), "1.00");
         assert_eq!(plain(60.0), "60");
         assert_eq!(plain(14.5), "14.5");
+    }
+
+    fn shannon_catalog() -> Catalog {
+        Catalog {
+            limits: vec![CatalogLimit {
+                id: "shannon_hartley".into(),
+                title: "Shannon-Hartley limit".into(),
+                formula: "B*ln(1 + snr)/ln2".into(),
+                claim_unit: "bit/s".into(),
+                parameters: vec![
+                    crate::catalog::CatalogParameter {
+                        name: "B".into(),
+                        units: vec!["Hz".into(), "kHz".into(), "MHz".into(), "GHz".into()],
+                    },
+                    crate::catalog::CatalogParameter {
+                        name: "snr".into(),
+                        units: vec!["dimensionless".into()],
+                    },
+                ],
+                assumptions: vec![],
+            }],
+        }
+    }
+
+    /// Seen live: the model converted "1 MHz" to 1e6 Hz, a value the text
+    /// does not write. The number written in an allowed unit is read again.
+    #[test]
+    fn a_parameter_the_model_converted_is_read_again_as_written() {
+        let text = "The Echo modem transmits 3 Mbit/s over a 1 MHz noisy channel with a linear\nsignal-to-noise ratio of 15.";
+        let json = r#"{"claims":[{"limit_id":"shannon_hartley","quantity":"data rate","value":3,"unit":"bit/s","evidence":"3 Mbit/s","constraints":{},
+            "parameters":{"B":{"value":1e6,"unit":"Hz","evidence":"1 MHz"},"snr":{"value":15,"unit":"dimensionless","evidence":"signal-to-noise ratio of 15"}}}],"missing":[]}"#;
+        let out = check(
+            &parse_model_output(json).expect("json"),
+            text,
+            &shannon_catalog(),
+        );
+        let b = &out[0].parameters["B"];
+        assert_eq!((b.value, b.unit.as_str()), (Some(1.0), "MHz"), "{out:?}");
+        assert_eq!(out[0].unit, "bit/s");
+        assert_eq!(out[0].value, Some(3e6));
+    }
+
+    #[test]
+    fn a_named_dimensionless_unit_is_never_the_same_as_one_without_it() {
+        assert!(!same_unit("MHz", "Mbit/s"));
+        assert!(!same_unit("rad", "dimensionless"));
+        assert!(!same_unit("sr", "rad"));
+        assert!(same_unit("Mbit/s", "Mbit/s"));
+        assert!(same_unit("kg·m/s", "kg*m/s"));
+        assert!(same_unit("kHz", "kHz"));
+    }
+
+    fn mass_energy_catalog() -> Catalog {
+        Catalog {
+            limits: vec![
+                CatalogLimit {
+                    id: "mass_energy".into(),
+                    title: "Mass-energy equivalence".into(),
+                    formula: "dm*c^2".into(),
+                    claim_unit: "J".into(),
+                    parameters: vec![crate::catalog::CatalogParameter {
+                        name: "dm".into(),
+                        units: vec!["kg".into(), "g".into()],
+                    }],
+                    assumptions: vec![],
+                },
+                CatalogLimit {
+                    id: "two_masses".into(),
+                    title: "Two masses".into(),
+                    formula: "(m_initial - m_final)*c^2".into(),
+                    claim_unit: "J".into(),
+                    parameters: vec![
+                        crate::catalog::CatalogParameter {
+                            name: "m_initial".into(),
+                            units: vec!["kg".into()],
+                        },
+                        crate::catalog::CatalogParameter {
+                            name: "m_final".into(),
+                            units: vec!["kg".into()],
+                        },
+                    ],
+                    assumptions: vec![],
+                },
+            ],
+        }
+    }
+
+    /// Seen live: one "1 kg" filled both masses of a law that needs two.
+    #[test]
+    fn one_written_number_never_fills_two_parameters() {
+        let text = "The Nova reactor releases 2e17 J of energy by converting 1 kg of mass.";
+        let json = r#"{"claims":[{"limit_id":"two_masses","quantity":"energy released","value":2e17,"unit":"J","evidence":"2e17 J","constraints":{},"parameters":{}}],"missing":[]}"#;
+        let c = &check(
+            &parse_model_output(json).expect("json"),
+            text,
+            &mass_energy_catalog(),
+        )[0];
+        let filled = c.parameters.values().filter(|p| p.value.is_some()).count();
+        assert!(filled <= 1, "{c:?}");
+        let json = json.replace("two_masses", "mass_energy");
+        let c = &check(
+            &parse_model_output(&json).expect("json"),
+            text,
+            &mass_energy_catalog(),
+        )[0];
+        assert_eq!(c.parameters["dm"].value, Some(1.0), "{c:?}");
     }
 }

@@ -193,7 +193,7 @@ async fn missing_field_is_400() {
 #[tokio::test]
 async fn unknown_limit_is_422() {
     let mut request = betz(0.3, unshrouded());
-    request["limit_id"] = json!("shockley_queisser");
+    request["limit_id"] = json!("no_such_law");
     let (status, body) = post(request).await;
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
     assert_eq!(body["error"]["code"], "UnknownLimit");
