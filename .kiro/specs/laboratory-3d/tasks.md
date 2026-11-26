@@ -31,3 +31,5 @@
 - [x] 5.3 `apparatus-view.ts`: energy, field, optics and quantum benches, driven by the same controls, Find Breaking Point, Dual Probe and Inspect in 3D Lab.
 - [x] 5.4 Switching releases the other view; e2e checks the GPU geometry count over four round trips and the WebGL context on /laboratory, /, /laboratory.
 - [x] 5.5 Test runner: `vitest-base.config.ts` (two workers, 15 s timeouts) via `runnerConfig`; `claimOf` and `contrast` moved out of spec files into `testing-fixtures.ts` and `testing-contrast.ts` (importing a spec from another spec made Vitest report "No test suite found" and run its tests twice).
+- [x] 5.6 Quantum bench: decaying population (343 nuclei, lit share = claimed remaining over the initial count, rings for the claimed and expected fractions); confinement plates outlined.
+- [x] 5.7 Field bench: a claimed length gets a measured-radius ring around the reference-radius sphere, its label outside both radii; speeds keep the path labelled Escapes or Captured.

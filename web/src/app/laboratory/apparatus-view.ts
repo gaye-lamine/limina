@@ -319,7 +319,8 @@ export class ApparatusView {
         new LineBasicMaterial({ color, transparent: true, opacity: 0.9 }),
       ),
     );
-    this.label(LAB.apparatus.measuredRadius, centre.clone().add(new Vector3(measured + 0.4, 0.7, 0)), color);
+    // Outside both the ring and the sphere, and a little above: a sprite is centred, so half its width is added.
+    this.label(LAB.apparatus.measuredRadius, centre.clone().add(new Vector3(Math.max(measured, reference) + 2.6, 1.1, 0)), color);
     this.label(LAB.apparatus.referenceRadius, centre.clone().add(new Vector3(0, reference + 0.7, 0)));
     if (d.pinned) {
       const ghost = new Mesh(new TorusGeometry(orbitRadii((d.pinned.ratio ?? 1) * (d.result?.bound ?? 1), d.result?.bound ?? 1).measured, 0.03, 8, 96), new MeshBasicMaterial({ color: this.theme.textSecondary, wireframe: true }));
