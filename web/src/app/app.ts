@@ -2,6 +2,9 @@ import { A11yModule } from '@angular/cdk/a11y';
 import { Overlay, OverlayRef } from '@angular/cdk/overlay';
 import { ComponentPortal } from '@angular/cdk/portal';
 import { Component, ElementRef, HostListener, inject, signal, viewChild } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
+import { filter, map } from 'rxjs';
 import { LucideAngularModule, X } from 'lucide-angular';
 import { ApiFailure, LimitInfo } from './api.models';
 import { ApiService } from './api.service';
@@ -20,7 +23,7 @@ import { Workbench } from './workbench';
  */
 @Component({
   selector: 'app-root',
-  imports: [LimitsList, Workbench, LucideAngularModule, A11yModule],
+  imports: [LimitsList, Workbench, LucideAngularModule, A11yModule, RouterOutlet],
   templateUrl: './app.html',
 })
 export class App {
@@ -38,6 +41,22 @@ export class App {
   private readonly api = inject(ApiService);
   private readonly overlay = inject(Overlay);
   private paletteRef: OverlayRef | null = null;
+  private readonly router = inject(Router);
+  /** Whether the 3D laboratory is shown; the analysis stays mounted (and kept) behind it. */
+  protected readonly inLab = toSignal(
+    this.router.events.pipe(
+      filter((e): e is NavigationEnd => e instanceof NavigationEnd),
+      map((e) => e.urlAfterRedirects.startsWith('/laboratory')),
+    ),
+    { initialValue: this.router.url.startsWith('/laboratory') },
+  );
+
+  /** The Laboratory link: an ordinary link, routed without a page reload. */
+  protected openLab(event: MouseEvent): void {
+    if (event.ctrlKey || event.metaKey || event.shiftKey || event.button !== 0) return;
+    event.preventDefault();
+    void this.router.navigateByUrl('/laboratory');
+  }
 
   constructor() {
     this.api.getLimits().subscribe({

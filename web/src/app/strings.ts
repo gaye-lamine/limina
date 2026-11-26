@@ -380,6 +380,7 @@ export const UI = {
     'You can still try the examples below: they are checked in full.',
   library: 'Library',
   howItWorks: 'How it works',
+  laboratory: 'Laboratory',
   commandHint: 'Ctrl K',
   commandOpen: 'Open the command palette',
   palette: 'Command palette',
@@ -549,4 +550,22 @@ export const EXPLAIN = {
   solvePrefix: 'It would be consistent only if',
   disputed: 'Two versions of this law disagree, so no verdict is given from it.',
   aiDraft: 'This law was written by AI, twice independently, with the same result; nobody has reviewed it yet.',
+} as const;
+
+/** Strings of the 3D laboratory (`web/src/app/laboratory/`). */
+export const LAB = {
+  title: 'Laboratory',
+  subtitle: 'Explore the bound of any law in three dimensions. Every shape is computed from the law itself.',
+  regionLabel: 'Three-dimensional view of the laboratory',
+  sceneAlt: 'An empty observatory floor with a metric grid, ready to show the bound of a law.',
+  statusLabel: 'Laboratory status',
+  laws: (n: number) => `${n} law${n === 1 ? '' : 's'} in the library`,
+  drafts: (n: number) => `${n} written by AI, not validated`,
+  loading: 'Loading the library…',
+  unavailable: 'The library could not be loaded right now.',
+  noView: 'The three-dimensional view is not available in this browser. The laws can still be checked from the analysis screen.',
+  help: 'Drag to orbit, scroll to zoom. On the view: arrow keys rotate, + and − zoom, 0 resets.',
+  resetView: 'Reset view',
+  back: 'Back to the analysis',
+  nextStep: 'Choosing a law to explore comes next.',
 } as const;

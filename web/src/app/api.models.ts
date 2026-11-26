@@ -36,6 +36,8 @@ export interface LimitInfo {
   option_labels: Record<string, string>;
   /** Display label of each parameter id. */
   parameter_labels: Record<string, string>;
+  /** "draft" for a law written by AI and not validated; absent for a built-in law. */
+  status?: string;
   /** Kind of law, for example 	heorem or 	heoretical_bound; absent when unknown. */
   classification?: string;
   /** References of the law. */

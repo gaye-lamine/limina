@@ -1,0 +1,37 @@
+<section class="lab" [attr.aria-label]="t.title">
+  <div
+    class="lab-stage"
+    #stage
+    role="img"
+    tabindex="0"
+    [attr.aria-label]="t.regionLabel + '. ' + t.sceneAlt"
+    (keydown)="onKey($event)"
+  >
+    @if (noView()) {
+      <p class="lab-noview">{{ t.noView }}</p>
+    }
+  </div>
+
+  <aside class="lab-hud surface" [attr.aria-label]="t.statusLabel" aria-live="polite">
+    <h1 class="lab-title">{{ t.title }}</h1>
+    <p class="lab-subtitle">{{ t.subtitle }}</p>
+    <ul class="lab-status">
+      @if (limits(); as all) {
+        <li class="num">{{ t.laws(builtIn()) }}</li>
+        @if (drafts() > 0) {
+          <li class="num">{{ t.drafts(drafts()) }}</li>
+        }
+      } @else if (failed()) {
+        <li>{{ t.unavailable }}</li>
+      } @else {
+        <li>{{ t.loading }}</li>
+      }
+    </ul>
+    <p class="lab-help">{{ t.help }}</p>
+    <p class="lab-help">{{ t.nextStep }}</p>
+    <div class="lab-actions">
+      <button type="button" class="btn btn-secondary lab-reset" (click)="resetView()" [disabled]="!viewReady()">{{ t.resetView }}</button>
+      <button type="button" class="btn btn-ghost lab-back" (click)="back()">{{ t.back }}</button>
+    </div>
+  </aside>
+</section>

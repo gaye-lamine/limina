@@ -8,13 +8,17 @@
     <button type="button" class="nav-link topbar-how" (click)="openDrawer('how')" [attr.aria-expanded]="drawerOpen() && drawerView() === 'how'" aria-controls="drawer">
       {{ u.howItWorks }}
     </button>
+    <a href="/laboratory" class="nav-link topbar-lab" (click)="openLab($event)" [attr.aria-current]="inLab() ? 'page' : null">{{ u.laboratory }}</a>
     <button type="button" class="kbd-hint" (click)="openPalette()" [attr.aria-label]="u.commandOpen">
       <kbd class="kbd">Ctrl</kbd><kbd class="kbd">K</kbd>
     </button>
   </nav>
 </header>
 <main id="main" class="main">
-  <app-workbench />
+  <app-workbench [hidden]="inLab()" />
+  @if (inLab()) {
+    <router-outlet />
+  }
 </main>
 <aside
   id="drawer"
