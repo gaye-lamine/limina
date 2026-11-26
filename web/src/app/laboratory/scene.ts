@@ -37,7 +37,10 @@ const ZOOM_STEP = 1.1;
 export function webglAvailable(): boolean {
   try {
     const canvas = document.createElement('canvas');
-    return !!(canvas.getContext('webgl2') ?? canvas.getContext('webgl'));
+    const gl = canvas.getContext('webgl2') ?? canvas.getContext('webgl');
+    // The probe context is released at once: only the observatory keeps one.
+    gl?.getExtension('WEBGL_lose_context')?.loseContext();
+    return !!gl;
   } catch {
     return false;
   }
@@ -52,6 +55,8 @@ export class Observatory {
   private readonly controls: OrbitControls;
   private readonly resize: ResizeObserver;
   private frame = 0;
+  /** Called on every frame with the time in seconds (animations of the law's objects). */
+  onFrame: ((seconds: number) => void) | null = null;
   private disposed = false;
 
   constructor(
@@ -131,6 +136,7 @@ export class Observatory {
     if (this.disposed) return;
     this.frame = requestAnimationFrame(this.loop);
     this.controls.update();
+    this.onFrame?.(performance.now() / 1000);
     this.renderer.render(this.scene, this.camera);
   };
 

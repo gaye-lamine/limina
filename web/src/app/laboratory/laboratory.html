@@ -1,37 +1,185 @@
 <section class="lab" [attr.aria-label]="t.title">
-  <div
-    class="lab-stage"
-    #stage
-    role="img"
-    tabindex="0"
-    [attr.aria-label]="t.regionLabel + '. ' + t.sceneAlt"
-    (keydown)="onKey($event)"
-  >
-    @if (noView()) {
-      <p class="lab-noview">{{ t.noView }}</p>
-    }
+  <div class="lab-view">
+    <div
+      class="lab-stage"
+      #stage
+      role="img"
+      tabindex="0"
+      [attr.aria-label]="sceneText()"
+      [attr.data-topology]="topology()"
+      [attr.data-hatched]="drawn().hatchedCells"
+      [attr.data-zones]="drawn().zones"
+      (keydown)="onKey($event)"
+    >
+      @if (noView()) {
+        <p class="lab-noview">{{ t.noView }}</p>
+      }
+    </div>
+    <div class="lab-readout surface" [attr.aria-label]="t.statusLabel" aria-live="polite" aria-atomic="true">
+      @if (result(); as r) {
+        <span class="pill pill--{{ r.kind === 'outside' ? 'needs' : r.kind }} lab-verdict">{{ r.label }}</span>
+        <dl class="lab-figures">
+          <div>
+            <dt>{{ t.hudClaim }}</dt>
+            <dd class="num">{{ claimText(claim()?.value ?? null) }}</dd>
+          </div>
+          <div>
+            <dt>{{ t.hudBound }}</dt>
+            <dd class="num">{{ claimText(r.bound) }}</dd>
+          </div>
+          <div>
+            <dt>{{ t.hudRatio }}</dt>
+            <dd class="num">{{ r.ratio === null ? '—' : fmt(r.ratio) }}</dd>
+          </div>
+        </dl>
+        <p class="lab-wording"><span class="lab-wording-h">{{ t.hudWording }}:</span> {{ r.wording }}</p>
+        @if (pin(); as p) {
+          <p class="lab-pin">
+            <span class="lab-wording-h">{{ t.pinned }}:</span>
+            {{ p.result?.label ?? '—' }}, {{ claimText(p.claim) }}
+            @if (p.result?.bound !== null && p.result?.bound !== undefined) {
+              ({{ t.hudBound }} {{ claimText(p.result?.bound ?? null) }})
+            }
+          </p>
+        }
+      } @else if (busy() || limit()) {
+        <span class="lab-wording">{{ t.computing }}</span>
+      }
+    </div>
   </div>
 
-  <aside class="lab-hud surface" [attr.aria-label]="t.statusLabel" aria-live="polite">
+  <aside class="lab-hud surface">
     <h1 class="lab-title">{{ t.title }}</h1>
-    <p class="lab-subtitle">{{ t.subtitle }}</p>
-    <ul class="lab-status">
-      @if (limits(); as all) {
-        <li class="num">{{ t.laws(builtIn()) }}</li>
-        @if (drafts() > 0) {
-          <li class="num">{{ t.drafts(drafts()) }}</li>
-        }
-      } @else if (failed()) {
-        <li>{{ t.unavailable }}</li>
-      } @else {
-        <li>{{ t.loading }}</li>
+    @if (limits(); as all) {
+      <p class="lab-status num">
+        {{ t.laws(builtIn()) }}@if (drafts() > 0) {<span>, {{ t.drafts(drafts()) }}</span>}
+      </p>
+      <label class="lab-field">
+        <span class="lab-label">{{ t.selectLaw }}</span>
+        <select class="lab-select lab-law" [value]="selectedId()" (change)="onLaw($event)">
+          @for (g of groups(); track g.label) {
+            <optgroup [label]="g.label">
+              @for (l of g.laws; track l.id) {
+                <option [value]="l.id" [selected]="l.id === selectedId()">{{ l.title }}</option>
+              }
+            </optgroup>
+          }
+        </select>
+      </label>
+      @if (isDraft()) {
+        <p class="lab-draft">{{ t.draftBadge }}</p>
       }
-    </ul>
-    <p class="lab-help">{{ t.help }}</p>
-    <p class="lab-help">{{ t.nextStep }}</p>
-    <div class="lab-actions">
-      <button type="button" class="btn btn-secondary lab-reset" (click)="resetView()" [disabled]="!viewReady()">{{ t.resetView }}</button>
-      <button type="button" class="btn btn-ghost lab-back" (click)="back()">{{ t.back }}</button>
-    </div>
+      @if (limit(); as l) {
+        <p class="lab-help">{{ l.statement }}</p>
+      }
+
+      <fieldset class="lab-group">
+        <legend class="lab-label">{{ t.controls }}</legend>
+        @if (claim(); as c) {
+          <ng-container *ngTemplateOutlet="control; context: { $implicit: c }" />
+        }
+        @for (s of params(); track s.id) {
+          <ng-container *ngTemplateOutlet="control; context: { $implicit: s }" />
+        }
+      </fieldset>
+
+      @if (topology() === 'surface' && params().length > 2) {
+        <fieldset class="lab-group lab-axes">
+          <label class="lab-field">
+            <span class="lab-label">{{ t.axisX }}</span>
+            <select class="lab-select" (change)="onAxis('x', $event)">
+              @for (s of params(); track s.id) {
+                <option [value]="s.id" [selected]="s.id === xAxis()">{{ s.label }}</option>
+              }
+            </select>
+          </label>
+          <label class="lab-field">
+            <span class="lab-label">{{ t.axisZ }}</span>
+            <select class="lab-select" (change)="onAxis('z', $event)">
+              @for (s of params(); track s.id) {
+                <option [value]="s.id" [selected]="s.id === zAxis()">{{ s.label }}</option>
+              }
+            </select>
+          </label>
+        </fieldset>
+      }
+
+      @if (options().length > 0) {
+        <fieldset class="lab-group">
+          <legend class="lab-label">{{ t.assumptions }}</legend>
+          @for (o of options(); track o.id) {
+            <label class="lab-field">
+              <span class="lab-sub">{{ o.label }}</span>
+              <select class="lab-select lab-choice" (change)="onChoice(o.id, $event)">
+                @for (x of o.options; track x.id) {
+                  <option [value]="x.id" [selected]="x.id === o.value">{{ x.label }}</option>
+                }
+                <option value="" [selected]="o.value === ''">{{ t.notStated }}</option>
+              </select>
+            </label>
+          }
+        </fieldset>
+      }
+
+      <div class="lab-actions">
+        @if (solvable() && freeParam(); as f) {
+          <button type="button" class="btn btn-primary lab-solve" (click)="findBreakingPoint()" [disabled]="solving()" [attr.aria-describedby]="'lab-solve-help'">
+            {{ solving() ? t.solving : t.findBreakingPoint }}
+          </button>
+          <p class="lab-help" id="lab-solve-help">{{ t.breakingOf(f.label) }}</p>
+        }
+        @if (solveNote()) {
+          <p class="lab-note" aria-live="polite">{{ solveNote() }}</p>
+        }
+        @if (pin()) {
+          <button type="button" class="btn btn-secondary lab-unpin" (click)="clearPin()">{{ t.clearPin }}</button>
+        } @else {
+          <button type="button" class="btn btn-secondary lab-pin-btn" (click)="pinProbe()" [disabled]="!result()">{{ t.pinProbe }}</button>
+        }
+        <button type="button" class="btn btn-secondary lab-reset" (click)="resetView()" [disabled]="!viewReady()">{{ t.resetView }}</button>
+        <button type="button" class="btn btn-ghost lab-back" (click)="back()">{{ t.back }}</button>
+      </div>
+      <p class="lab-help">{{ t.zones }}</p>
+      <p class="lab-help">{{ t.help }}</p>
+    } @else if (failed()) {
+      <p class="lab-status">{{ t.unavailable }}</p>
+    } @else {
+      <p class="lab-status">{{ t.loading }}</p>
+    }
   </aside>
 </section>
+
+<ng-template #control let-s>
+  <div class="lab-control">
+    <label class="lab-sub" [for]="'lab-track-' + s.id">{{ s.label }}</label>
+    <input
+      type="range"
+      class="lab-track"
+      [id]="'lab-track-' + s.id"
+      min="0"
+      [max]="steps"
+      step="1"
+      [value]="toPosition(s)"
+      [attr.aria-valuetext]="shownValue(s) + ' ' + unitText(unitOf(s))"
+      (input)="onTrack(s.id, $event)"
+    />
+    <div class="lab-typed">
+      <input
+        type="number"
+        class="lab-number num"
+        [attr.aria-label]="t.valueOf(s.label)"
+        [value]="shownValue(s)"
+        (change)="onTyped(s.id, $event)"
+      />
+      @if (s.units.length > 1) {
+        <select class="lab-select lab-unit" [attr.aria-label]="t.unitOf(s.label)" (change)="onUnit(s.id, $event)">
+          @for (u of s.units; track u) {
+            <option [value]="u" [selected]="u === unitOf(s)">{{ unitText(u) || t.ratio }}</option>
+          }
+        </select>
+      } @else {
+        <span class="lab-unit-text">{{ unitText(s.base) }}</span>
+      }
+    </div>
+  </div>
+</ng-template>

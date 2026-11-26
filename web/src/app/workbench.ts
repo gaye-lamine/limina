@@ -1,4 +1,5 @@
 import { A11yModule } from '@angular/cdk/a11y';
+import { Router } from '@angular/router';
 import { Component, HostListener, computed, inject, signal } from '@angular/core';
 import { Accordion, AccordionContent, AccordionHeader, AccordionPanel } from 'primeng/accordion';
 import { Drawer } from 'primeng/drawer';
@@ -15,6 +16,7 @@ import { CountUp } from './count-up';
 import { formatValue } from './chart-geometry';
 import { Explorer } from './explorer';
 import { IMAGE_TYPES, imageProblem, prepareImage } from './image-input';
+import { INSPECT_KEY, inspectOf } from './laboratory/inspect';
 import { ReviewExport } from './review-export';
 import {
   OptionResult,
@@ -109,6 +111,7 @@ export type StepState = 'waiting' | 'active' | 'done';
 export class Workbench {
   private readonly analysis = inject(AnalysisService);
   private readonly api = inject(ApiService);
+  private readonly router = inject(Router);
   private readonly toast = inject(ToastService);
   private readonly exporter = inject(ReviewExport);
   protected readonly status = inject(StatusService);
@@ -222,6 +225,12 @@ export class Workbench {
   private direction(e: Entry): 'Max' | 'Min' | 'Equal' {
     if (e.kind !== 'claim') return 'Max';
     return this.limits().find((l) => l.id === e.claim.limit_id)?.direction ?? 'Max';
+  }
+
+  /** "Inspect in 3D Lab": opens the laboratory with this claim's law, values and assumptions. */
+  protected inspectInLab(c: AnalyzedClaim): void {
+    const inspect = inspectOf(c);
+    if (inspect) void this.router.navigateByUrl('/laboratory', { state: { [INSPECT_KEY]: inspect } });
   }
 
   protected kindOf(i: number): VerdictKind {

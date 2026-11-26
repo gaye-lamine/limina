@@ -327,6 +327,9 @@
                   </div>
                 } @else if (claim(); as c) {
                   <p class="inst-sentence">{{ sentenceOf(selected()) }}</p>
+                  @if (c.limit_id && c.value !== null) {
+                    <button type="button" class="btn btn-ghost inst-inspect" (click)="inspectInLab(c)">{{ u.inspectInLab }}</button>
+                  }
                   @for (line of explanation(); track $index) {
                     <p class="inst-note">{{ line }}</p>
                   }
