@@ -317,7 +317,14 @@ export const UI = {
   } as Record<string, string>,
   notAnalysed: 'NOT READ',
   disputed: 'DISPUTED',
-  failedSentence: () => 'This paragraph could not be read.',
+  failedSentence: (code?: string) =>
+    code === 'AnalysisTimeout'
+      ? 'Checking this paragraph took too long, so it was stopped. Try a shorter paragraph, or try again later.'
+      : 'This paragraph could not be read.',
+  cancelAnalysis: 'Cancel analysis',
+  cancelling: 'Cancelling…',
+  analysisCancelled: 'Analysis cancelled. The claims read so far are kept.',
+  paragraphCancelled: 'cancelled',
   disputedSentence: 'Two versions of the law disagree, so no verdict is given.',
   noVerdict: 'No verdict.',
   noVerdictBecause: (reason: string) => `No verdict: ${reason}.`,

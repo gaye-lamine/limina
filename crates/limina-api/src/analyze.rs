@@ -39,7 +39,15 @@ pub async fn analyze(
 ) -> Result<Json<AnalyzeResponse>, ApiError> {
     let request: AnalyzeRequest =
         serde_json::from_slice(&body).map_err(|e| ApiError::InvalidJson(e.to_string()))?;
-    Ok(Json(analyze_text(&state, &request.text).await?))
+    // One deadline for the whole request: the model chains, retries and
+    // law authoring can otherwise add up to many minutes.
+    let deadline = state.analyze_timeout();
+    match tokio::time::timeout(deadline, analyze_text(&state, &request.text)).await {
+        Ok(result) => Ok(Json(result?)),
+        Err(_) => Err(ApiError::AnalysisTimeout {
+            secs: deadline.as_secs().max(1),
+        }),
+    }
 }
 
 /// The analysis itself, shared by `POST /v1/analyze` and the `limina check`

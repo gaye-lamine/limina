@@ -182,7 +182,9 @@ async fn landauer_is_authored_listed_and_evaluated_as_a_draft() {
         .as_str()
         .expect("wording")
         .starts_with("draft limit draft-landauer: "));
-    let b = ok["bounds"]["permissive"]["b_min"].as_f64().expect("b_min");
+    // The decisive bound of a minimum is the largest: the AI-written one
+    // (the open formula status bounds nothing, at 0).
+    let b = ok["bounds"]["permissive"]["b_max"].as_f64().expect("b_max");
     assert!((b - bound).abs() <= 1e-9 * bound, "{b} vs {bound}");
 
     let (status, low) = call(
@@ -193,10 +195,16 @@ async fn landauer_is_authored_listed_and_evaluated_as_a_draft() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(low["verdict"], "IMPOSSIBLE");
+    // An unvalidated AI-written law never gives IMPOSSIBLE: CONDITIONAL,
+    // possible only if its formula is not taken as correct.
+    assert_eq!(low["verdict"], "CONDITIONAL");
+    assert_eq!(
+        low["configurations"][0]["assumptions"]["draft_formula"],
+        "not_validated"
+    );
     assert_eq!(
         low["wording"],
-        "inconsistent with draft limit draft-landauer under assumptions none"
+        "inconsistent with draft limit draft-landauer if its formula is correct; the formula is an unvalidated draft written by AI, so no IMPOSSIBLE verdict is given"
     );
     for word in ["fraud", "lie", "scam", "hoax"] {
         assert!(!low["wording"].as_str().expect("wording").contains(word));
@@ -212,6 +220,7 @@ async fn built_in_evaluation_is_unchanged_with_drafts_registered() {
     let body = json!({
         "limit_id": "carnot",
         "claim": {"value": 0.6, "unit": "dimensionless"},
+        "constraints": {"conversion_process": ["heat_engine_cycle"]},
         "parameters": {"Th": {"value": 600.0, "unit": "K"}, "Tc": {"value": 300.0, "unit": "K"}}
     });
     let (status, r) = call(&state, "POST", "/v1/evaluate", Some(body)).await;
@@ -263,7 +272,8 @@ async fn landauer_draft_temperature_threshold_is_at_most() {
     assert!((t - expected).abs() <= 1e-9 * expected, "{t} vs {expected}");
     assert_eq!(r["direction"], "at most");
     assert_eq!(r["verdict_below"], "COMPATIBLE");
-    assert_eq!(r["verdict_above"], "IMPOSSIBLE");
+    // Above the threshold the claim is beyond the AI-written bound: CONDITIONAL, never IMPOSSIBLE.
+    assert_eq!(r["verdict_above"], "CONDITIONAL");
     assert!(r["sentence"]
         .as_str()
         .expect("sentence")

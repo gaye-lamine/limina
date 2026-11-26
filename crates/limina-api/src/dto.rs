@@ -276,8 +276,10 @@ pub struct TraceStepDto {
 /// The numerical comparison of two model-written definitions.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct ComparisonDto {
-    /// Samples evaluated.
+    /// Samples drawn.
     pub samples: usize,
+    /// Samples where both definitions gave a bound that was compared.
+    pub compared: usize,
     /// Largest relative difference seen.
     pub max_relative_difference: f64,
     /// Why they disagree; null when they agree.

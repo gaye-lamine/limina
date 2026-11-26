@@ -611,6 +611,108 @@ fn in_context(sentence: &str, phrases: &[&str]) -> bool {
     has_any(&w, phrases)
 }
 
+/// Assumption the served Carnot law adds to the core limit: what converts
+/// the heat. Its bound applies only to a heat engine cycle; the text must say
+/// so (see [`heat_engine_confirmed`]), otherwise the engine answers
+/// CONDITIONAL, never IMPOSSIBLE.
+pub const CONVERSION_PROCESS: &str = "conversion_process";
+/// Option of [`CONVERSION_PROCESS`] under which the Carnot bound applies.
+pub const HEAT_ENGINE_CYCLE: &str = "heat_engine_cycle";
+/// Option of [`CONVERSION_PROCESS`] under which Carnot gives no bound.
+pub const NOT_A_HEAT_ENGINE_CYCLE: &str = "not_a_heat_engine_cycle";
+
+/// Converters that are not heat engines: their efficiency is not bounded by
+/// Carnot, even when the text gives two temperatures (a fuel cell at 353 K
+/// in air at 293 K). Whole words, in English and French.
+const NON_THERMAL: &[&str] = &[
+    "fuel cell",
+    "fuel cells",
+    "pile à combustible",
+    "piles à combustible",
+    "pile a combustible",
+    "electrochemical",
+    "electrochemistry",
+    "électrochimie",
+    "électrochimique",
+    "électrochimiques",
+    "electrochimie",
+    "electrochimique",
+    "battery",
+    "batteries",
+    "batterie",
+    "accumulator",
+    "accumulateur",
+    "solar cell",
+    "solar cells",
+    "cellule solaire",
+    "cellules solaires",
+    "photovoltaic",
+    "photovoltaics",
+    "photovoltaïque",
+    "photovoltaïques",
+    "photovoltaique",
+    "electrolyser",
+    "electrolyzer",
+    "électrolyseur",
+];
+
+/// Words that state a heat engine working on a cycle between two
+/// reservoirs. Whole words, in English and French.
+const HEAT_ENGINE: &[&str] = &[
+    "heat engine",
+    "heat engines",
+    "thermal engine",
+    "combustion engine",
+    "steam engine",
+    "engine",
+    "engines",
+    "moteur thermique",
+    "moteurs thermiques",
+    "machine thermique",
+    "moteur",
+    "moteurs",
+    "turbine",
+    "turbines",
+    "steam",
+    "vapeur",
+    "power plant",
+    "centrale thermique",
+    "thermal power plant",
+    "thermodynamic cycle",
+    "cycle thermodynamique",
+    "carnot",
+    "rankine",
+    "stirling",
+    "brayton",
+    "otto cycle",
+    "diesel",
+    "hot reservoir",
+    "cold reservoir",
+    "source chaude",
+    "source froide",
+    "thermal efficiency",
+    "rendement thermique",
+];
+
+/// Whether the text (the paragraph of the claim) names a converter that is
+/// not a heat engine: a fuel cell, a battery, a solar cell...
+pub fn non_thermal_system(text: &str) -> bool {
+    has_any(&words(text), NON_THERMAL)
+}
+
+/// Whether the text (the paragraph of the claim) states a heat engine cycle
+/// between two reservoirs, and names no converter that is not one. Only then
+/// does the Carnot bound apply as the text is written.
+pub fn heat_engine_confirmed(text: &str) -> bool {
+    !non_thermal_system(text) && has_any(&words(text), HEAT_ENGINE)
+}
+
+/// Whether a law is ruled out for this text whatever the quantity name or
+/// the model's hint: Carnot for a converter that is not a heat engine.
+pub fn excluded(id: &str, text: &str) -> bool {
+    id == "carnot" && non_thermal_system(text)
+}
+
 /// Whether a sentence (as words) contains one of these phrases.
 fn has_any(sentence_words: &str, phrases: &[&str]) -> bool {
     phrases.iter().any(|p| sentence_words.contains(&words(p)))
@@ -732,12 +834,15 @@ pub fn match_built_in(claim: &ModelClaim, text: &str, catalog: &Catalog) -> Opti
         let Some(limit) = catalog.limit(k.id) else {
             continue;
         };
-        if !same_dimension(limit, &claim.unit) {
+        if !same_dimension(limit, &claim.unit) || excluded(k.id, text) {
             continue;
         }
+        // Context is looked for in the whole paragraph: "The capsule escapes
+        // Earth's gravity. Its launch speed is 8 km/s." states it in the
+        // sentence before the number.
         let in_context = match context_of(k.id) {
             Some(phrases) => {
-                if !sentence.as_deref().is_some_and(|s| in_context(s, phrases)) {
+                if !in_context(text, phrases) {
                     continue;
                 }
                 true
@@ -753,12 +858,15 @@ pub fn match_built_in(claim: &ModelClaim, text: &str, catalog: &Catalog) -> Opti
         .limit_id
         .as_deref()
         .and_then(|id| catalog.limit(id))
-        .filter(|l| same_dimension(l, &claim.unit));
+        .filter(|l| same_dimension(l, &claim.unit) && !excluded(&l.id, text));
     let top = scored.iter().map(|(s, _, _)| *s).max();
     let best: Vec<&(usize, &str, &'static str)> =
         scored.iter().filter(|(s, _, _)| Some(*s) == top).collect();
     if let Some(h) = hint {
-        if best.iter().any(|(_, id, _)| *id == h.id) || best.is_empty() {
+        // With no keyword match, the hint alone is kept only when nothing in
+        // the text speaks against it: Carnot needs a heat engine stated.
+        let alone_ok = h.id != "carnot" || heat_engine_confirmed(text);
+        if best.iter().any(|(_, id, _)| *id == h.id) || (best.is_empty() && alone_ok) {
             let by = best
                 .iter()
                 .find(|(_, id, _)| *id == h.id)

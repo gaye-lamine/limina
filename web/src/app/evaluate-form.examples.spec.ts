@@ -131,7 +131,8 @@ describe('Examples', () => {
     expect(body).toEqual({
       limit_id: 'carnot',
       claim: { value: 0.6, unit: 'dimensionless' },
-      constraints: {},
+      // The example is a heat engine: it states the conversion process.
+      constraints: { conversion_process: ['heat_engine_cycle'] },
       parameters: { Th: { value: 600, unit: 'K' }, Tc: { value: 300, unit: 'K' } },
     });
     expect((el.querySelector('#param-Th-value') as HTMLInputElement).value).toBe('600');

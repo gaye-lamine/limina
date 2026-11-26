@@ -100,10 +100,10 @@ async fn carnot_declares_its_temperatures() {
     assert_eq!(carnot["direction"], "Max");
     assert_eq!(
         carnot["assumptions"],
-        json!([{
-            "id": "cycle_model",
-            "options": ["ideal_reversible_two_reservoirs"]
-        }])
+        json!([
+            {"id": "cycle_model", "options": ["ideal_reversible_two_reservoirs"]},
+            {"id": "conversion_process", "options": ["heat_engine_cycle", "not_a_heat_engine_cycle"]}
+        ])
     );
     assert_eq!(
         carnot["parameters"],
@@ -210,11 +210,15 @@ async fn every_limit_lists_the_display_labels_of_its_ids() {
     let carnot = &body["limits"][1];
     assert_eq!(
         carnot["assumption_labels"],
-        json!({"cycle_model": "cycle model"})
+        json!({"cycle_model": "cycle model", "conversion_process": "conversion process"})
     );
     assert_eq!(
         carnot["option_labels"],
-        json!({"ideal_reversible_two_reservoirs": "ideal reversible cycle between two reservoirs"})
+        json!({
+            "ideal_reversible_two_reservoirs": "ideal reversible cycle between two reservoirs",
+            "heat_engine_cycle": "a heat engine cycle between two reservoirs",
+            "not_a_heat_engine_cycle": "a conversion that is not a heat engine cycle"
+        })
     );
     assert_eq!(
         carnot["parameter_labels"],

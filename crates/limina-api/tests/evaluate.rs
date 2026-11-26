@@ -46,7 +46,7 @@ fn carnot(value: f64, parameters: Value) -> Value {
     json!({
         "limit_id": "carnot",
         "claim": {"value": value, "unit": "dimensionless"},
-        "constraints": {},
+        "constraints": {"conversion_process": ["heat_engine_cycle"]},
         "parameters": parameters
     })
 }
@@ -150,7 +150,7 @@ async fn carnot_060_600k_300k_is_impossible() {
     assert_eq!(body["verdict"], "IMPOSSIBLE");
     assert_eq!(
         body["wording"],
-        "inconsistent with limit carnot under assumptions cycle model = ideal reversible cycle between two reservoirs"
+        "inconsistent with limit carnot under assumptions conversion process = a heat engine cycle between two reservoirs; cycle model = ideal reversible cycle between two reservoirs"
     );
     assert_eq!(body["bounds"]["restrictive"]["b_max"], 0.5);
 }

@@ -217,7 +217,7 @@ describe('Workbench', { timeout: 30_000 }, () => {
   });
 
   it('downloads the review as a PDF', async () => {
-    const { fixture, el } = await reviewed();
+    const { http, fixture, el } = await reviewed();
     const exporter = TestBed.inject(ReviewExport);
     const saved: { doc: TDocumentDefinitions; name: string }[] = [];
     exporter.download = async (doc, name) => {
@@ -225,6 +225,11 @@ describe('Workbench', { timeout: 30_000 }, () => {
     };
     (el.querySelector('.download-button') as HTMLButtonElement).click();
     await settle(fixture);
+    // The review states the result of each conversion process the text leaves open.
+    for (let k = 0; k < 4; k++) {
+      for (const x of http.match('/v1/evaluate')) x.flush(claimOf().result!);
+      await settle(fixture);
+    }
     expect(saved).toHaveLength(1);
     expect(saved[0].name).toBe('limina-review.pdf');
     const text = JSON.stringify(saved[0].doc.content);
@@ -301,6 +306,44 @@ describe('Workbench', { timeout: 30_000 }, () => {
     expect(el.querySelector('.tiles')).toBeNull();
     const toasts = TestBed.inject(ToastService).toasts();
     expect(toasts.some((t) => t.kind === 'error' && t.text.includes('Paragraph 1 could not be read'))).toBe(true);
+  });
+
+  it('cancels the analysis: aborts the request in flight, sends no further paragraph, keeps what was read', async () => {
+    const { http, fixture, el } = await setup();
+    type(el, 'Engine 60% at 600 K\n\nPump 4 at 300 K\n\nCell 5 kWh in 1 kg');
+    (el.querySelector('.wb-analyze') as HTMLButtonElement).click();
+    await settle(fixture);
+    answer(http, [claimOf({ evidence: { text: '60%', start: 7, end: 10 } })]);
+    await settle(fixture);
+    const pending = http.expectOne('/v1/analyze');
+    const button = el.querySelector('.cancel-button') as HTMLButtonElement;
+    expect(button.textContent).toContain('Cancel analysis');
+    button.click();
+    await settle(fixture);
+    expect(pending.cancelled).toBe(true);
+    await drain(http, fixture);
+    http.expectNone('/v1/analyze');
+    expect(el.getAttribute('data-state')).toBe('reviewed');
+    expect(el.querySelectorAll('.claim-item')).toHaveLength(1);
+    const toasts = TestBed.inject(ToastService).toasts();
+    expect(toasts.some((t) => t.text.includes('Analysis cancelled'))).toBe(true);
+  });
+
+  it('says in plain words that a paragraph took too long, and does not retry it', async () => {
+    const { http, fixture, el } = await setup();
+    type(el, 'COP 1');
+    (el.querySelector('.wb-analyze') as HTMLButtonElement).click();
+    await settle(fixture);
+    http
+      .expectOne('/v1/analyze')
+      .flush({ error: { code: 'AnalysisTimeout', message: 'the analysis took longer than 60 s and was stopped' } }, { status: 504, statusText: 'Gateway Timeout' });
+    await settle(fixture);
+    await drain(http, fixture);
+    http.expectNone('/v1/analyze');
+    const card = el.querySelector('.nv')?.textContent ?? '';
+    expect(card).toContain('Checking this paragraph took too long, so it was stopped.');
+    expect(card).not.toContain('AnalysisTimeout');
+    expect(card).not.toContain('504');
   });
 
   it('advances the stepper only on pipeline events', async () => {

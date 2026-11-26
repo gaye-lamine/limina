@@ -17,6 +17,7 @@ use axum::Json;
 use limina_core::{Direction, DomainRange, Limit};
 use limina_dsl::{bound_curve_at, DeclarativeLimit, Registry};
 use limina_extract::check::{number_in, LIMIT_NOT_RECOGNIZED};
+use limina_extract::matcher::{heat_engine_confirmed, CONVERSION_PROCESS, HEAT_ENGINE_CYCLE};
 use limina_extract::{
     transcribe_image_routed, AuthorError, ImageInput, LawAnswer, LawStatus, ModelAttempt, Route,
     TwoModelLaw, WantedParameter,
@@ -389,8 +390,8 @@ fn comparison_step(law: &TwoModelLaw) -> TraceStepDto {
             "comparison",
             DONE,
             format!(
-                "draft_agreed: the two definitions agree on {} samples (largest relative difference {:e})",
-                c.samples, c.max_relative_difference
+                "draft_agreed: the two definitions agree on {} compared samples of {} (largest relative difference {:e})",
+                c.compared, c.samples, c.max_relative_difference
             ),
         ),
         (_, Some(c)) => step(
@@ -517,6 +518,7 @@ async fn law_pipeline(state: &AppState, text: &str, claim: &mut AnalyzedClaimDto
         ],
         comparison: law.comparison.as_ref().map(|c| ComparisonDto {
             samples: c.samples,
+            compared: c.compared,
             max_relative_difference: c.max_relative_difference,
             reason: c.reason.clone(),
         }),
@@ -553,8 +555,22 @@ async fn law_pipeline(state: &AppState, text: &str, claim: &mut AnalyzedClaimDto
         })
         .collect();
     read_parameters(extractor, text, claim, &wanted).await;
-    // (iv) The engine.
+    // (iv) The engine, only where the two definitions were compared.
     let request = engine_request(claim, id);
+    let ranges = law
+        .comparison
+        .as_ref()
+        .map(|c| c.ranges.clone())
+        .unwrap_or_default();
+    if let Some(outside) = outside_compared_ranges(&authored.limit, &request, &ranges) {
+        claim.trace.push(step(
+            "evaluation",
+            SKIPPED,
+            format!("not evaluated: {outside}"),
+        ));
+        needs_input(claim, &outside);
+        return;
+    }
     match evaluate_draft(&authored.limit, &request) {
         Ok(result) => {
             claim.status = crate::analyze::EVALUATED;
@@ -568,6 +584,39 @@ async fn law_pipeline(state: &AppState, text: &str, claim: &mut AnalyzedClaimDto
         }
     }
     claim.trace.push(verdict_step(claim));
+}
+
+/// Why a draft law is not applied to these values: a parameter read from the
+/// text lies outside the range where the two definitions were compared
+/// (SI units, a relative margin of 1e-9 at the ends). Agreement says nothing
+/// there. None when every parameter is inside, or not read (the engine then
+/// says what is missing).
+pub fn outside_compared_ranges(
+    limit: &DeclarativeLimit,
+    request: &EvaluateRequest,
+    ranges: &[(String, f64, f64)],
+) -> Option<String> {
+    let input = crate::convert::decision_input(limit, request).ok()?;
+    for (name, lo, hi) in ranges {
+        let Some(m) = input
+            .known_parameters
+            .get(&limina_core::ParameterId::new(name.clone()))
+        else {
+            continue;
+        };
+        let v = m.si_value();
+        let slack = 1e-9 * lo.abs().max(hi.abs());
+        if v < lo - slack || v > hi + slack {
+            return Some(format!(
+                "{name} = {} (SI) is outside the range [{}, {}] where the two versions of the \
+                 law were compared, so the AI-written law is not applied",
+                number(v),
+                number(*lo),
+                number(*hi)
+            ));
+        }
+    }
+    None
 }
 
 /// Reads the parameters of the law out of the text and records them, with
@@ -701,7 +750,23 @@ async fn built_in_path(
         })
         .unwrap_or_default();
     read_parameters(extractor, text, claim, &wanted).await;
-    let request = engine_request(claim, id.to_string());
+    let mut request = engine_request(claim, id.to_string());
+    // Carnot named by the model: its bound applies only when the paragraph
+    // states a heat engine cycle, as on the matcher path.
+    let declares_conversion = extractor
+        .catalog()
+        .limit(id)
+        .is_some_and(|l| l.assumption(CONVERSION_PROCESS).is_some());
+    if declares_conversion && heat_engine_confirmed(text) {
+        request.constraints.insert(
+            CONVERSION_PROCESS.to_string(),
+            vec![HEAT_ENGINE_CYCLE.to_string()],
+        );
+        claim.constraints.insert(
+            CONVERSION_PROCESS.to_string(),
+            HEAT_ENGINE_CYCLE.to_string(),
+        );
+    }
     match evaluate_request(&request) {
         Ok(result) => {
             claim.status = crate::analyze::EVALUATED;
@@ -800,7 +865,7 @@ pub fn curve_with(state: &AppState, request: &CurveRequest) -> Result<CurveRespo
                 .ok_or_else(|| ApiError::UnknownLimit(id.to_string()))?,
         ),
     };
-    let constraints = graphs::constraints_of(&request.constraints);
+    let constraints = graphs::plot_constraints(id, &request.constraints);
     let free = request.free_parameter.as_str();
     if !limit.parameters().iter().any(|s| s.id.as_str() == free) {
         return Err(ApiError::UnknownFreeParameter(free.to_string()));

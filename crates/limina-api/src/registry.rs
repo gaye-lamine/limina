@@ -1,8 +1,6 @@
 //! The limits served by the API.
 
-use limina_core::{
-    units_for_dimension, Betz, Carnot, Cop, Dimension, Direction, Limit, MeasureKind,
-};
+use limina_core::{units_for_dimension, Betz, Cop, Dimension, Direction, Limit, MeasureKind};
 
 use crate::dto::{AssumptionDto, LimitDto, LimitsResponse, ParameterSpecDto};
 use crate::labels::{assumption_label, option_label, parameter_label};
@@ -13,7 +11,7 @@ use limina_extract::{Catalog, CatalogAssumption, CatalogLimit, CatalogOption, Ca
 pub fn find_limit(id: &str) -> Option<Box<dyn Limit>> {
     match id {
         "betz" => Some(Box::new(Betz::new())),
-        "carnot" => Some(Box::new(Carnot::new())),
+        "carnot" => Some(Box::new(crate::qualified::carnot())),
         "cop" => Some(Box::new(Cop::new())),
         _ => library_limit(id),
     }
@@ -41,7 +39,7 @@ pub fn find_equality(id: &str) -> Option<EqualityLimit> {
 fn all_limits() -> Vec<Box<dyn Limit>> {
     vec![
         Box::new(Betz::new()),
-        Box::new(Carnot::new()),
+        Box::new(crate::qualified::carnot()),
         Box::new(Cop::new()),
     ]
 }

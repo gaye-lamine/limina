@@ -25,3 +25,8 @@ Rework of the Evaluate page in `web/`: opening state, units from metadata, examp
 - A. Bounds that are a range (`b_min` differs from `b_max`, in either enclosure): the thick line and the hatch start at the largest `b_max` of the two enclosures, so the hatch only covers values excluded in every configuration. A light grey band spans from the smallest `b_min` to that line, and the label reads "low to high".
 - B. No bounds (Carnot without temperatures): no chart is drawn. A text line says no bound could be computed and lists the missing parameters.
 - C. Metadata mismatch: none after `api-limit-metadata`. `bounds` values are in SI base units and the claim is in `claim_unit`; the chart assumes they are the same, which holds for `dimensionless`. A limit whose claim unit is not an SI base unit needs a conversion, not yet needed.
+
+## Revision 2026-11-26 (audit of 26/11)
+- R-11 While an analysis runs, a "Cancel analysis" button stops it: the request in flight is aborted (RxJS `takeUntil`, which cancels the HTTP request), no further paragraph is sent, the claims read so far are reviewed, and a notice says so.
+- R-12 A paragraph stopped by the analysis deadline says so in plain words ("Checking this paragraph took too long, so it was stopped. Try a shorter paragraph, or try again later.") and is not retried; no code or status number is shown.
+- R-13 A CONDITIONAL sentence names the options under which the claim holds, leaving out assumptions with one option only (Carnot's cycle model).

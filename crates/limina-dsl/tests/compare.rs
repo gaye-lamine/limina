@@ -4,8 +4,8 @@ use std::collections::BTreeMap;
 
 use limina_core::{ConstraintsMap, Limit};
 use limina_dsl::{
-    bound_curve, compare_limits, relative_difference, CurveError, DeclarativeLimit, Registry,
-    COMPARISON_SAMPLES, COMPARISON_SEED,
+    bound_curve, compare_limits, min_compared, relative_difference, CurveError, DeclarativeLimit,
+    Registry, COMPARISON_SAMPLES, COMPARISON_SEED,
 };
 use serde_json::json;
 
@@ -158,4 +158,83 @@ fn curve_requests_are_checked() {
         run(&fixed, "Th", (400.0, 900.0), 1001),
         Err(CurveError::Invalid(_))
     ));
+}
+
+/// A dimensionless law of one parameter x, for the comparison edge cases.
+fn plain(id: &str, formula: &str, range: [f64; 2]) -> DeclarativeLimit {
+    DeclarativeLimit::from_json(
+        &json!({
+            "id": id, "title": "t", "direction": "max", "bounded_dimension": "dimensionless",
+            "parameters": [{"name": "x", "dimension": "dimensionless", "units": ["dimensionless"], "test_range": range}],
+            "formula": formula, "validity": [], "references": ["r"], "epistemic_status": "theorem"
+        })
+        .to_string(),
+    )
+    .expect("definition")
+}
+
+/// Regression (26/11 audit): two formulas that differ by a factor 1000 but
+/// are both undefined on the whole sampled range (square root of a negative)
+/// used to "agree" on 200 samples without one number compared.
+#[test]
+fn two_formulas_undefined_everywhere_never_agree() {
+    let a = plain("draft-a", "sqrt(x^2 - 100)", [1.0, 5.0]);
+    let b = plain("draft-b", "1000*sqrt(x^2 - 100)", [1.0, 5.0]);
+    let c = compare(&a, &b);
+    assert!(!c.agreed, "{c:?}");
+    assert_eq!(c.samples, 200);
+    assert_eq!(c.compared, 0);
+    assert!(
+        c.reason
+            .as_deref()
+            .unwrap_or("")
+            .contains("only 0 of 200 samples"),
+        "{c:?}"
+    );
+}
+
+/// Agreement needs a quarter of the samples compared: a law defined on less
+/// than that share of its range is not agreed, one defined on more is.
+#[test]
+fn agreement_needs_a_quarter_of_the_samples_compared() {
+    assert_eq!(min_compared(200), 50);
+    assert_eq!(min_compared(1), 1);
+    // Defined only for x > 4.9 of [1, 5]: about 2 % of the samples.
+    let narrow = compare(
+        &plain("draft-a", "sqrt(x - 4.9)", [1.0, 5.0]),
+        &plain("draft-b", "sqrt(x - 4.9)", [1.0, 5.0]),
+    );
+    assert!(!narrow.agreed, "{narrow:?}");
+    assert!(narrow.compared < 50, "{narrow:?}");
+    // Defined for x > 2 of [1, 5]: about 75 % of the samples.
+    let wide = compare(
+        &plain("draft-a", "sqrt(x - 2)", [1.0, 5.0]),
+        &plain("draft-b", "sqrt(x - 2)", [1.0, 5.0]),
+    );
+    assert!(wide.agreed, "{wide:?}");
+    assert!(wide.compared >= 50 && wide.compared < 200, "{wide:?}");
+}
+
+/// The comparison reports where it sampled: the intersection of the two
+/// ranges. Formulas that differ only outside it agree, and the range tells
+/// the caller not to apply the law there.
+#[test]
+fn the_compared_ranges_are_the_intersection_of_the_two_definitions() {
+    let a = plain("draft-a", "x", [1.0, 2.0]);
+    let b = plain("draft-b", "min(x, 2) + 5*max(x - 2, 0)", [1.0, 100.0]);
+    let c = compare(&a, &b);
+    assert!(c.agreed, "{c:?}");
+    assert_eq!(c.compared, 200);
+    assert_eq!(c.ranges, vec![("x".to_string(), 1.0, 2.0)]);
+}
+
+/// A division by zero inside the range is undefined at one point at most:
+/// it does not prevent agreement when the formulas match elsewhere.
+#[test]
+fn a_singular_point_is_not_compared_and_does_not_block_agreement() {
+    let a = plain("draft-a", "1/(x - 10)", [1.0, 20.0]);
+    let b = plain("draft-b", "1/(x - 10)", [1.0, 20.0]);
+    let c = compare(&a, &b);
+    assert!(c.agreed, "{c:?}");
+    assert!(c.compared >= 199, "{c:?}");
 }

@@ -125,11 +125,14 @@ async fn an_unknown_claim_gets_a_law_from_two_models_and_an_engine_verdict() {
     );
     assert_eq!(claim["status"], "evaluated");
     assert_eq!(claim["limit_id"], "draft-landauer");
-    assert_eq!(claim["result"]["verdict"], "IMPOSSIBLE");
+    // An agreed draft is still unvalidated: the engine answers CONDITIONAL,
+    // never IMPOSSIBLE, and says the formula is an AI draft.
+    assert_eq!(claim["result"]["verdict"], "CONDITIONAL");
     assert_eq!(
         claim["result"]["wording"],
-        "inconsistent with draft limit draft-landauer under assumptions none"
+        "inconsistent with draft limit draft-landauer if its formula is correct; the formula is an unvalidated draft written by AI, so no IMPOSSIBLE verdict is given"
     );
+    assert_eq!(claim["law"]["comparison"]["compared"], 200);
     assert_eq!(claim["law"]["source"], "draft_agreed");
     assert_eq!(claim["law"]["sentence"], LAW);
     assert_eq!(claim["law"]["comparison"]["samples"], 200);
@@ -138,13 +141,14 @@ async fn an_unknown_claim_gets_a_law_from_two_models_and_an_engine_verdict() {
     assert_eq!(claim["parameters"]["T"]["value"], 300.0);
     let detail = claim["trace"][5]["detail"].as_str().expect("detail");
     assert!(
-        detail.starts_with("draft_agreed: the two definitions agree on 200 samples"),
+        detail
+            .starts_with("draft_agreed: the two definitions agree on 200 compared samples of 200"),
         "{detail}"
     );
     assert!(claim["trace"][7]["detail"]
         .as_str()
         .expect("d")
-        .contains("IMPOSSIBLE"));
+        .contains("CONDITIONAL"));
     // The agreed law is served and evaluable; it is a draft.
     let (_, list) = call(&m.state, "GET", "/v1/limits", None).await;
     let law = list["limits"]
@@ -161,6 +165,36 @@ async fn an_unknown_claim_gets_a_law_from_two_models_and_an_engine_verdict() {
     assert_eq!(requests.len(), 4);
     assert!(requests[3].user.contains(TEXT));
     assert!(requests[3].system.contains("- T (units: K)"));
+}
+
+/// Correctif 3: the two definitions agree only on T in [400, 1000] K (the
+/// intersection of their test ranges); the text's 300 K is outside it, so
+/// the AI-written law is not applied and no verdict is given.
+#[tokio::test]
+async fn a_draft_is_not_applied_outside_the_range_where_it_was_compared() {
+    let m = mocks();
+    let ranged = |formula: &str, range: [f64; 2]| {
+        landauer(formula).replace(
+            "\"test_range\":[1,1000]",
+            &format!("\"test_range\":[{},{}]", range[0], range[1]),
+        )
+    };
+    m.a.push_content(&extraction());
+    m.a.push_content(LAW);
+    m.a.push_content(&ranged("kB*T*ln2", [400.0, 1000.0]));
+    m.b.inner.push_content(&ranged("ln2*kB*T", [1.0, 2000.0]));
+    m.a.push_content(&parameters());
+    let claim = analyze(&m.state).await;
+    assert_eq!(claim["law"]["source"], "draft_agreed", "{claim}");
+    assert_eq!(claim["status"], "needs_input", "{claim}");
+    assert!(claim["result"].is_null(), "{claim}");
+    let reason = claim["reason"].as_str().expect("reason");
+    assert!(
+        reason.contains(
+            "outside the range [400, 1000] where the two versions of the law were compared"
+        ),
+        "{reason}"
+    );
 }
 
 #[tokio::test]
@@ -316,8 +350,8 @@ async fn injected_text_is_data_for_every_step() {
     let (status, body) = call(&m.state, "POST", "/v1/analyze", Some(json!({"text": text}))).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(
-        body["claims"][0]["result"]["verdict"], "IMPOSSIBLE",
-        "the engine decides"
+        body["claims"][0]["result"]["verdict"], "CONDITIONAL",
+        "the engine decides, and an AI-written law never gives IMPOSSIBLE"
     );
     for r in m.a.requests() {
         assert_eq!(r.user.matches("TEXT>>>").count(), 1, "{}", r.user);

@@ -10,7 +10,13 @@ use std::collections::{BTreeMap, BTreeSet};
 use axum::body::Bytes;
 use axum::extract::State;
 use axum::Json;
-use limina_core::{AssumptionId, ConstraintsMap, EngineError, OptionId, Quantity, Verdict};
+use limina_core::{
+    AbsoluteTemperature, AssumptionId, ConstraintsMap, EngineError, Limit, Measure, MeasureKind,
+    OptionId, ParameterId, Quantity, TemperatureDifference, Verdict,
+};
+use limina_extract::matcher::CONVERSION_PROCESS;
+
+use crate::qualified;
 use limina_dsl::report::{ConditionReport, FormulaReport};
 use limina_dsl::{
     solve_for, CheckReport, DeclarativeLimit, DimensionCheck, LimitDefinition, Registry, Solution,
@@ -198,9 +204,63 @@ pub async fn solve(
 pub fn solve_with(state: &AppState, request: &SolveRequestDto) -> Result<SolveResponse, ApiError> {
     let (limit, draft) = find_dsl_limit(state, &request.limit_id)
         .ok_or_else(|| ApiError::UnknownLimit(request.limit_id.clone()))?;
-    let question = solve_request(&limit, request)?;
+    // The assumptions the API adds to a law (Carnot's conversion process, a
+    // draft's formula status) are not in its DSL definition, which is the
+    // law under the assumption that applies.
+    let mut request = request.clone();
+    for key in [CONVERSION_PROCESS, qualified::DRAFT_FORMULA] {
+        if !limit.definition().assumptions.iter().any(|a| a.id == key) {
+            request.constraints.remove(key);
+        }
+    }
+    let question = solve_request(&limit, &request)?;
     let solution = solve_for(&limit, &question).map_err(solve_error)?;
-    Ok(solve_response(request, solution, draft))
+    let mut response = solve_response(&request, solution, draft);
+    if draft {
+        // Around the threshold, an AI-written law decides like any draft:
+        // through the engine with its formula status open, never IMPOSSIBLE.
+        response.verdict_below = draft_verdict_at(&limit, &request, response.below)?;
+        response.verdict_above = draft_verdict_at(&limit, &request, response.above)?;
+    }
+    Ok(response)
+}
+
+/// The engine verdict of a draft law with the free parameter at `free_si`
+/// (SI units) and the formula status left open.
+fn draft_verdict_at(
+    limit: &DeclarativeLimit,
+    request: &SolveRequestDto,
+    free_si: f64,
+) -> Result<&'static str, ApiError> {
+    let law = qualified::draft(limit);
+    let mut parameters = request.parameters.clone();
+    parameters.remove(&request.free_parameter);
+    let evaluate = crate::dto::EvaluateRequest {
+        limit_id: request.limit_id.clone(),
+        claim: request.claim.clone(),
+        constraints: request.constraints.clone(),
+        parameters,
+    };
+    let mut input = crate::convert::decision_input(&law, &evaluate)?;
+    let spec = law
+        .parameters()
+        .iter()
+        .find(|p| p.id.as_str() == request.free_parameter)
+        .ok_or_else(|| ApiError::UnknownFreeParameter(request.free_parameter.clone()))?;
+    let value = match spec.kind {
+        MeasureKind::AbsoluteTemperature => {
+            Measure::AbsoluteTemperature(AbsoluteTemperature::from_kelvin(free_si)?)
+        }
+        MeasureKind::TemperatureDifference => {
+            Measure::TemperatureDifference(TemperatureDifference::from_kelvin(free_si)?)
+        }
+        MeasureKind::Plain(d) => Measure::Plain(Quantity::from_si(free_si, d)?),
+    };
+    input
+        .known_parameters
+        .insert(ParameterId::new(request.free_parameter.clone()), value);
+    let decision = limina_core::decide(&law, &input)?;
+    Ok(verdict_name(&decision.verdict))
 }
 
 /// The DSL limit with this id, built-in first; true when it is authored.

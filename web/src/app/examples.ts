@@ -31,7 +31,7 @@ export const EXAMPLES: Example[] = [
     label: STRINGS.exampleCarnotImpossible,
     limitId: 'carnot',
     claim: '0.60',
-    constraints: {},
+    constraints: { conversion_process: 'heat_engine_cycle' },
     parameters: { Th: '600', Tc: '300' },
   },
   {

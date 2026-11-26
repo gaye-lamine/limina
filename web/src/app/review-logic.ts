@@ -80,7 +80,8 @@ export function conditionalOptions(c: AnalyzedClaim, limit: LimitInfo | null | u
     ...new Set(
       configs.flatMap((k) =>
         Object.entries(k.assumptions)
-          .filter(([a]) => !c.constraints[a])
+          // An assumption with one option says nothing about this claim.
+          .filter(([a]) => !c.constraints[a] && (limit?.assumptions.find((x) => x.id === a)?.options.length ?? 2) > 1)
           .map(([, o]) => limit?.option_labels[o] ?? o.replace(/_/g, ' ')),
       ),
     ),
@@ -95,7 +96,7 @@ function missingNames(c: AnalyzedClaim, limit: LimitInfo | null | undefined): st
 
 /** One plain sentence from engine data only. */
 export function plainSentence(e: Entry, direction: 'Max' | 'Min' | 'Equal', limit?: LimitInfo | null): string {
-  if (e.kind === 'failure') return UI.failedSentence();
+  if (e.kind === 'failure') return UI.failedSentence(e.failure.code);
   const c = e.claim;
   if (c.law?.source === 'draft_disputed') return UI.disputedSentence;
   const r = c.result;
@@ -362,7 +363,7 @@ export function noVerdict(e: Entry, limits: LimitInfo[]): NoVerdict | null {
   if (e.kind === 'failure') {
     return {
       kind: 'failed',
-      happened: UI.failedSentence(),
+      happened: UI.failedSentence(e.failure.code),
       tried: [plainStep({ step: 'extraction', status: 'failed' })],
       settle: UI.settleFailed,
       settlePrint: UI.settleFailed,

@@ -9,7 +9,8 @@ use serde_json::{json, Value};
 
 use crate::dto::{EvaluateRequest, EvaluateResponse, LimitsResponse};
 use crate::error::ApiError;
-use crate::{convert, registry, response, AppState};
+use crate::{convert, qualified, registry, response, AppState};
+use limina_extract::matcher::{CONVERSION_PROCESS, NOT_A_HEAT_ENGINE_CYCLE};
 
 /// `GET /healthz`: liveness probe.
 pub async fn healthz() -> Json<Value> {
@@ -51,14 +52,32 @@ pub async fn evaluate(
     Ok(Json(evaluate_request(&request)?))
 }
 
-/// The evaluation of an authored limit, worded as a draft.
+/// The evaluation of an authored limit, worded as a draft. The law gets the
+/// assumption `draft_formula`, left open whatever the request says, so the
+/// engine answers CONDITIONAL for a claim beyond the AI-written bound: an
+/// unvalidated formula never yields IMPOSSIBLE (product rule: when in
+/// doubt, never IMPOSSIBLE). The one case the open option cannot cover, a
+/// negative claim against a minimum (a bound is never below 0), is refused
+/// with no verdict.
 pub fn evaluate_draft(
     limit: &DeclarativeLimit,
     request: &EvaluateRequest,
 ) -> Result<EvaluateResponse, ApiError> {
-    let input = convert::decision_input(limit, request)?;
-    let decision = decide(limit, &input)?;
-    Ok(response::build_draft(limit, &input, &decision)?)
+    let law = qualified::draft(limit);
+    let mut request = request.clone();
+    request.constraints.remove(qualified::DRAFT_FORMULA);
+    let input = convert::decision_input(&law, &request)?;
+    let decision = decide(&law, &input)?;
+    let mut response = response::build_draft(&law, &input, &decision)?;
+    if response.verdict == "IMPOSSIBLE" {
+        return Err(ApiError::DraftNotApplied(
+            "a negative value cannot be checked against a minimum written by AI".to_string(),
+        ));
+    }
+    if qualified::only_open_option(&response, law.key(), law.open()) {
+        response.wording = qualified::draft_wording(&limit.definition().id);
+    }
+    Ok(response)
 }
 
 /// The evaluation of an equality law: both bounds go through the engine and
@@ -87,5 +106,11 @@ pub fn evaluate_request(request: &EvaluateRequest) -> Result<EvaluateResponse, A
         .ok_or_else(|| ApiError::UnknownLimit(request.limit_id.clone()))?;
     let input = convert::decision_input(limit.as_ref(), request)?;
     let decision = decide(limit.as_ref(), &input)?;
-    Ok(response::build(limit.as_ref(), &input, &decision)?)
+    let mut response = response::build(limit.as_ref(), &input, &decision)?;
+    if request.limit_id == "carnot"
+        && qualified::only_open_option(&response, CONVERSION_PROCESS, NOT_A_HEAT_ENGINE_CYCLE)
+    {
+        response.wording = qualified::carnot_wording(&request.limit_id);
+    }
+    Ok(response)
 }

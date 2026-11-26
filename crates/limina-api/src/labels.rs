@@ -7,6 +7,8 @@
 const ASSUMPTIONS: &[(&str, &str)] = &[
     ("reference_area", "reference area"),
     ("cycle_model", "cycle model"),
+    ("conversion_process", "conversion process"),
+    ("draft_formula", "AI-written formula"),
     ("mode", "mode"),
     ("imaging_method", "imaging method"),
     ("propulsion", "propulsion"),
@@ -17,6 +19,16 @@ const ASSUMPTIONS: &[(&str, &str)] = &[
 
 /// Option id to its display label.
 const OPTIONS: &[(&str, &str)] = &[
+    (
+        "heat_engine_cycle",
+        "a heat engine cycle between two reservoirs",
+    ),
+    (
+        "not_a_heat_engine_cycle",
+        "a conversion that is not a heat engine cycle",
+    ),
+    ("as_written", "taken as correct"),
+    ("not_validated", "not validated by a person"),
     ("unshrouded_rotor", "unshrouded rotor"),
     (
         "shrouded_total_capture_area",

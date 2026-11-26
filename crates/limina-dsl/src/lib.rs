@@ -26,8 +26,8 @@ pub mod solve;
 pub mod surface;
 
 pub use compare::{
-    compare_limits, decisive_bound_at, relative_difference, Comparison, AGREEMENT_TOLERANCE,
-    COMPARISON_SAMPLES, COMPARISON_SEED,
+    compare_limits, decisive_bound_at, min_compared, relative_difference, Comparison,
+    AGREEMENT_TOLERANCE, COMPARISON_SAMPLES, COMPARISON_SEED,
 };
 pub use curve::{
     bound_curve, bound_curve_at, bound_curve_enclosed, decisive, sample_points, validity_zones,

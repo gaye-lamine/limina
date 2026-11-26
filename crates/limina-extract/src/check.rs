@@ -125,8 +125,29 @@ pub fn check(output: &ModelOutput, text: &str, catalog: &Catalog) -> Vec<Checked
         fill_parameters_from_sentence(c, text, catalog);
         fill_body_constants(c, text, catalog);
         fill_options_from_sentence(c, text, catalog);
+        confirm_conversion(c, text, catalog);
     }
     merge_quotient_claims(claims, text)
+}
+
+/// Note prefix of a claim whose model hint was dropped by the matcher rules.
+pub const HINT_RULED_OUT: &str = "law named by the reading not used:";
+
+/// The claim without the model's Carnot hint when the matcher did not keep
+/// it: the paragraph names a converter that is not a heat engine, or states
+/// no heat engine at all. Any other hint is kept as it was.
+fn drop_ruled_out_hint(claim: &ModelClaim, text: &str) -> (ModelClaim, Option<String>) {
+    if claim.limit_id.as_deref() != Some("carnot") || crate::matcher::heat_engine_confirmed(text) {
+        return (claim.clone(), None);
+    }
+    let why = if crate::matcher::non_thermal_system(text) {
+        "the text names a converter that is not a heat engine"
+    } else {
+        "the text does not state a heat engine cycle"
+    };
+    let mut out = claim.clone();
+    out.limit_id = None;
+    (out, Some(format!("{HINT_RULED_OUT} carnot ({why})")))
 }
 
 /// Note prefix of a claim whose built-in law was chosen by the deterministic matcher.
@@ -142,7 +163,7 @@ fn resolve_built_in(
     catalog: &Catalog,
 ) -> (ModelClaim, Option<String>) {
     let Some(m) = crate::matcher::match_built_in(claim, text, catalog) else {
-        return (claim.clone(), None);
+        return drop_ruled_out_hint(claim, text);
     };
     if claim.limit_id.as_deref() == Some(m.id.as_str()) {
         return (claim.clone(), None);
@@ -163,9 +184,20 @@ fn resolve_built_in(
 /// A single line break is a wrapped line (text read from an image), not an end.
 pub(crate) fn sentence_around(text: &str, span: &Span) -> String {
     let chars: Vec<char> = text.chars().collect();
+    // "N.A.", "O.N.", "e.g.": a period right after one letter that follows
+    // a period closes an initialism, not the sentence.
+    let initialism = |i: usize| {
+        chars.get(i) == Some(&'.')
+            && i >= 2
+            && chars[i - 1].is_alphabetic()
+            && chars[i - 2] == '.'
+            && (i < 3 || chars[i - 3].is_alphabetic())
+            && (i < 4 || !chars[i - 4].is_alphanumeric())
+    };
     let ends = |i: usize| {
         matches!(chars.get(i), Some('.' | '!' | '?'))
             && chars.get(i + 1).is_none_or(|c| c.is_whitespace())
+            && !initialism(i)
     };
     // A blank line: this line break and the next non-space character is another line break.
     let blank = |i: usize| {
@@ -324,6 +356,142 @@ fn names_parameter(
     cues.iter().any(|c| words.contains(&format!(" {c} ")))
 }
 
+/// A dimensionless parameter, the phrases that name it, the condition on its value.
+type UnitlessCue = (&'static str, &'static [&'static str], fn(f64) -> bool);
+
+fn positive(v: f64) -> bool {
+    v > 0.0
+}
+
+fn non_negative(v: f64) -> bool {
+    v >= 0.0
+}
+
+/// Dimensionless parameters that may be read from the text without the
+/// model: the phrases that name each one, and the condition its value must
+/// meet for the law (the bound divides by the numerical aperture; a power
+/// ratio is never negative). A phrase counts only right next to the number.
+const UNITLESS_CUES: &[UnitlessCue] = &[
+    (
+        "aperture",
+        &[
+            "numerical aperture",
+            "n.a.",
+            "na",
+            "ouverture numérique",
+            "ouverture numerique",
+            "o.n.",
+        ],
+        positive,
+    ),
+    (
+        "snr",
+        &[
+            "signal-to-noise ratio",
+            "signal to noise ratio",
+            "snr",
+            "s/n",
+            "rapport signal sur bruit",
+            "rapport signal/bruit",
+        ],
+        non_negative,
+    ),
+];
+
+/// Words allowed between a cue phrase and its number: "numerical aperture
+/// of 1.4", "NA = 1.4", "N.A.: 1.4", "ouverture numérique de 1,4".
+const CUE_LINKS: &[&str] = &["of", "=", ":", "is", "de", "d'", "égale à", "equal to"];
+
+/// Whether `before` (lower case) ends with `phrase` as whole words.
+fn ends_with_phrase(before: &str, phrase: &str) -> bool {
+    before.ends_with(phrase)
+        && before[..before.len() - phrase.len()]
+            .chars()
+            .last()
+            .is_none_or(|c| !c.is_alphanumeric())
+}
+
+/// Whether `after` (lower case) starts with `phrase` as whole words.
+fn starts_with_phrase(after: &str, phrase: &str) -> bool {
+    after.starts_with(phrase)
+        && after[phrase.len()..]
+            .chars()
+            .next()
+            .is_none_or(|c| !c.is_alphanumeric())
+}
+
+/// The cue phrase right before the number ending at char `start` of
+/// `chars`, with an optional link word: the char index where the phrase starts.
+fn cue_before(chars: &[char], start: usize, cues: &[&str]) -> Option<usize> {
+    let raw: String = chars[..start].iter().collect();
+    let lower = raw.to_lowercase();
+    // Lower-casing keeps the length in chars of these scripts; check it.
+    if lower.chars().count() != raw.chars().count() {
+        return None;
+    }
+    let mut before = lower.trim_end().to_string();
+    if let Some(link) = CUE_LINKS.iter().find(|l| ends_with_phrase(&before, l)) {
+        before.truncate(before.len() - link.len());
+        before = before.trim_end().to_string();
+    }
+    let cue = cues.iter().find(|c| ends_with_phrase(&before, c))?;
+    Some(before.chars().count() - cue.chars().count())
+}
+
+/// The cue phrase right after the number ending at char `end`: the char
+/// index where the phrase ends ("1.4 NA").
+fn cue_after(chars: &[char], end: usize, cues: &[&str]) -> Option<usize> {
+    let raw: String = chars[end..].iter().collect();
+    let lower = raw.to_lowercase();
+    if lower.chars().count() != raw.chars().count() {
+        return None;
+    }
+    let after = lower.trim_start();
+    let skipped = lower.chars().count() - after.chars().count();
+    let cue = cues.iter().find(|c| starts_with_phrase(after, c))?;
+    Some(end + skipped + cue.chars().count())
+}
+
+/// A dimensionless parameter written without a unit but named right next to
+/// its number, in the claim's sentence: the value, "dimensionless", the
+/// quotation (phrase and number) and where it starts. Only for parameters of
+/// [`UNITLESS_CUES`], only a number not followed by a unit and not already
+/// used, only a value meeting the law's condition, and only when exactly one
+/// number qualifies. A bare number ("Model 2000") is never taken.
+fn unitless_by_cue(
+    sentence: &str,
+    p: &crate::catalog::CatalogParameter,
+    with_units: &[(f64, String, String, usize)],
+    used: &[f64],
+) -> Option<(f64, String, String, usize)> {
+    if !p.units.iter().any(|u| u == "dimensionless") {
+        return None;
+    }
+    let (_, cues, valid) = UNITLESS_CUES.iter().find(|(n, _, _)| *n == p.name)?;
+    let chars: Vec<char> = sentence.chars().collect();
+    let found: Vec<(f64, String, String, usize)> = scan_numbers(sentence)
+        .into_iter()
+        .filter(|(v, start, _)| {
+            v.is_finite()
+                && valid(*v)
+                && !used.iter().any(|x| same(*x, *v))
+                && !with_units.iter().any(|(_, _, _, at)| at == start)
+        })
+        .filter_map(|(v, start, end)| {
+            let (from, to) = match cue_before(&chars, start, cues) {
+                Some(from) => (from, end),
+                None => (start, cue_after(&chars, end, cues)?),
+            };
+            let quote: String = chars[from..to].iter().collect();
+            Some((v, "dimensionless".to_string(), quote, from))
+        })
+        .collect();
+    match found.as_slice() {
+        [one] => Some(one.clone()),
+        _ => None,
+    }
+}
+
 /// The character range `[start, end)` of the sentence of `text` around `span`.
 fn sentence_bounds(text: &str, span: &Span) -> (usize, usize) {
     let sentence = sentence_around(text, span);
@@ -345,7 +513,7 @@ pub const UNIT_FROM_TEXT: &str = "unit read from the text:";
 
 /// The unit written right after `value` in the sentence of `evidence`,
 /// when exactly one written unit follows that number there.
-fn written_unit(text: &str, evidence: &str, value: f64) -> Option<String> {
+pub(crate) fn written_unit(text: &str, evidence: &str, value: f64) -> Option<String> {
     let span = locate(text, evidence)?;
     let sentence = sentence_around(text, &span);
     let units: Vec<String> = numbers_with_units(&sentence)
@@ -476,6 +644,33 @@ fn fill_options_from_sentence(claim: &mut CheckedClaim, text: &str, catalog: &Ca
     }
 }
 
+/// Note of a claim whose paragraph states a heat engine cycle.
+pub const HEAT_ENGINE_STATED: &str = "the text states a heat engine cycle between two reservoirs";
+
+/// The conversion process of a law that declares it (Carnot): a heat engine
+/// cycle only when the paragraph states one and names no converter that is
+/// not a heat engine. Otherwise the assumption stays open and the engine
+/// answers CONDITIONAL at most, never IMPOSSIBLE.
+fn confirm_conversion(claim: &mut CheckedClaim, text: &str, catalog: &Catalog) {
+    use crate::matcher::{heat_engine_confirmed, CONVERSION_PROCESS, HEAT_ENGINE_CYCLE};
+    let declares = claim
+        .limit_id
+        .as_deref()
+        .and_then(|id| catalog.limit(id))
+        .is_some_and(|l| l.assumption(CONVERSION_PROCESS).is_some());
+    if !declares {
+        return;
+    }
+    claim.constraints.remove(CONVERSION_PROCESS);
+    if heat_engine_confirmed(text) {
+        claim.constraints.insert(
+            CONVERSION_PROCESS.to_string(),
+            HEAT_ENGINE_CYCLE.to_string(),
+        );
+        claim.notes.push(HEAT_ENGINE_STATED.to_string());
+    }
+}
+
 /// A body named in a sentence, with its nominal gravitational parameter
 /// GM (m^3/s^2) and its nominal equatorial radius (m), from IAU 2015
 /// Resolution B3. Only bodies with IAU nominal values are listed.
@@ -492,11 +687,13 @@ const BODIES: &[(&str, &[&str], f64, f64)] = &[
 /// Note prefix of parameters taken from a named body's nominal values.
 pub const BODY_CONSTANTS: &str = "values of a named body (IAU 2015 nominal):";
 
-/// GM and r of a law left out by the text, when its sentence names exactly
+/// GM and r of a law left out by the text, when its paragraph names exactly
 /// one body of [`BODIES`] and says the claim starts from its surface: the
-/// body's nominal GM and equatorial radius. Nothing else is filled.
+/// body's nominal GM and equatorial radius. The paragraph, not the sentence:
+/// "The capsule starts from the surface of the Earth. It reaches 8 km/s."
+/// names the body before the number. Nothing else is filled.
 fn fill_body_constants(claim: &mut CheckedClaim, text: &str, catalog: &Catalog) {
-    let (Some(id), Some(span)) = (claim.limit_id.clone(), claim.evidence.clone()) else {
+    let (Some(id), Some(_)) = (claim.limit_id.clone(), claim.evidence.as_ref()) else {
         return;
     };
     let Some(limit) = catalog.limit(&id) else {
@@ -507,10 +704,10 @@ fn fill_body_constants(claim: &mut CheckedClaim, text: &str, catalog: &Catalog) 
     if !(wants("GM") && wants("r") && missing("GM") && missing("r")) {
         return;
     }
-    let sentence = sentence_around(text, &span).to_lowercase();
+    let paragraph = text.to_lowercase();
     let w = format!(
         " {} ",
-        sentence
+        paragraph
             .split(|c: char| !c.is_alphanumeric())
             .filter(|x| !x.is_empty())
             .collect::<Vec<_>>()
@@ -594,9 +791,18 @@ fn fill_parameters_from_sentence(claim: &mut CheckedClaim, text: &str, catalog: 
         } else {
             free.collect()
         };
-        let [(value, unit, quote, at)] = chosen.as_slice() else {
+        // No number written in a unit of the parameter: a dimensionless one
+        // may still be named right next to its number ("numerical aperture
+        // of 1.4"), never a bare number.
+        let picked: Option<(f64, String, String, usize)> = match chosen.as_slice() {
+            [(v, u, q, a)] => Some((*v, u.clone(), q.clone(), *a)),
+            [] if in_unit.is_empty() => unitless_by_cue(&sentence, p, &found, &used),
+            _ => None,
+        };
+        let Some(ref picked) = picked else {
             continue;
         };
+        let (value, unit, quote, at) = (&picked.0, &picked.1, &picked.2, &picked.3);
         let Some(inner) = locate(&sentence.chars().skip(*at).collect::<String>(), quote) else {
             continue;
         };
@@ -889,6 +1095,10 @@ fn check_claim(claim: &ModelClaim, text: &str, catalog: &Catalog) -> CheckedClai
         .collect();
     let mut constraints = BTreeMap::new();
     for (assumption, option) in &claim.constraints {
+        // Decided from the paragraph by `confirm_conversion`, never by the reading.
+        if assumption == crate::matcher::CONVERSION_PROCESS {
+            continue;
+        }
         if limit.is_some_and(|l| stated(text, l, assumption, option)) {
             constraints.insert(assumption.clone(), option.clone());
         } else {
@@ -1622,8 +1832,9 @@ mod tests {
 
     #[test]
     fn percent_becomes_a_fraction_with_a_note() {
+        // A heat engine is stated: the model's Carnot hint is kept.
         let c = &checked(
-            "at 60% efficiency",
+            "heat engine at 60% efficiency",
             r#"{"claims":[{"limit_id":"carnot","quantity":"efficiency","value":60,"unit":"%","evidence":"60% efficiency","constraints":{},"parameters":{}}],"missing":[]}"#,
         )[0];
         assert_eq!(c.value, Some(0.6));
@@ -1633,8 +1844,8 @@ mod tests {
             c.evidence,
             Some(Span {
                 text: "60% efficiency".into(),
-                start: 3,
-                end: 17
+                start: 15,
+                end: 29
             })
         );
     }
@@ -1642,14 +1853,14 @@ mod tests {
     #[test]
     fn a_unit_the_limit_does_not_allow_is_flagged_not_guessed() {
         let c = &checked(
-            "between 327 °C and 27 °C at 40%",
+            "a heat engine between 327 °C and 27 °C at 40%",
             r#"{"claims":[{"limit_id":"carnot","quantity":"efficiency","value":40,"unit":"%","evidence":"40%","constraints":{},"parameters":{"Th":{"value":327,"unit":"°C","evidence":"327 °C"}}}],"missing":[]}"#,
         )[0];
         assert!(c.flags.iter().any(|f| f == UNIT_NOT_UNDERSTOOD));
         assert_eq!(c.parameters["Th"].value, None);
         assert_eq!(c.not_evaluable_reason(), Some(UNIT_NOT_UNDERSTOOD));
         let d = &checked(
-            "efficiency of 0.4 W",
+            "heat engine efficiency of 0.4 W",
             r#"{"claims":[{"limit_id":"carnot","quantity":"efficiency","value":0.4,"unit":"W","evidence":"0.4 W","constraints":{},"parameters":{}}],"missing":[]}"#,
         )[0];
         assert_eq!(d.value, None);
@@ -1844,6 +2055,99 @@ mod tests {
         assert_eq!((b.value, b.unit.as_str()), (Some(1.0), "MHz"), "{out:?}");
         assert_eq!(out[0].unit, "bit/s");
         assert_eq!(out[0].value, Some(3e6));
+    }
+
+    fn abbe_catalog() -> Catalog {
+        Catalog {
+            limits: vec![CatalogLimit {
+                id: "abbe_limit".into(),
+                title: "Abbe diffraction limit".into(),
+                formula: "wavelength/(2*aperture)".into(),
+                claim_unit: "m".into(),
+                parameters: vec![
+                    crate::catalog::CatalogParameter {
+                        name: "wavelength".into(),
+                        units: vec!["m".into(), "um".into(), "nm".into()],
+                    },
+                    crate::catalog::CatalogParameter {
+                        name: "aperture".into(),
+                        units: vec!["dimensionless".into()],
+                    },
+                ],
+                assumptions: vec![],
+            }],
+        }
+    }
+
+    /// The model reads the resolved size and the wavelength only (seen in
+    /// the e2e run); the aperture is read from the text where a phrase names it.
+    fn aperture_read(text: &str) -> Option<(f64, String)> {
+        let json = r#"{"claims":[{"limit_id":"abbe_limit","quantity":"resolution","value":100,"unit":"nm","evidence":"100 nm","constraints":{},
+            "parameters":{"wavelength":{"value":500,"unit":"nm","evidence":"500 nm"}}}],"missing":[]}"#;
+        let out = check(
+            &parse_model_output(json).expect("json"),
+            text,
+            &abbe_catalog(),
+        );
+        let a = out[0].parameters.get("aperture")?;
+        Some((a.value?, a.evidence.as_ref()?.text.clone()))
+    }
+
+    #[test]
+    fn an_initialism_does_not_end_the_sentence() {
+        let text = "It resolves 100 nm with an N.A. of 1.2. The next sentence has 5 K.";
+        let span = locate(text, "100 nm").expect("found");
+        assert_eq!(
+            sentence_around(text, &span),
+            "It resolves 100 nm with an N.A. of 1.2."
+        );
+    }
+
+    #[test]
+    fn a_dimensionless_parameter_named_next_to_its_number_is_read_when_the_model_omits_it() {
+        let lumen = "The Lumen microscope resolves details of 100 nm using light of 500 nm wavelength and a numerical aperture of 1.4.";
+        assert_eq!(
+            aperture_read(lumen),
+            Some((1.4, "numerical aperture of 1.4".to_string()))
+        );
+        for (text, value) in [
+            (
+                "It resolves details of 100 nm at 500 nm with NA = 0.95.",
+                0.95,
+            ),
+            (
+                "It resolves details of 100 nm at 500 nm with an N.A. of 1.2.",
+                1.2,
+            ),
+            (
+                "It resolves details of 100 nm at 500 nm and a 1.3 NA objective.",
+                1.3,
+            ),
+            (
+                "Il résout des détails de 100 nm à 500 nm avec une ouverture numérique de 1,4.",
+                1.4,
+            ),
+        ] {
+            assert_eq!(aperture_read(text).map(|(v, _)| v), Some(value), "{text}");
+        }
+    }
+
+    #[test]
+    fn a_bare_number_or_a_value_outside_the_law_is_never_taken_as_a_parameter() {
+        for text in [
+            // A model number, no phrase next to it.
+            "The Model 2000 microscope resolves details of 100 nm using light of 500 nm wavelength.",
+            // The phrase is in the sentence, but not next to the number.
+            "The numerical aperture is high; the Model 2000 resolves details of 100 nm at 500 nm.",
+            // NA > 0: the bound divides by the aperture.
+            "It resolves details of 100 nm at 500 nm with a numerical aperture of 0.",
+            // Two named values: ambiguous, none is chosen.
+            "It resolves details of 100 nm at 500 nm with NA 1.2 or NA 1.4.",
+            // "na" inside a word is not the phrase.
+            "The Arena 1.4 microscope resolves details of 100 nm at 500 nm.",
+        ] {
+            assert_eq!(aperture_read(text), None, "{text}");
+        }
     }
 
     #[test]

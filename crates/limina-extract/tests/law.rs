@@ -150,8 +150,10 @@ fn parameters_follow_the_evidence_rules() {
     assert_eq!(&text[text.find("one bit").expect("in")..][..16], span.text);
     assert_eq!(found[1].value, None, "293.15 is not written in the text");
     assert_eq!(found[1].flags, ["not traceable to the text"]);
-    assert_eq!(found[2].value, None);
-    assert_eq!(found[2].flags, ["unit not understood"]);
+    // Read as 300 °C, but the text writes "300 K": the written unit wins, as
+    // in the extraction, so the value is the 300 K of the text.
+    assert_eq!(found[2].value, Some(300.0));
+    assert_eq!(found[2].unit, "K");
     assert_eq!(found[3].flags, ["not traceable to the text"]);
     assert_eq!(found[4].flags, ["not stated in the text"]);
     assert_eq!(found[5].flags, ["not stated in the text"]);
@@ -159,6 +161,26 @@ fn parameters_follow_the_evidence_rules() {
         check_parameters("no json", text, &wanted),
         Err(ExtractError::ExtractionFailed(_))
     ));
+}
+
+/// A unit the text writes next to the number, that the parameter cannot
+/// take, rejects the value whatever unit the model read ("details of 100
+/// nm" read as a momentum of 100 kg*m/s).
+#[test]
+fn a_parameter_whose_written_unit_the_law_does_not_allow_is_rejected() {
+    let text = "The Lumen microscope resolves details of 100 nm using light of 500 nm wavelength.";
+    let wanted = vec![WantedParameter {
+        name: "p".into(),
+        units: vec!["kg*m/s".into()],
+        meaning: String::new(),
+    }];
+    let answer = json!({"parameters": {"p": {"value": 100, "unit": "kg*m/s",
+        "evidence": "The Lumen microscope resolves details of 100 nm"}}})
+    .to_string();
+    let found = check_parameters(&answer, text, &wanted).expect("checked");
+    assert_eq!(found[0].value, None);
+    assert_eq!(found[0].unit, "nm");
+    assert_eq!(found[0].flags, ["unit not understood"]);
 }
 
 #[tokio::test]

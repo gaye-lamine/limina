@@ -418,11 +418,22 @@ pub fn check_parameters(
                 _ => None,
             };
             found.evidence = span;
+            // The unit written next to the number in the text wins over the
+            // one read, as in the extraction: "100 nm" read as 100 kg*m/s is
+            // 100 nm, which a momentum cannot take.
+            let written = traced.and_then(|v| {
+                crate::check::written_unit(text, p.evidence.as_deref().unwrap_or(""), v)
+            });
+            if let Some(u) = written.filter(|u| !crate::check::same_unit(u, &found.unit)) {
+                found.unit = u;
+            }
+            let allowed = w
+                .units
+                .iter()
+                .any(|u| crate::check::same_unit(u, &found.unit));
             match traced {
                 None => found.flags.push(crate::check::NOT_TRACEABLE.into()),
-                Some(_) if !w.units.contains(&found.unit) => {
-                    found.flags.push(crate::check::UNIT_NOT_UNDERSTOOD.into())
-                }
+                Some(_) if !allowed => found.flags.push(crate::check::UNIT_NOT_UNDERSTOOD.into()),
                 Some(v) => found.value = Some(v),
             }
             found

@@ -83,6 +83,15 @@ pub enum ApiError {
     /// `POST /v1/curve`: the range or the point count is invalid.
     #[error("invalid curve request: {0}")]
     InvalidCurveRequest(String),
+    /// A law written by AI is not applied to this claim. No verdict.
+    #[error("the AI-written law is not applied: {0}")]
+    DraftNotApplied(String),
+    /// `POST /v1/analyze` ran longer than its deadline and was stopped.
+    #[error("the analysis took longer than {secs} s and was stopped; try a shorter text, or try again later")]
+    AnalysisTimeout {
+        /// The deadline, in seconds.
+        secs: u64,
+    },
     /// A validity condition of the law does not hold for the given
     /// parameters: the law does not apply to this claim. No verdict.
     #[error("outside the model domain of {limit_id}: the condition \"{condition}\" does not hold")]
@@ -142,6 +151,8 @@ impl ApiError {
             ApiError::MissingFixedParameter(_) => "MissingFixedParameter",
             ApiError::InvalidCurveRequest(_) => "InvalidCurveRequest",
             ApiError::OutsideModelDomain { .. } => "OutsideModelDomain",
+            ApiError::DraftNotApplied(_) => "DraftNotApplied",
+            ApiError::AnalysisTimeout { .. } => "AnalysisTimeout",
         }
     }
 
@@ -156,7 +167,9 @@ impl ApiError {
                 StatusCode::BAD_GATEWAY
             }
             ApiError::RateLimited => StatusCode::TOO_MANY_REQUESTS,
-            ApiError::UnknownLimit(_)
+            ApiError::AnalysisTimeout { .. } => StatusCode::GATEWAY_TIMEOUT,
+            ApiError::DraftNotApplied(_)
+            | ApiError::UnknownLimit(_)
             | ApiError::Engine(_)
             | ApiError::TextTooLong { .. }
             | ApiError::EmptyText

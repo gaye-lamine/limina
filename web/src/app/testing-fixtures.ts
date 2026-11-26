@@ -34,13 +34,20 @@ export const LIMITS: LimitInfo[] = [
     formula: 'efficiency <= 1 - Tc/Th',
     statement: 'A heat engine cannot turn a larger fraction of its heat into work than 1 - Tc/Th.',
     claim_unit: 'dimensionless',
-    assumptions: [{ id: 'cycle_model', options: ['ideal_reversible_two_reservoirs'] }],
+    assumptions: [
+      { id: 'cycle_model', options: ['ideal_reversible_two_reservoirs'] },
+      { id: 'conversion_process', options: ['heat_engine_cycle', 'not_a_heat_engine_cycle'] },
+    ],
     parameters: [
       { id: 'Th', kind: 'AbsoluteTemperature', required: true, units: ['K'] },
       { id: 'Tc', kind: 'AbsoluteTemperature', required: true, units: ['K'] },
     ],
-    assumption_labels: { cycle_model: 'cycle model' },
-    option_labels: { ideal_reversible_two_reservoirs: 'ideal reversible cycle between two reservoirs' },
+    assumption_labels: { cycle_model: 'cycle model', conversion_process: 'conversion process' },
+    option_labels: {
+      ideal_reversible_two_reservoirs: 'ideal reversible cycle between two reservoirs',
+      heat_engine_cycle: 'a heat engine cycle between two reservoirs',
+      not_a_heat_engine_cycle: 'a conversion that is not a heat engine cycle',
+    },
     parameter_labels: TEMPERATURE_LABELS,
     classification: 'theorem',
   },

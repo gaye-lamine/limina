@@ -103,14 +103,16 @@ export const SAMPLES: Sample[] = [
         limit_id: 'carnot',
         ...q(0.6, 'dimensionless', '60%', 60, '%'),
         parameters: { Th: q(600, 'K', '600 K'), Tc: q(300, 'K', '300 K') },
-        constraints: {},
+        // A turbine and an engine: the text states a heat engine cycle.
+        constraints: { conversion_process: 'heat_engine_cycle' },
       },
       {
         quantity: 'thermal efficiency',
         limit_id: 'carnot',
         ...q(0.4, 'dimensionless', '40%', 40, '%'),
         parameters: { Th: q(600, 'K', '600 K'), Tc: q(300, 'K', '300 K') },
-        constraints: {},
+        // A turbine and an engine: the text states a heat engine cycle.
+        constraints: { conversion_process: 'heat_engine_cycle' },
       },
       {
         quantity: 'coefficient of performance',

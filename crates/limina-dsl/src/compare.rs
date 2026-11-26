@@ -30,22 +30,39 @@ pub const COMPARISON_SEED: u64 = 0x4C49_4D49_4E41;
 /// The result of a comparison.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Comparison {
-    /// True only when every check and every sample agrees.
+    /// True only when every check and every sample agrees, and at least
+    /// [`min_compared`] samples gave a bound under both definitions.
     pub agreed: bool,
-    /// Samples evaluated.
+    /// Samples drawn.
     pub samples: usize,
-    /// Largest relative difference seen over the samples (0 without samples).
+    /// Samples where both definitions gave a bound that was compared. A
+    /// sample where both fail the same way (outside a domain, a division by
+    /// zero) is drawn but not compared: it is no evidence of agreement.
+    pub compared: usize,
+    /// Largest relative difference seen over the compared samples (0 without any).
     pub max_relative_difference: f64,
     /// Why they do not agree; None when they agree.
     pub reason: Option<String>,
+    /// The range of each parameter where the samples were drawn (SI units):
+    /// the intersection of the two definitions' ranges. Agreement says
+    /// nothing outside it. Empty when the comparison stopped before sampling.
+    pub ranges: Vec<(String, f64, f64)>,
+}
+
+/// Fewest compared samples for agreement: a quarter of the samples drawn
+/// (50 of the default 200), at least one.
+pub fn min_compared(samples: usize) -> usize {
+    samples.div_ceil(4).max(1)
 }
 
 fn disagree(reason: String, samples: usize, max: f64) -> Comparison {
     Comparison {
         agreed: false,
         samples,
+        compared: 0,
         max_relative_difference: max,
         reason: Some(reason),
+        ranges: Vec::new(),
     }
 }
 
@@ -213,6 +230,15 @@ pub fn compare_limits(
     };
     let mut rng = Rng(seed);
     let mut max = 0.0f64;
+    let mut compared = 0usize;
+    let with = |mut c: Comparison, n: usize| {
+        c.compared = n;
+        c.ranges = ranges
+            .iter()
+            .map(|(name, (lo, hi))| (name.clone(), *lo, *hi))
+            .collect();
+        c
+    };
     for i in 0..samples {
         let mut map = BTreeMap::new();
         let mut point = Vec::new();
@@ -223,7 +249,7 @@ pub fn compare_limits(
                 Ok(iv) => {
                     map.insert(ParameterId::new(name.clone()), iv);
                 }
-                Err(e) => return disagree(format!("sample {v}: {e}"), i, max),
+                Err(e) => return with(disagree(format!("sample {v}: {e}"), i, max), compared),
             }
         }
         let enclosure = ParameterEnclosure::new(map);
@@ -231,42 +257,70 @@ pub fn compare_limits(
         let y = decisive_bound(b, &set_b, &enclosure);
         match (&x, &y) {
             (Ok(x), Ok(y)) => {
+                compared += 1;
                 let d = relative_difference(*x, *y);
                 max = max.max(d);
-                if d.is_nan() || d > AGREEMENT_TOLERANCE {
-                    return disagree(
-                        format!(
-                            "bounds differ at {}: {x:e} against {y:e} (relative difference {d:e})",
-                            point.join(", ")
+                if !d.is_finite() || d > AGREEMENT_TOLERANCE {
+                    return with(
+                        disagree(
+                            format!(
+                                "bounds differ at {}: {x:e} against {y:e} (relative difference {d:e})",
+                                point.join(", ")
+                            ),
+                            i + 1,
+                            max,
                         ),
-                        i + 1,
-                        max,
+                        compared,
                     );
                 }
             }
+            // Both undefined the same way: drawn, not compared.
             (Err(x), Err(y)) if discriminant(x) == discriminant(y) => {}
             _ => {
                 let show = |r: &Result<f64, EngineError>| match r {
                     Ok(v) => format!("{v:e}"),
                     Err(e) => e.to_string(),
                 };
-                return disagree(
-                    format!(
-                        "at {} one definition gives {} and the other {}",
-                        point.join(", "),
-                        show(&x),
-                        show(&y)
+                return with(
+                    disagree(
+                        format!(
+                            "at {} one definition gives {} and the other {}",
+                            point.join(", "),
+                            show(&x),
+                            show(&y)
+                        ),
+                        i + 1,
+                        max,
                     ),
-                    i + 1,
-                    max,
+                    compared,
                 );
             }
         }
     }
-    Comparison {
-        agreed: true,
-        samples,
-        max_relative_difference: max,
-        reason: None,
+    let needed = min_compared(samples);
+    if compared < needed {
+        return with(
+            disagree(
+                format!(
+                    "only {compared} of {samples} samples gave a bound under both definitions \
+                     (at least {needed} are needed); elsewhere both are undefined, which is no \
+                     evidence that they agree"
+                ),
+                samples,
+                max,
+            ),
+            compared,
+        );
     }
+    with(
+        Comparison {
+            agreed: true,
+            samples,
+            compared,
+            max_relative_difference: max,
+            reason: None,
+            ranges: Vec::new(),
+        },
+        compared,
+    )
 }

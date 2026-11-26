@@ -126,6 +126,8 @@ describe('display of engine results', () => {
     const missing = missingAssumptions(claimOf({ limit_id: 'betz', constraints: {} }), betz);
     expect(missing.map((m) => m.id)).toEqual(['reference_area']);
     expect(stateAssumptions(missing)).toMatch(/^State the .+: .+ or .+\.$/);
-    expect(missingAssumptions(claimOf({ constraints: {} }), carnot)).toEqual([]);
+    // Carnot: a heat engine cycle must be stated, so it is a choice to make.
+    expect(missingAssumptions(claimOf({ constraints: {} }), carnot).map((m) => m.id)).toEqual(['conversion_process']);
+    expect(missingAssumptions(claimOf({ constraints: { conversion_process: 'heat_engine_cycle' } }), carnot)).toEqual([]);
   });
 });

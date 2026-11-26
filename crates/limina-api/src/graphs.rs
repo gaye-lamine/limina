@@ -10,6 +10,7 @@ use limina_core::{AssumptionId, ConstraintsMap, Direction, EngineError, Limit, O
 use limina_dsl::{
     bound_surface, decisive, zones, CurveError, CurvePoint, EqualityLimit, SurfaceAxis,
 };
+use limina_extract::matcher::{CONVERSION_PROCESS, HEAT_ENGINE_CYCLE};
 
 use crate::authoring::si;
 use crate::dto::{CurvePointDto, CurveRequest, ParameterDto, SurfaceRequest, SurfaceResponse};
@@ -30,6 +31,19 @@ pub(crate) fn constraints_of(map: &BTreeMap<String, Vec<String>>) -> Constraints
         );
     }
     constraints
+}
+
+/// The constraints of a plot. A plot shows the law's bound where it
+/// applies: Carnot, when the request leaves its conversion process open, is
+/// drawn for a heat engine cycle (the other option bounds nothing). Plots
+/// carry no verdict.
+pub(crate) fn plot_constraints(id: &str, map: &BTreeMap<String, Vec<String>>) -> ConstraintsMap {
+    let mut map = map.clone();
+    if id == "carnot" {
+        map.entry(CONVERSION_PROCESS.to_string())
+            .or_insert_with(|| vec![HEAT_ENGINE_CYCLE.to_string()]);
+    }
+    constraints_of(&map)
 }
 
 /// The given parameters in SI, except the free ones; a name the limit does
@@ -171,7 +185,7 @@ pub fn surface_with(
     )?;
     let values = bound_surface(
         limit.as_ref(),
-        &constraints_of(&request.constraints),
+        &plot_constraints(id, &request.constraints),
         &fixed,
         &x,
         &y,

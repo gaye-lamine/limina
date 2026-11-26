@@ -1,5 +1,6 @@
 import { AnalyzedClaim } from './analysis.models';
 import { LIMITS } from './testing-fixtures';
+import { UI } from './strings';
 import {
   Entry,
   filtered,
@@ -57,6 +58,24 @@ describe('verdict kinds and labels', () => {
     expect(ratioSentence(0.7156, 'Min', true)).toBe('The claim is 28 % below the minimum the law requires.');
     expect(ratioSentence(1.49, 'Min', false)).toBe('The claim is 1.49 times the minimum the law requires, within the bound.');
     expect(plainSentence(entry('CONDITIONAL'), 'Max')).toBe('Possible only if mode = heating.');
+    // Carnot without a stated heat engine: the open option is named in words;
+    // the single-option cycle model is left out.
+    const carnot = LIMITS.find((l) => l.id === 'carnot')!;
+    const open = entry('CONDITIONAL');
+    if (open.kind === 'claim') {
+      open.claim.constraints = {};
+      open.claim.result = {
+        ...open.claim.result!,
+        configurations: [
+          { assumptions: { cycle_model: 'ideal_reversible_two_reservoirs', conversion_process: 'not_a_heat_engine_cycle' }, support: 'Certain', depends_on: [] },
+        ],
+      };
+    }
+    expect(plainSentence(open, 'Max', carnot)).toBe(
+      'Possible only with a conversion that is not a heat engine cycle. Under any other assumption of the law, the claim is inconsistent with it.',
+    );
+    // A paragraph stopped for taking too long says so in plain words.
+    expect(UI.failedSentence('AnalysisTimeout')).toBe('Checking this paragraph took too long, so it was stopped. Try a shorter paragraph, or try again later.');
     expect(plainSentence(entry('INSUFFICIENT_DATA'), 'Max')).toBe('A value the text does not give is needed: Tc.');
     expect(plainSentence(noLaw, 'Max')).toBe('No verdict: no established law identified for this quantity.');
     expect(plainSentence(failure, 'Max')).toBe('This paragraph could not be read.');

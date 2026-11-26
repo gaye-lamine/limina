@@ -41,10 +41,10 @@ Betz: a power coefficient of 0.70 for an unshrouded rotor (expected verdict: `IM
 curl -X POST http://127.0.0.1:3000/v1/evaluate -H "Content-Type: application/json" -d '{"limit_id":"betz","claim":{"value":0.70,"unit":"dimensionless"},"constraints":{"reference_area":["unshrouded_rotor"]},"parameters":{}}'
 ```
 
-Carnot: an efficiency of 0.60 between 600 K and 300 K (expected verdict: `IMPOSSIBLE`):
+Carnot: a heat engine at an efficiency of 0.60 between 600 K and 300 K (expected verdict: `IMPOSSIBLE`; without `conversion_process` stated, the verdict is `CONDITIONAL`, since two temperatures do not make a heat engine):
 
 ```
-curl -X POST http://127.0.0.1:3000/v1/evaluate -H "Content-Type: application/json" -d '{"limit_id":"carnot","claim":{"value":0.60,"unit":"dimensionless"},"constraints":{},"parameters":{"Th":{"value":600,"unit":"K"},"Tc":{"value":300,"unit":"K"}}}'
+curl -X POST http://127.0.0.1:3000/v1/evaluate -H "Content-Type: application/json" -d '{"limit_id":"carnot","claim":{"value":0.60,"unit":"dimensionless"},"constraints":{"conversion_process":["heat_engine_cycle"]},"parameters":{"Th":{"value":600,"unit":"K"},"Tc":{"value":300,"unit":"K"}}}'
 ```
 
 These commands use bash quoting. In Windows PowerShell, save the JSON body to a file and send it with `curl.exe -X POST http://127.0.0.1:3000/v1/evaluate -H "Content-Type: application/json" -d "@body.json"`.

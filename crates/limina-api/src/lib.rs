@@ -15,12 +15,14 @@ pub mod graphs;
 pub mod handlers;
 pub mod labels;
 pub mod pipeline;
+pub mod qualified;
 pub mod registry;
 pub mod response;
 
 use std::fmt;
 use std::net::SocketAddr;
 use std::sync::{Arc, RwLock};
+use std::time::Duration;
 
 use limina_dsl::DeclarativeLimit;
 
@@ -42,7 +44,12 @@ pub struct AppState {
     vision: Option<Arc<dyn VisionProvider>>,
     agreements: Arc<RwLock<BTreeMap<String, String>>>,
     chains: Option<dto::ChainsDto>,
+    analyze_timeout: Option<Duration>,
 }
+
+/// Default deadline of one `POST /v1/analyze` request
+/// (`LIMINA_ANALYZE_TIMEOUT_SECS` overrides it).
+pub const DEFAULT_ANALYZE_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// One OpenAI-compatible provider per model id of `models`.
 fn links(
@@ -174,9 +181,30 @@ impl AppState {
         }
     }
 
-    /// [`AppState::from_config`] on the process environment.
+    /// [`AppState::from_config`] on the process environment, with the
+    /// analysis deadline of `LIMINA_ANALYZE_TIMEOUT_SECS` when it is a
+    /// positive number of seconds.
     pub fn from_env() -> Result<AppState, ExtractError> {
-        AppState::from_config(&ExtractConfig::from_env())
+        let state = AppState::from_config(&ExtractConfig::from_env())?;
+        let secs = std::env::var("LIMINA_ANALYZE_TIMEOUT_SECS")
+            .ok()
+            .and_then(|s| s.trim().parse::<u64>().ok())
+            .filter(|s| *s > 0);
+        Ok(match secs {
+            Some(s) => state.with_analyze_timeout(Duration::from_secs(s)),
+            None => state,
+        })
+    }
+
+    /// Sets the deadline of one `POST /v1/analyze` request.
+    pub fn with_analyze_timeout(mut self, timeout: Duration) -> AppState {
+        self.analyze_timeout = Some(timeout);
+        self
+    }
+
+    /// The deadline of one `POST /v1/analyze` request.
+    pub fn analyze_timeout(&self) -> Duration {
+        self.analyze_timeout.unwrap_or(DEFAULT_ANALYZE_TIMEOUT)
     }
 
     /// Extraction through any provider, on the served limits.

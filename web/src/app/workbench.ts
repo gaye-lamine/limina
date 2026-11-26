@@ -4,7 +4,7 @@ import { Accordion, AccordionContent, AccordionHeader, AccordionPanel } from 'pr
 import { Drawer } from 'primeng/drawer';
 import { Timeline } from 'primeng/timeline';
 import { LucideAngularModule, ChevronDown, ChevronLeft, ChevronRight, Copy, Download, ExternalLink, ImageUp, X } from 'lucide-angular';
-import { Observable, firstValueFrom } from 'rxjs';
+import { Observable, Subject, firstValueFrom, takeUntil } from 'rxjs';
 import { AnalyzeResponse, AnalyzedClaim } from './analysis.models';
 import { AnalysisService } from './analysis.service';
 import { ApiFailure, EvaluateResponse, LimitInfo } from './api.models';
@@ -119,6 +119,9 @@ export class Workbench {
 
   readonly text = signal(SAMPLES[0].text);
   readonly running = signal(false);
+  /** Set by "Cancel analysis": no new paragraph is sent and the request in flight is aborted. */
+  readonly cancelling = signal(false);
+  private readonly cancel$ = new Subject<void>();
   readonly analysed = signal(false);
   readonly entries = signal<Entry[]>([]);
   readonly selected = signal(0);
@@ -593,8 +596,9 @@ export class Workbench {
     if (item) void this.takeImage(item.getAsFile(), event);
   }
 
-  private async analyzeOnce(text: string): Promise<AnalyzeResponse> {
-    return firstValueFrom(this.analysis.analyze(text) as Observable<AnalyzeResponse>);
+  private async analyzeOnce(text: string): Promise<AnalyzeResponse | null> {
+    // Unsubscribing aborts the HTTP request; a cancelled request resolves to null.
+    return firstValueFrom((this.analysis.analyze(text) as Observable<AnalyzeResponse>).pipe(takeUntil(this.cancel$)), { defaultValue: null });
   }
 
   private paragraphOf(start: number): number {
@@ -604,6 +608,13 @@ export class Workbench {
       if (p.start <= start) k = i;
     });
     return k + 1;
+  }
+
+  /** "Cancel analysis": aborts the request in flight and sends no further paragraph. */
+  cancel(): void {
+    if (!this.running() || this.cancelling()) return;
+    this.cancelling.set(true);
+    this.cancel$.next();
   }
 
   /** Runs the pipeline: each paragraph through POST /v1/analyze, or a built-in sample through the engine. */
@@ -627,8 +638,14 @@ export class Workbench {
     const text = this.text();
     this.parts.set(paragraphs(text));
     const sample = sampleOf(text);
+    this.cancelling.set(false);
     if (sample && !this.status.extraction()) await this.runSample(sample);
     else await this.runModel();
+    if (this.cancelling()) {
+      // Cancelled: the claims read so far are kept and reviewed.
+      this.toast.show(UI.analysisCancelled);
+      this.cancelling.set(false);
+    }
     // Every paragraph is answered: the server has read the text and identified each claim's law.
     this.setStep(0, 'done');
     this.setStep(1, 'done');
@@ -646,6 +663,7 @@ export class Workbench {
   private async runModel(): Promise<void> {
     const parts = this.parts();
     for (const [k, p] of parts.entries()) {
+      if (this.cancelling()) break;
       const head = `${WB.progressParagraph} ${k + 1} ${WB.progressOf} ${parts.length}`;
       const line = this.push({ text: head, status: 'running' });
       let attempt = 0;
@@ -653,6 +671,10 @@ export class Workbench {
         attempt += 1;
         try {
           const r = await this.analyzeOnce(p.text);
+          if (r === null) {
+            this.settle(line, 'failed', `${head}: ${UI.paragraphCancelled}`);
+            break;
+          }
           const claims = r.claims.map((c) => shiftClaim(c, p.start));
           // An answer with claims carries the server's law identification (its 'limit' step).
           if (claims.some((c) => c.trace.some((t) => t.step === 'limit'))) this.setStep(1, 'active');
@@ -661,7 +683,7 @@ export class Workbench {
           break;
         } catch (e) {
           const f = e as ApiFailure;
-          if (f.code === 'ExtractionFailed' && attempt < ATTEMPTS) {
+          if (f.code === 'ExtractionFailed' && attempt < ATTEMPTS && !this.cancelling()) {
             this.settle(line, 'running', `${head}: ${WB.progressRetry} (${attempt})`);
             continue;
           }

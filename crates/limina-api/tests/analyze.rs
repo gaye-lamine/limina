@@ -65,7 +65,17 @@ async fn carnot_heat_engine_at_60_percent_is_impossible_with_bound_one_half() {
     assert_eq!(claim["unit"], "dimensionless");
     assert_eq!(claim["raw_value"], 60.0);
     assert_eq!(claim["raw_unit"], "%");
-    assert_eq!(claim["notes"], json!(["60 % becomes 0.60"]));
+    assert_eq!(
+        claim["notes"],
+        json!([
+            "60 % becomes 0.60",
+            "the text states a heat engine cycle between two reservoirs"
+        ])
+    );
+    assert_eq!(
+        claim["constraints"],
+        json!({"conversion_process": "heat_engine_cycle"})
+    );
     let (s, e) = offsets(CARNOT_TEXT, "60% efficiency");
     assert_eq!(
         claim["evidence"],
@@ -128,7 +138,7 @@ async fn the_result_is_the_same_as_post_evaluate() {
     let request = Request::post("/v1/evaluate")
         .header("content-type", "application/json")
         .body(Body::from(
-            json!({"limit_id":"carnot","claim":{"value":0.6,"unit":"dimensionless"},"constraints":{},"parameters":{"Th":{"value":600.0,"unit":"K"},"Tc":{"value":300.0,"unit":"K"}}}).to_string(),
+            json!({"limit_id":"carnot","claim":{"value":0.6,"unit":"dimensionless"},"constraints":{"conversion_process":["heat_engine_cycle"]},"parameters":{"Th":{"value":600.0,"unit":"K"},"Tc":{"value":300.0,"unit":"K"}}}).to_string(),
         ))
         .expect("request");
     let response = limina_api::router()

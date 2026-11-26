@@ -168,6 +168,7 @@ describe('activeAssumptions', () => {
     expect(activeAssumptions(BETZ, {})).toEqual([{ id: 'reference_area', value: 'not specified' }]);
     expect(activeAssumptions(CARNOT, {})).toEqual([
       { id: 'cycle_model', value: 'ideal_reversible_two_reservoirs' },
+      { id: 'conversion_process', value: 'not specified' },
     ]);
   });
 });

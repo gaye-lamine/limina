@@ -102,6 +102,9 @@
         <span class="run-sep" aria-hidden="true"></span>
         <span class="num" [appCountUp]="answered()"></span> / <span class="num">{{ parts().length }}</span>
       </p>
+      <button type="button" class="btn btn-secondary cancel-button" (click)="cancel()" [disabled]="cancelling()">
+        <lucide-icon [img]="icons.X" [size]="16" aria-hidden="true" />{{ cancelling() ? u.cancelling : u.cancelAnalysis }}
+      </button>
     </section>
   } @else {
     <section class="summary" [attr.aria-label]="u.summaryLabel">
