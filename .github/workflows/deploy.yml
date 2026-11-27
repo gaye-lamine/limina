@@ -1,0 +1,92 @@
+name: Deploy
+
+# Builds the web app and the API and puts them on the VPS (user `limina`).
+# Secrets: VPS_HOST (address of the VPS) and VPS_SSH_KEY (the private deployment key).
+# Without them the build still runs and the deployment is skipped.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build the web app
+        working-directory: web
+        run: |
+          npm ci
+          npm run build
+
+      - name: Build the API (release)
+        run: cargo build --release --locked -p limina-api
+
+      - name: Check the deployment secrets
+        id: secrets
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          if [ -n "$VPS_HOST" ] && [ -n "$VPS_SSH_KEY" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::VPS_HOST or VPS_SSH_KEY is not set: the build is checked, nothing is deployed."
+          fi
+
+      - name: Prepare the SSH key
+        if: steps.secrets.outputs.ready == 'true'
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/limina_deploy
+          chmod 600 ~/.ssh/limina_deploy
+
+      - name: Send the API binary
+        if: steps.secrets.outputs.ready == 'true'
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+        run: |
+          scp -i ~/.ssh/limina_deploy -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
+            target/release/limina-api "limina@${VPS_HOST}:/opt/limina/limina-api.new"
+
+      - name: Synchronise the web app
+        if: steps.secrets.outputs.ready == 'true'
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+        run: |
+          if [ -d web/dist/web/browser ]; then SRC=web/dist/web/browser/; else SRC=web/dist/web/; fi
+          echo "sending $SRC"
+          rsync -az --delete \
+            -e "ssh -i $HOME/.ssh/limina_deploy -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=accept-new" \
+            "$SRC" "limina@${VPS_HOST}:/opt/limina/web/"
+
+      - name: Switch to the new version and restart
+        if: steps.secrets.outputs.ready == 'true'
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+        run: |
+          ssh -i ~/.ssh/limina_deploy -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
+            "limina@${VPS_HOST}" \
+            'chmod +x /opt/limina/limina-api.new && mv -f /opt/limina/limina-api.new /opt/limina/limina-api && sudo systemctl restart limina && sleep 1 && curl -sf http://127.0.0.1:3000/v1/limits > /dev/null'
