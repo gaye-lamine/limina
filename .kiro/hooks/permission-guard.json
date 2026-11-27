@@ -1,0 +1,15 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "permission-guard",
+      "trigger": "PermissionRequest",
+      "description": "Unattended runs: approves shell commands and file edits that stay inside the repository and match no risky pattern (force push, reset --hard, deletions outside the repo, printing or editing .env, system paths, remote code). Anything else keeps Kiro's normal approval prompt. Script: .kiro/hooks/scripts/permission-guard.ps1, tests: permission-guard.test.ps1.",
+      "action": {
+        "type": "command",
+        "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \".kiro/hooks/scripts/permission-guard.ps1\"",
+        "timeout": 20
+      }
+    }
+  ]
+}

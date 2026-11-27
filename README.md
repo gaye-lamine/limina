@@ -1,8 +1,107 @@
 # Limina
 
-Limina reads a physical performance claim (press release, product page), extracts the numbers, and checks them against a deterministic library of fundamental physical limits (Carnot, Betz, Shockleyâ€“Queisser, etc.). The verdict is always computed by the deterministic engine, never by an LLM.
+Limina reads a physical performance claim (press release, product page), extracts the numbers, and checks them against a deterministic library of fundamental physical limits (Carnot, Betz, Shockley–Queisser, etc.). The verdict is always computed by the deterministic engine, never by an LLM: the language model only reads numbers out of a text and rephrases a result that is already computed.
 
-**Status:** early development. The engine, the DSL, the API with extraction and authoring, and the web app are implemented; the MCP server is not built yet.
+**Status:** working prototype built for the Kiroween 2026 hackathon. The engine, the DSL, the API with extraction and authoring, the web app and the 3D laboratory are implemented; the MCP server is not built.
+
+What it does, in four screens of one web app:
+
+- **Analysis**: paste a text (or an image); each claim gets one of four verdicts, `IMPOSSIBLE`, `CONDITIONAL`, `COMPATIBLE` or `INSUFFICIENT DATA`, with the wording "inconsistent with limit X under assumptions Y".
+- **Library**: the 35 built-in laws, each with its formula, assumptions, classification and references.
+- **3D Laboratory** (`/laboratory`): pick any law, move its values, and watch the claim meet its limit in 3D, as a physical apparatus or as a mathematical boundary. It also holds the **Forge** (write a new law from a sentence) and the **System stress test** (load several laws together and see which limit breaks first). See [The 3D Laboratory](#the-3d-laboratory).
+- **Physics lint**: `limina check` for markdown files.
+
+Honest limits: Limina checks a claim against a bound; it does not prove a figure is reached, and a bound of a model is not a law of nature. Every built-in law is a draft not yet validated by an external reviewer, and a law written by AI is always a draft that can never produce `IMPOSSIBLE` on its own. Prior art: ONTO Limits.
+
+## Quick start
+
+You need [Rust](https://rustup.rs/) (on Windows, also the Microsoft C++ Build Tools) and Node 20.19 or later (the web app uses Angular 21).
+
+```
+# terminal 1: the API on http://127.0.0.1:3000
+cargo run -p limina-api
+
+# terminal 2: the web app on http://localhost:4200 (forwards /v1 to the API)
+cd web
+npm install
+npm start
+```
+
+Open http://localhost:4200, then **Laboratory** in the top bar.
+
+Without any key, everything deterministic works: the library, `POST /v1/evaluate`, the laboratory (curves, surfaces, the breaking point, both views, the stress test) and the sample cases. A key turns on the three routes that call a language model: reading a text (`/v1/analyze`), writing a law (`/v1/limits/author`, the Forge) and reading an image (`/v1/transcribe`). See [Run with extraction](#run-with-extraction).
+
+## Docker
+
+One image holds the API and the built web app (a multi-stage `Dockerfile` at the root: Angular build, Rust release build, small runtime image).
+
+```
+docker build -t limina .
+docker run --rm -p 3000:3000 limina
+```
+
+Open http://localhost:3000. With extraction, and behind a proxy that sets the client address:
+
+```
+docker run --rm -p 3000:3000 -e NVIDIA_API_KEY=... -e TRUST_PROXY=true limina
+```
+
+Environment of the server:
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `PORT` | 3000 in the image | Listens on `0.0.0.0:$PORT`. Without `PORT` and `LIMINA_API_ADDR`, a local run listens on `127.0.0.1:3000` only. |
+| `LIMINA_API_ADDR` | none | An explicit `host:port`; it wins over `PORT`. |
+| `STATIC_DIR` | `/app/static` in the image | The built web app, served next to the API. Any path that is not a file and not under `/v1/` gets `index.html` (so `/laboratory` works on reload). |
+| `NVIDIA_API_KEY` | none | Turns on the three model routes. Never logged, stored or returned. |
+| `LLM_RATE_LIMIT_PER_HOUR` | 15 | Requests per client address per hour on `/v1/analyze`, `/v1/limits/author` and `/v1/transcribe`; `0` turns the limit off. |
+| `TRUST_PROXY` | `false` | `true`: the client address is read from `CF-Connecting-IP`, then from the first `X-Forwarded-For` entry. Turn it on only behind a proxy that sets them (Cloudflare). |
+| `LIMINA_ANALYZE_TIMEOUT_SECS` | 60 | Deadline of one analysis. |
+
+## Hosting behind Cloudflare
+
+The same image serves a public demo:
+
+- The model routes are limited per client address (15 an hour by default; the answer is `429` with `RateLimited` and a `Retry-After` header). The deterministic routes (`/v1/limits`, `/v1/evaluate`, `/v1/curve`, `/v1/surface`, `/v1/solve`) and the web app are never limited. Set `TRUST_PROXY=true` behind Cloudflare, otherwise every visitor looks like the proxy.
+- Without a key the server starts anyway (`extraction disabled`), the laboratory and the library work, and the three model routes answer `503 ExtractionUnavailable`, which the web app explains in plain words.
+- Laws written while the server runs live in memory only; at most 50 are kept, the oldest are dropped first.
+- Cloudflare terminates TLS; the container speaks plain HTTP on `$PORT`.
+
+## The 3D Laboratory
+
+`/laboratory` (lazy-loaded, Three.js) shows any law of the library, built-in or draft, from its metadata only: no law is named in the code, so a law written by AI gets the same controls and the same apparatus.
+
+- **Two views, switchable at any time.** *Physical apparatus* (default): one of four animated test benches chosen from the law's units, parameter kinds and labels (energy and heat; fields, trajectories and relativity; waves and optics; quantum states and decay). *Mathematical boundary*: a surface (two or more parameters), a corridor (one) or a chamber (none), from `/v1/surface`, `/v1/curve` and `/v1/evaluate`.
+- **Controls from the metadata**: a slider, a typed value and a unit chooser per parameter and for the claimed value (°C, km/s, nm, % converted on screen; the API always receives SI), and one chooser per assumption, pre-set to a valid default.
+- **Status panel**: the verdict as text, the claimed value, the limit, the ratio and the engine's wording, always as received.
+- **Find breaking point** (`/v1/solve`) moves a slider to the value where the claim meets the limit. **Dual probe** pins a reference and moves a second one. **Inspect in 3D Lab** on an analysed claim opens the laboratory with its law and values.
+- **Direct manipulation**: drag the probe, a wall, a ring, the hot source or the aperture; the sliders follow and the verdict is asked again. The keyboard does everything the pointer does.
+- **Forge a new law**: describe a limit in plain English (three examples are offered). The sentence goes to `POST /v1/limits/author`; the draft is checked (units, finite and non-negative bound on a grid of sample points) and, on success, opens at once, labelled "Draft: written by AI, not validated", with its apparatus and its boundary. A refusal is explained in plain words and the sentence stays in the box. The model sometimes cannot write a valid law; Limina then says so and registers nothing.
+- **System stress test**: load two to four laws with a maximum or a minimum, from the laboratory or with "Stress-test all laws in 3D Lab" on an analysis. A **System load** slider (20 % to 150 % of the most constraining limit) scales every claim; each law shows the engine's verdict and its claimed ÷ limit, and the first law past its limit is labelled **First breaking limit**.
+- **Glow and sound**: a bloom pass makes beams, cores and the crossing wave glow (with a plain fallback where the browser cannot render it). Sound is off by default ("Sound: Off"); when on, a Web Audio tone follows the claimed ÷ limit, with a low thud when a limit is crossed. Nothing is loaded from outside.
+- **Accessibility**: every verdict has a text label (never colour alone), full keyboard use, visible focus, a text alternative of the scene, and motion stops under `prefers-reduced-motion`.
+
+The design is in `.kiro/specs/laboratory-3d/`.
+
+## Tests
+
+```
+# Rust: format, lints, all tests
+cargo fmt --all --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
+
+# Web: lints, unit tests, production build
+cd web
+npm run lint
+npm test
+npm run build
+
+# End to end (Playwright, with the installed Edge): needs the API on :3000 and `npm start` on :4200
+npx playwright test
+```
+
+The unit tests of the web app run on Vitest through the Angular builder (`web/vitest-base.config.ts` limits the workers and sets the timeouts). The decision engine has property-based tests (`proptest`, fixed seeds in CI): a value below the bound is never classified `IMPOSSIBLE`. The live tests that call a model run only with a key (`-- --ignored`).
 
 ## Installation
 
@@ -16,7 +115,7 @@ cargo test --workspace
 
 ## Run the API
 
-Start the server (listens on `http://127.0.0.1:3000`; set `LIMINA_API_ADDR` to change the address):
+Start the server (listens on `http://127.0.0.1:3000`; set `LIMINA_API_ADDR` or `PORT` to change it):
 
 ```
 cargo run -p limina-api
@@ -117,56 +216,67 @@ Example (`data/limits/carnot.json`):
 ```
 
 `cargo test -p limina-dsl` runs the checks, including the differential properties (256 cases, 1024 with `CI` set).
+
 ## Inverse questions and authored limits
+
 ### Inverse questions: `POST /v1/solve`
+
 Gives the value of one parameter at which the bound equals the claim, every other parameter fixed. The search range is the `range` of the request (SI units), else the plausible domain, else the `test_range` of the definition. The bound must be monotone in that parameter on the range; otherwise the answer is 422 `NotMonotone` and no threshold is given (422 `NoSearchRange` without a range). The verdicts just below and just above the threshold come from the engine. Carnot at 60 % with Tc = 300 K (answer: Th at least 750 K):
+
 ```
 $body = @{ limit_id = "carnot"; claim = @{ value = 0.60; unit = "dimensionless" }; parameters = @{ Tc = @{ value = 300; unit = "K" } }; free_parameter = "Th" } | ConvertTo-Json -Depth 5
 Invoke-RestMethod -Method Post -Uri http://127.0.0.1:3000/v1/solve -ContentType "application/json" -Body $body
 ```
+
 ### Authored limits: `POST /v1/limits/author`
-Writes a DSL definition from one sentence (at most 2000 characters) with the language model, then checks it with the DSL. A refused definition goes back to the model with the exact error, at most twice. The code, not the model, sets `"status": "draft"`, the `draft-` id prefix and the reference "to be added", and never sets `validated_by`. The answer lists the definition, the number of attempts, every error seen and the check report. Authored limits live in memory until the API stops. Needs the key (503 `ExtractionUnavailable` without it):
+
+Writes a DSL definition from one sentence (at most 2000 characters) with the language model, then checks it with the DSL. A refused definition goes back to the model with the exact error, at most twice. The code, not the model, sets `"status": "draft"`, the `draft-` id prefix and the reference "to be added", and never sets `validated_by`. Habitual slips of a model are normalized by the code and reported in `overrides` (a `kind` that is not a temperature, exponents written as text or put among the units, a dimension that disagrees with the parameter's own units); the dimension check of the formula against the bounded dimension is never relaxed. The answer lists the definition, the number of attempts, every error seen and the check report. Authored limits live in memory until the API stops, and the 50 newest are kept. Needs the key (503 `ExtractionUnavailable` without it):
+
 ```
 $body = @{ text = "Erasing one bit of information at temperature T dissipates at least kB T ln 2 of energy." } | ConvertTo-Json
 Invoke-RestMethod -Method Post -Uri http://127.0.0.1:3000/v1/limits/author -ContentType "application/json" -Body $body | ConvertTo-Json -Depth 10
 ```
+
 ### Draft limits in `GET /v1/limits` and `POST /v1/evaluate`
+
 An authored limit is listed with `"status": "draft"` and evaluated like the others; its sentences say "inconsistent with draft limit X under assumptions Y". With the id returned above (for example `draft-landauer-principle`), a claim of 1e-21 J at 300 K is below the Landauer bound (about 2.87e-21 J):
+
 ```
 $body = @{ limit_id = "draft-landauer-principle"; claim = @{ value = 1e-21; unit = "J" }; parameters = @{ T = @{ value = 300; unit = "K" } } } | ConvertTo-Json -Depth 5
 Invoke-RestMethod -Method Post -Uri http://127.0.0.1:3000/v1/evaluate -ContentType "application/json" -Body $body
 ```
+
 The engine guard is relative only by default (`1e-9 * |bound|`, decision D-24), so verdicts work at any scale; a limit may declare its own absolute floor.
 
 ## Analysis screen and laws written by two models
-The web app (http://localhost:4200) is one screen: a text (or a pasted or dropped image, read by the vision model through `POST /v1/transcribe`), an "Analyze" button, the pipeline trace of the selected claim on the left, and on the right the claim tabs with the engine verdict, a plain explanation built from engine numbers, a badge ("built-in law", "AI-written, not validated", "disputed between models") and an explorer. The explorer plots the bound against one parameter with a slider per parameter, the claim as a dashed line and the inconsistent region hatched; every curve comes from `POST /v1/curve`, never from the browser. The library and "How it works" are in a drawer opened from the top bar and closed with Escape.
+
+The analysis screen of the web app is one screen: a text (or a pasted or dropped image, read by the vision model through `POST /v1/transcribe`), an "Analyze" button, the pipeline trace of the selected claim on the left, and on the right the claim tabs with the engine verdict, a plain explanation built from engine numbers, a badge ("built-in law", "AI-written, not validated", "disputed between models") and an explorer. The explorer plots the bound against one parameter with a slider per parameter, the claim as a dashed line and the inconsistent region hatched; every curve comes from `POST /v1/curve`, never from the browser. The library and "How it works" are in a drawer opened from the top bar and closed with Escape.
 
 For a claim with no built-in limit, `POST /v1/analyze` runs four steps, each recorded in the claim's `trace` with its failures: (i) a model names the established law that bounds the quantity, or answers "no law identified"; (ii) two models write the law in the DSL (`LIMINA_LLM_MODEL`, default `nvidia/nemotron-3.5-lightning-30b-a3b`, and `LIMINA_LLM_MODEL_B`, default `nvidia/nemotron-3-ultra-550b-a55b`), and the two definitions are compared on 200 deterministic samples inside their test ranges: a relative difference of at most 1e-6 everywhere gives `draft_agreed`, anything else `draft_disputed` and no verdict; (iii) a second extraction pass reads the law's parameters from the same text with the same evidence rules; (iv) the engine evaluates the claim against the agreed draft. A draft law never gets `validated_by`. `GET /v1/pipeline` lists what is enabled and the model ids (`LIMINA_LLM_VISION_MODEL`, default `nvidia/nemotron-3.5-super-vl-120b-a12b`).
+
 ```
 $body = @{ limit_id = "carnot"; parameters = @{ Tc = @{ value = 300; unit = "K" } }; free_parameter = "Th"; range = @(300, 1000); points = 8 } | ConvertTo-Json -Depth 5
 Invoke-RestMethod -Method Post -Uri http://127.0.0.1:3000/v1/curve -ContentType "application/json" -Body $body
 ```
+
 Live test: `cargo test -p limina-api --test pipeline_live -- --ignored --nocapture`.
 
 ## Physics lint
+
 `limina check` reads a text or markdown file, extracts its performance claims and checks each one with the same code as `POST /v1/analyze`, then prints it at its line and column, like a compiler. It needs the key in the environment or in `.env` in the current directory.
+
 ```
 cargo run -q -p limina-cli -- check demo/spec-heat-pump.md
 cargo run -q -p limina-cli -- check demo/spec-heat-pump.md --format json
 ```
+
 Each claim prints `file:line:col: severity: VERDICT limit`, then the claim and the bound, the engine wording, a line `to settle this, state: ...` when an assumption or a temperature is missing (mode, reference area), and, where the inverse solver answers, a line such as "Not inconsistent with limit carnot only if Th is at least 750 K". Exit code 0: no inconsistency; 1: at least one IMPOSSIBLE; 2: the analysis could not run (no key, network failure, extraction failed), which wins over 1. CONDITIONAL and needs-input claims are warnings. The file is read paragraph by paragraph (paragraphs without a digit are skipped), and an unusable model answer is asked again up to 3 times; a paragraph that still fails is reported at its line and the check goes on. `demo/spec-heat-pump.md` is an illustrative note with four claims. The live test: `cargo test -p limina-cli --test live -- --ignored --nocapture`.
 
 The Kiro hook `.kiro/hooks/physics-lint.json` (PostFileSave, markdown files under `docs/` or `demo/`) asks the agent to run `limina check` on the saved file, show the report, and for each finding propose either to state the missing assumption or to ask the author; it never changes a number to make a claim pass. The steering file `.kiro/steering/physics-claims.md` applies to the same files.
 
 ## Run the web app
 
-Needs Node 20.19 or later (the app uses Angular 21; Angular 22 needs a newer Node). Start the API in one terminal:
-
-```
-cargo run -p limina-api
-```
-
-Start the web app in a second terminal:
+Needs Node 20.19 or later (the app uses Angular 21; Angular 22 needs a newer Node). Start the API in one terminal (`cargo run -p limina-api`), then in a second one:
 
 ```
 cd web
@@ -174,17 +284,17 @@ npm install
 npm start
 ```
 
-Open http://localhost:4200 and pick a case in "Open a case". Carnot and COP open on a bench with an apparatus (thermometers for Th and Tc, the claim, and for COP the mode); the instrument panel on the right shows the engine verdict, the wording and the gauge. The Library below lists every limit. The dev server forwards `/v1` and `/healthz` to `http://127.0.0.1:3000`, so the API must be running. Web checks: `npm run lint` and `npm test` (headless, no browser needed).
+Open http://localhost:4200 and pick a case in "Open a case". Carnot and COP open on a bench with an apparatus (thermometers for Th and Tc, the claim, and for COP the mode); the instrument panel on the right shows the engine verdict, the wording and the gauge. The Library below lists every limit. The dev server forwards `/v1` and `/healthz` to `http://127.0.0.1:3000`, so the API must be running. The 3D laboratory is at http://localhost:4200/laboratory. Web checks: `npm run lint` and `npm test` (headless, no browser needed). For a production build served by the API itself, see [Docker](#docker): `npm run build` writes `web/dist/web/browser`, and `STATIC_DIR` points the API at it.
 
 ## Physics coverage
 
-The verdict always comes from the deterministic engine. Each built-in law has a classification (fundamental law, theorem, theoretical bound, model, empirical law) and at least one reference; a model or an empirical law is never presented as fundamental, and a theoretical bound is not a claim that the figure is technologically reachable. "Bound" laws give IMPOSSIBLE only above (or below) the bound in every configuration the text allows; "equality" laws compare the claim with the predicted value and a stated tolerance band, and answer OUTSIDE MODEL DOMAIN when a validity condition fails. All 30 laws are drafts (`status: draft`, not validated by an external reviewer). Details, assumptions and references: `GET /v1/limits`, data/limits/<id>.json and .kiro/specs/law-<id>/.
+The verdict always comes from the deterministic engine. Each built-in law has a classification (fundamental law, theorem, theoretical bound, model, empirical law) and at least one reference; a model or an empirical law is never presented as fundamental, and a theoretical bound is not a claim that the figure is technologically reachable. "Bound" laws give IMPOSSIBLE only above (or below) the bound in every configuration the text allows; "equality" laws compare the claim with the predicted value and a stated tolerance band, and answer OUTSIDE MODEL DOMAIN when a validity condition fails. All 35 laws are drafts (`status: draft`, not validated by an external reviewer). Details, assumptions and references: `GET /v1/limits`, data/limits/<id>.json and .kiro/specs/law-<id>/.
 
 | Discipline | Law (kind, classification) |
 | --- | --- |
-| Mechanics and relativity | speed_limit (bound, theoretical bound); tsiolkovsky (bound, theoretical bound); energy_momentum, relativistic_kinetic_energy, time_dilation, length_contraction (equality, theorem); newton_gravity, kepler_third, escape_velocity (equality, model); betz (bound, theoretical bound) |
-| Thermodynamics and information | carnot, cop, stefan_boltzmann, shannon_hartley (bound, theorem); landauer (bound, theoretical bound) |
-| Electromagnetism and optics | coulomb, faraday_emf, photon_energy, photon_energy_wavelength (equality, fundamental law); lorentz_force (magnitude bound, theorem); abbe_limit, luminous_efficacy (bound, theoretical bound) |
+| Mechanics and relativity | speed_limit, tsiolkovsky, mass_energy, power_conservation (bound, theoretical bound or fundamental law); escape_speed_min (minimum, theoretical bound); energy_momentum, relativistic_kinetic_energy, time_dilation, length_contraction (equality, theorem); newton_gravity, kepler_third, escape_velocity (equality, model); betz (bound, theoretical bound) |
+| Thermodynamics and information | carnot, cop, stefan_boltzmann, shannon_hartley (bound, theorem); landauer (bound, theoretical bound); shockley_queisser (bound, theoretical bound) |
+| Electromagnetism and optics | coulomb, faraday_emf, photon_energy, photon_energy_wavelength (equality, fundamental law); lorentz_force (magnitude bound, theorem); abbe_limit, rayleigh_criterion, luminous_efficacy (bound, theoretical bound) |
 | Quantum, atomic and nuclear | heisenberg (bound, theorem); de_broglie, nuclear_q (equality, fundamental law); hydrogen_levels (equality, model); radioactive_decay (equality, empirical law) |
 | Astrophysics and cosmology | eddington_luminosity (bound, theoretical bound, needs the accretion geometry); schwarzschild_radius, friedmann_flat (equality, model) |
 
@@ -196,5 +306,4 @@ MIT, see [LICENSE](LICENSE).
 
 ## Built with Kiro
 
-This project is built with Kiro. The `.kiro` directory contains the steering, specs and hooks.
-
+This project is built with Kiro. The `.kiro` directory contains the steering (7 documents: product rules, structure, tech, UI design, testing, physics rules and claims), the specs (one per law and per component, each with requirements, design and tasks, including `laboratory-3d`) and the hooks (core tests on save, physics lint, a submission guard at session start, and a permission guard for unattended runs). The journal of the build is in `docs/kiro-journey.md`.

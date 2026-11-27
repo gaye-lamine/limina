@@ -320,7 +320,9 @@ export const UI = {
   failedSentence: (code?: string) =>
     code === 'AnalysisTimeout'
       ? 'Checking this paragraph took too long, so it was stopped. Try a shorter paragraph, or try again later.'
-      : 'This paragraph could not be read.',
+      : code === 'RateLimited'
+        ? 'Too many texts were read from this address for now. Try again in a while.'
+        : 'This paragraph could not be read.',
   cancelAnalysis: 'Cancel analysis',
   cancelling: 'Cancelling…',
   analysisCancelled: 'Analysis cancelled. The claims read so far are kept.',
@@ -641,6 +643,7 @@ export const LAB = {
       `No valid law could be written from this sentence${n ? ` after ${n} tries` : ''}. State the quantity with its unit, and the values the limit depends on, more explicitly.`,
     unavailable: 'Writing new laws is not available right now. The laws of the library still work.',
     busy: 'Writing new laws did not work right now. Try again in a moment.',
+    limited: 'Too many laws were written from this address for now. Try again in a while.',
     empty: 'Write the limit first.',
     tooLong: (max: number) => `Keep it under ${max} characters.`,
     offline: 'Limina is unavailable right now.',

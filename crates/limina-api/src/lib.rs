@@ -14,10 +14,12 @@ pub mod error;
 pub mod graphs;
 pub mod handlers;
 pub mod labels;
+pub mod limiter;
 pub mod pipeline;
 pub mod qualified;
 pub mod registry;
 pub mod response;
+pub mod static_files;
 
 use std::fmt;
 use std::net::SocketAddr;
@@ -45,8 +47,11 @@ pub struct AppState {
     agreements: Arc<RwLock<BTreeMap<String, String>>>,
     chains: Option<dto::ChainsDto>,
     analyze_timeout: Option<Duration>,
+    limiter: Option<Arc<limiter::IpRateLimiter>>,
 }
 
+/// Most limits authored while the server runs that are kept in memory.
+pub const MAX_AUTHORED_LIMITS: usize = 50;
 /// Default deadline of one `POST /v1/analyze` request
 /// (`LIMINA_ANALYZE_TIMEOUT_SECS` overrides it).
 pub const DEFAULT_ANALYZE_TIMEOUT: Duration = Duration::from_secs(60);
@@ -185,7 +190,9 @@ impl AppState {
     /// analysis deadline of `LIMINA_ANALYZE_TIMEOUT_SECS` when it is a
     /// positive number of seconds.
     pub fn from_env() -> Result<AppState, ExtractError> {
-        let state = AppState::from_config(&ExtractConfig::from_env())?;
+        let mut state = AppState::from_config(&ExtractConfig::from_env())?;
+        // The per-address limit of the routes that call a model: on by default.
+        state.limiter = limiter::IpRateLimiter::from_env().map(Arc::new);
         let secs = std::env::var("LIMINA_ANALYZE_TIMEOUT_SECS")
             .ok()
             .and_then(|s| s.trim().parse::<u64>().ok())
@@ -194,6 +201,16 @@ impl AppState {
             Some(s) => state.with_analyze_timeout(Duration::from_secs(s)),
             None => state,
         })
+    }
+
+    /// Limits the routes that call a language model, per client address.
+    pub fn with_rate_limiter(mut self, limiter: limiter::IpRateLimiter) -> AppState {
+        self.limiter = Some(Arc::new(limiter));
+        self
+    }
+
+    pub(crate) fn rate_limiter(&self) -> Option<&limiter::IpRateLimiter> {
+        self.limiter.as_deref()
     }
 
     /// Sets the deadline of one `POST /v1/analyze` request.
@@ -229,11 +246,25 @@ impl AppState {
         self.extractor.as_deref()
     }
 
-    /// Adds an authored limit, replacing one with the same id.
+    /// Adds an authored limit, replacing one with the same id. At most
+    /// [`MAX_AUTHORED_LIMITS`] stay in memory: past that, the oldest go first,
+    /// with their agreement status, so a public server cannot grow without bound.
     pub fn register(&self, limit: DeclarativeLimit) {
-        let mut all = self.authored.write().unwrap_or_else(|p| p.into_inner());
-        all.retain(|l| l.definition().id != limit.definition().id);
-        all.push(limit);
+        let mut evicted = Vec::new();
+        {
+            let mut all = self.authored.write().unwrap_or_else(|p| p.into_inner());
+            all.retain(|l| l.definition().id != limit.definition().id);
+            all.push(limit);
+            while all.len() > MAX_AUTHORED_LIMITS {
+                evicted.push(all.remove(0).definition().id.clone());
+            }
+        }
+        if !evicted.is_empty() {
+            let mut agreements = self.agreements.write().unwrap_or_else(|p| p.into_inner());
+            for id in evicted {
+                agreements.remove(&id);
+            }
+        }
     }
 
     /// The authored limit with this id.
@@ -271,17 +302,25 @@ pub fn router() -> Router {
 
 /// The router with every endpoint of the API.
 pub fn router_with(state: AppState) -> Router {
+    // The three routes that call a language model carry the per-address limit;
+    // every deterministic route is left out of it.
+    let llm = Router::new()
+        .route("/v1/analyze", post(analyze::analyze))
+        .route("/v1/limits/author", post(authoring::author))
+        .route("/v1/transcribe", post(pipeline::transcribe))
+        .route_layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            limiter::limit_llm_routes,
+        ));
     Router::new()
         .route("/healthz", get(handlers::healthz))
         .route("/v1/limits", get(handlers::limits))
         .route("/v1/evaluate", post(handlers::evaluate))
         .route("/v1/capabilities", get(handlers::capabilities))
-        .route("/v1/analyze", post(analyze::analyze))
-        .route("/v1/limits/author", post(authoring::author))
         .route("/v1/solve", post(authoring::solve))
         .route("/v1/curve", post(pipeline::curve))
         .route("/v1/surface", post(graphs::surface))
-        .route("/v1/transcribe", post(pipeline::transcribe))
         .route("/v1/pipeline", get(pipeline::info))
+        .merge(llm)
         .with_state(state)
 }

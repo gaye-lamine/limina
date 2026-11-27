@@ -66,6 +66,7 @@ export function forgeFailure(f: ApiFailure): string {
     case 'ExtractionUnavailable':
       return LAB.forge.unavailable;
     case 'RateLimited':
+      return LAB.forge.limited;
     case 'ExtractionFailed':
     case 'ExtractionProviderError':
       return LAB.forge.busy;

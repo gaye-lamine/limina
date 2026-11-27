@@ -109,6 +109,7 @@ describe('laboratory: forge a new law', () => {
     expect(attemptsIn(msg)).toBe(3);
     const text = forgeFailure({ status: 422, code: 'LimitNotAuthored', message: msg });
     expect(text).toBe(LAB.forge.notAuthored(3));
+    expect(forgeFailure({ status: 429, code: 'RateLimited', message: 'too many requests from this address; try again in 60 minutes' })).toBe(LAB.forge.limited);
     for (const code of ['LimitNotAuthored', 'ExtractionUnavailable', 'RateLimited', 'ExtractionProviderError', 'EmptyText', 'TextTooLong', 'NetworkError', 'Other']) {
       const t = forgeFailure({ status: 422, code, message: msg });
       expect(t).not.toMatch(/(?<!heat )\b(engine|extraction|pipeline|api|server|json|schema|variant|llm|model|rust)\b/i);

@@ -1,0 +1,16 @@
+.git
+.github
+.agents
+.kiro
+.env
+.env.*
+target
+target-*
+**/node_modules
+web/dist
+web/.angular
+web/test-results
+web/e2e
+docs
+demo
+**/*.log

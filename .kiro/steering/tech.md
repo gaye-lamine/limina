@@ -10,7 +10,7 @@ inclusion: always
 
 - API: axum + tokio. Persistence: SQLite via sqlx. WASM build via wasm-bindgen.
 
-- Web: Angular (strict TypeScript, signals, standalone components), D3 for plots, KaTeX for formulas, fast-check for in-browser property tests, Playwright for e2e.
+- Web: Angular (strict TypeScript, signals, standalone components), D3 for plots, KaTeX for formulas, Vitest for unit tests, Playwright for e2e.
 
 - LLM access only through an `ExtractionProvider` trait. No provider-specific code outside its implementation.
 

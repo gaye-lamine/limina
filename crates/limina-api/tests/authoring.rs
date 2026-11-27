@@ -344,6 +344,66 @@ async fn authoring_without_a_key_is_503() {
 }
 
 #[tokio::test]
+async fn only_the_fifty_newest_drafts_stay_in_memory() {
+    let state = AppState::default();
+    for i in 0..52 {
+        let mut v: Value = serde_json::from_str(&landauer()).expect("json");
+        v["id"] = json!(format!("draft-law-{i:02}"));
+        v["status"] = json!("draft");
+        v["references"] = json!(["to be added"]);
+        let definition: limina_dsl::LimitDefinition =
+            serde_json::from_value(v).expect("definition");
+        state.register(limina_dsl::DeclarativeLimit::compile(definition).expect("compiles"));
+    }
+    assert_eq!(
+        state.authored_limits().len(),
+        limina_api::MAX_AUTHORED_LIMITS
+    );
+    let (status, r) = call(&state, "GET", "/v1/limits", None).await;
+    assert_eq!(status, StatusCode::OK);
+    let ids: Vec<&str> = r["limits"]
+        .as_array()
+        .expect("limits")
+        .iter()
+        .filter(|l| l["status"] == "draft")
+        .map(|l| l["id"].as_str().expect("id"))
+        .collect();
+    assert_eq!(ids.len(), limina_api::MAX_AUTHORED_LIMITS);
+    assert!(!ids.contains(&"draft-law-00") && !ids.contains(&"draft-law-01"));
+    assert!(ids.contains(&"draft-law-02") && ids.contains(&"draft-law-51"));
+    // An evicted draft is gone for evaluation too; a kept one still answers.
+    let (gone, _) = call(
+        &state,
+        "POST",
+        "/v1/evaluate",
+        Some(evaluate_body("draft-law-00", 1e-21)),
+    )
+    .await;
+    assert_eq!(gone, StatusCode::UNPROCESSABLE_ENTITY);
+    let (kept, _) = call(
+        &state,
+        "POST",
+        "/v1/evaluate",
+        Some(evaluate_body("draft-law-51", 1e-21)),
+    )
+    .await;
+    assert_eq!(kept, StatusCode::OK);
+}
+
+#[tokio::test]
+async fn a_plain_parameter_given_a_wrong_kind_is_authored_at_the_first_attempt() {
+    let mock = Arc::new(MockProvider::new());
+    let state = state(&mock);
+    let mut v: Value = serde_json::from_str(&synthetic("x", Some([1.0, 10.0]))).expect("json");
+    v["parameters"][0]["kind"] = json!("dimension");
+    mock.push_content(&v.to_string());
+    let (status, r) = author(&state, TEXT).await;
+    assert_eq!(status, StatusCode::OK, "{r}");
+    assert_eq!(r["attempts"], 1);
+    assert!(r["overrides"].to_string().contains("kind"), "{r}");
+}
+
+#[tokio::test]
 async fn authoring_text_is_at_most_2000_characters() {
     let mock = Arc::new(MockProvider::new());
     let state = state(&mock);

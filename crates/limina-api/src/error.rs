@@ -34,6 +34,12 @@ pub enum ApiError {
     /// More extraction requests than allowed per minute.
     #[error("too many extraction requests; try again in a minute")]
     RateLimited,
+    /// More requests that call a language model than this address may make in an hour.
+    #[error("too many requests from this address; try again in {} minutes", .retry_after_secs.div_ceil(60))]
+    TooManyRequests {
+        /// Seconds until the oldest request of the window leaves it.
+        retry_after_secs: u64,
+    },
     /// The text to analyse is longer than allowed.
     #[error("the text is longer than {max} characters")]
     TextTooLong {
@@ -140,7 +146,7 @@ impl ApiError {
             ApiError::ExtractionUnavailable => "ExtractionUnavailable",
             ApiError::ExtractionFailed(_) => "ExtractionFailed",
             ApiError::ExtractionProvider(_) => "ExtractionProviderError",
-            ApiError::RateLimited => "RateLimited",
+            ApiError::RateLimited | ApiError::TooManyRequests { .. } => "RateLimited",
             ApiError::TextTooLong { .. } => "TextTooLong",
             ApiError::EmptyText => "EmptyText",
             ApiError::LimitNotAuthored { .. } => "LimitNotAuthored",
@@ -166,7 +172,9 @@ impl ApiError {
             ApiError::ExtractionFailed(_) | ApiError::ExtractionProvider(_) => {
                 StatusCode::BAD_GATEWAY
             }
-            ApiError::RateLimited => StatusCode::TOO_MANY_REQUESTS,
+            ApiError::RateLimited | ApiError::TooManyRequests { .. } => {
+                StatusCode::TOO_MANY_REQUESTS
+            }
             ApiError::AnalysisTimeout { .. } => StatusCode::GATEWAY_TIMEOUT,
             ApiError::DraftNotApplied(_)
             | ApiError::UnknownLimit(_)

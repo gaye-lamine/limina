@@ -23,3 +23,5 @@ Thumbs.db
 .agents/
 target-check/
 target-*/
+# Playwright run output
+web/test-results/
