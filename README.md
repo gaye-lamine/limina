@@ -1,5 +1,7 @@
 # Limina
 
+**Live app: <https://limina.backnd-api.cloud>** | **Demo video: <https://youtu.be/Trah1SFFpBo>**
+
 Limina reads a physical performance claim (press release, product page), extracts the numbers, and checks them against a deterministic library of fundamental physical limits (Carnot, Betz, Shockley–Queisser, etc.). The verdict is always computed by the deterministic engine, never by an LLM: the language model only reads numbers out of a text and rephrases a result that is already computed.
 
 **Status:** working prototype built for the Kiroween 2026 hackathon. The engine, the DSL, the API with extraction and authoring, the web app and the 3D laboratory are implemented; the MCP server is not built.
@@ -12,6 +14,12 @@ What it does, in four screens of one web app:
 - **Physics lint**: `limina check` for markdown files.
 
 Honest limits: Limina checks a claim against a bound; it does not prove a figure is reached, and a bound of a model is not a law of nature. Every built-in law is a draft not yet validated by an external reviewer, and a law written by AI is always a draft that can never produce `IMPOSSIBLE` on its own. Prior art: ONTO Limits.
+
+## Architecture
+
+- **Decision engine (Rust).** `limina-core` holds the units, the interval arithmetic, the library of limits and the decision engine. Every verdict is computed there, deterministically, never by a language model. The other crates (`limina-dsl`, `limina-extract`, `limina-api`, `limina-cli`) build on it.
+- **Web app and 3D laboratory (Angular 21).** The web app in `web/` is Angular 21 with signals and standalone components. The 3D laboratory renders with Three.js on WebGL.
+- **Neuro-symbolic extraction (NVIDIA NIM).** The language model only reads quantities out of a text and rephrases a result already computed; it never produces a verdict. Calls go to NVIDIA NIM (`https://integrate.api.nvidia.com/v1`) through the `ExtractionProvider` trait, with the key read from the `NVIDIA_API_KEY` environment variable. Without the key, the deterministic parts still work.
 
 ## Quick start
 
