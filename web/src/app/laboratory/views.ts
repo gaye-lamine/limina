@@ -35,6 +35,7 @@ import {
 } from 'three';
 import { CurvePoint, CurveResponse, SurfaceResponse } from '../analysis.models';
 import { LimitInfo } from '../api.models';
+import { HANDLE_KEY, Handle, Point3, probeUpdates, radialClaim } from './drag-map';
 import { LabResult } from './lab-model';
 import { releaseObject } from './scene';
 import { Skin } from './skin';
@@ -48,6 +49,8 @@ export interface Axis {
   hi: number;
   log: boolean;
   value: number;
+  /** The parameter on this axis. */
+  id: string;
   /** Axis name and the texts of its two ends, for the discrete marks. */
   name: string;
   loText: string;
@@ -140,12 +143,17 @@ export class LawView {
   private ticks: Tick[] = [];
   private drawn: Drawn = { hatchedCells: 0, zones: 0 };
 
+  /** The labels, drawn after the glow so they stay sharp. */
+  private readonly labels = new Group();
+
   constructor(
     stage: Group,
     private readonly theme: LabTheme,
     private readonly reduced: boolean,
+    overlay: Group,
   ) {
     stage.add(this.root);
+    overlay.add(this.labels);
   }
 
   /** Called on every frame. */
@@ -165,8 +173,10 @@ export class LawView {
   }
 
   clear(): void {
-    this.root.traverse((o) => releaseObject(o));
-    this.root.clear();
+    for (const g of [this.root, this.labels]) {
+      g.traverse((o) => releaseObject(o));
+      g.clear();
+    }
     this.ticks = [];
     this.drawn = { hatchedCells: 0, zones: 0 };
   }
@@ -174,6 +184,7 @@ export class LawView {
   dispose(): void {
     this.clear();
     this.root.removeFromParent();
+    this.labels.removeFromParent();
   }
 
   // ---------- surface and corridor ----------
@@ -195,7 +206,10 @@ export class LawView {
     this.axes(d, xs, zs, ys);
     const px = d.x && xs ? xs.to(d.x.value) : 0;
     const pz = d.z && zs ? zs.to(d.z.value) : 0;
-    this.probe(new Vector3(px, ys.to(d.claim), pz), bound === null ? null : ys.to(bound), d.result?.kind === 'impossible', false);
+    const ball = this.probe(new Vector3(px, ys.to(d.claim), pz), bound === null ? null : ys.to(bound), d.result?.kind === 'impossible', false);
+    // Dragging the probe moves the claim (its height) and the width axis' parameter.
+    const xId = d.x?.id ?? null;
+    ball.userData[HANDLE_KEY] = { name: 'probe', plane: 'vertical', map: (p) => probeUpdates(p, ys, xs, xId) } satisfies Handle;
     if (d.pinned) {
       const qx = d.pinned.x !== null && xs ? xs.to(d.pinned.x) : 0;
       const qz = d.pinned.z !== null && zs ? zs.to(d.pinned.z) : 0;
@@ -341,7 +355,7 @@ export class LawView {
     if (!text) return;
     const s = textSprite(text, color);
     s.position.copy(at);
-    this.root.add(s);
+    this.labels.add(s);
   }
 
   private corridorMesh(c: CurveResponse, xs: Scale, ys: Scale, direction: LimitInfo['direction']): void {
@@ -417,7 +431,7 @@ export class LawView {
 
   // ---------- probe, beam and wave ----------
 
-  private probe(at: Vector3, boundY: number | null, crossing: boolean, pinned: boolean): void {
+  private probe(at: Vector3, boundY: number | null, crossing: boolean, pinned: boolean): Mesh {
     const color = pinned ? this.theme.textSecondary : this.theme.accent;
     const ball = new Mesh(
       new SphereGeometry(0.28, 24, 16),
@@ -443,13 +457,14 @@ export class LawView {
       this.dashed([foot, new Vector3(at.x, 0.03, HALF + AXIS_GAP)], this.theme.textSecondary, 0.45);
       this.dashed([foot, new Vector3(HALF + AXIS_GAP, 0.03, at.z)], this.theme.textSecondary, 0.45);
     }
-    if (boundY === null) return;
+    if (boundY === null) return ball;
     this.line([at, new Vector3(at.x, boundY, at.z)], crossing ? this.theme.impossible : this.theme.accent, 0.9);
     const mark = new Mesh(new RingGeometry(0.22, 0.32, 32), new MeshBasicMaterial({ color: this.theme.textPrimary, side: DoubleSide }));
     mark.rotation.x = -Math.PI / 2;
     mark.position.set(at.x, boundY, at.z);
     this.root.add(mark);
     if (crossing) this.wave(new Vector3(at.x, boundY, at.z));
+    return ball;
   }
 
   /** The wave of a claim past the limit: rings spreading from where the beam meets it. */
@@ -505,6 +520,8 @@ export class LawView {
     core.position.copy(centre);
     core.scale.setScalar(r);
     this.root.add(core);
+    // Dragging the core in or out moves the claim: the limit is the shell.
+    core.userData[HANDLE_KEY] = { name: 'core', plane: 'vertical', map: (p) => radialClaim(p3distance(p, centre), SHELL, bound) } satisfies Handle;
     this.ticks.push((t) => core.scale.setScalar(r * (1 + 0.04 * Math.sin(t * 4))));
     if (d.pinned) {
       const pr = SHELL * coreRatio(d.pinned.claim, bound);
@@ -604,3 +621,7 @@ export class LawView {
   }
 }
 
+/** Distance between two points of the scene. */
+function p3distance(a: Point3, b: Point3): number {
+  return Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+}

@@ -33,3 +33,8 @@
 - [x] 5.5 Test runner: `vitest-base.config.ts` (two workers, 15 s timeouts) via `runnerConfig`; `claimOf` and `contrast` moved out of spec files into `testing-fixtures.ts` and `testing-contrast.ts` (importing a spec from another spec made Vitest report "No test suite found" and run its tests twice).
 - [x] 5.6 Quantum bench: decaying population (343 nuclei, lit share = claimed remaining over the initial count, rings for the claimed and expected fractions); confinement plates outlined.
 - [x] 5.7 Field bench: a claimed length gets a measured-radius ring around the reference-radius sphere, its label outside both radii; speeds keep the path labelled Escapes or Captured.
+
+## Phase 6, pass A: direct manipulation, glow, sound
+- [x] 6.1 Draggable handles (`drag-map.ts`, `pointer.ts`): boundary probe and chamber core; walls, ring, field probe, hot source, aperture; orbit off while dragging; grab cursors; keyboard unchanged; unit tests of the maps; e2e drags of the Carnot probe and a Heisenberg wall.
+- [x] 6.2 Glow (`glow.ts`): bloom between render and output passes, labels in an overlay drawn after it, direct rendering without float targets, disposal; WebGL round trip still releases its context.
+- [x] 6.3 Sound (`lab-audio.ts`): off by default, keyboard toggle, tone, thud on IMPOSSIBLE, ping on breaking point; context closed when off and on leaving; unit tests with a fake context, e2e count of created and closed contexts.

@@ -168,11 +168,22 @@
         } @else {
           <button type="button" class="btn btn-secondary lab-pin-btn" (click)="pinProbe()" [disabled]="!result()">{{ t.pinProbe }}</button>
         }
+        <button
+          type="button"
+          class="btn btn-secondary lab-sound"
+          [attr.aria-pressed]="sound()"
+          aria-describedby="lab-sound-help"
+          (click)="toggleSound()"
+        >
+          {{ sound() ? t.soundOn : t.soundOff }}
+        </button>
+        <p class="lab-help" id="lab-sound-help">{{ t.soundHelp }}</p>
         <button type="button" class="btn btn-secondary lab-reset" (click)="resetView()" [disabled]="!viewReady()">{{ t.resetView }}</button>
         <button type="button" class="btn btn-ghost lab-back" (click)="back()">{{ t.back }}</button>
       </div>
       <p class="lab-help">{{ t.zones }}</p>
       <p class="lab-help">{{ t.help }}</p>
+      <p class="lab-help">{{ t.dragHelp }}</p>
     } @else if (failed()) {
       <p class="lab-status">{{ t.unavailable }}</p>
     } @else {

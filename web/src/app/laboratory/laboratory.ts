@@ -41,7 +41,9 @@ import {
   withRange,
   withValue,
 } from './lab-model';
+import { DragUpdate } from './drag-map';
 import { readInspect } from './inspect';
+import { LabAudio } from './lab-audio';
 import { convert } from './lab-units';
 import { Observatory, webglAvailable } from './scene';
 import { skinFor } from './skin';
@@ -92,6 +94,9 @@ export class Laboratory implements AfterViewInit, OnDestroy {
   private observatory: Observatory | null = null;
   private view: LawView | null = null;
   private bench: ApparatusView | null = null;
+  private readonly audio = new LabAudio();
+  /** Sound: off by default, started by the Sound button. */
+  protected readonly sound = signal(false);
   private readonly reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
   private readonly changes = new Subject<void>();
   private loadSeq = 0;
@@ -199,8 +204,9 @@ export class Laboratory implements AfterViewInit, OnDestroy {
     this.zone.runOutsideAngular(() => {
       const theme = readTheme();
       this.observatory = new Observatory(this.host().nativeElement, theme, this.reduced);
-      this.view = new LawView(this.observatory.stage, theme, this.reduced);
-      this.bench = new ApparatusView(this.observatory.stage, theme, this.reduced);
+      this.view = new LawView(this.observatory.stage, theme, this.reduced, this.observatory.overlay);
+      this.bench = new ApparatusView(this.observatory.stage, theme, this.reduced, this.observatory.overlay);
+      this.observatory.onDrag = (updates) => this.zone.run(() => this.applyDrag(updates));
       this.observatory.onFrame = (s) => {
         this.view?.tick(s);
         this.bench?.tick(s);
@@ -400,6 +406,7 @@ export class Laboratory implements AfterViewInit, OnDestroy {
     this.busy.set(false);
     if (!a) return;
     this.result.set(a.result);
+    this.audio.update(a.result.ratio, a.result.kind === 'impossible');
     this.curve.set(a.curve);
     this.surface.set(a.surface);
     // Keep the engine's bound inside the claim's slider when the parameters move it far.
@@ -444,6 +451,7 @@ export class Laboratory implements AfterViewInit, OnDestroy {
       strength: place(byId(massParameter(limit))),
       level: byId(discreteParameter(limit))?.value ?? null,
       nanometres: sp && spectral ? toNanometres(sp.value, spectral.as) : null,
+      positionParam: apertureParameter(limit) ?? ps[0]?.id ?? null,
       decay: isDecay(limit),
       initial: byId(initialParameter(limit))?.value ?? null,
       pinned: pin && pin.limitId === limit.id ? { ratio: pin.result?.ratio ?? null, impossible: pin.result?.kind === 'impossible' } : null,
@@ -456,7 +464,7 @@ export class Laboratory implements AfterViewInit, OnDestroy {
       const s = ps.find((p) => p.id === id);
       if (!s) return null;
       const text = (v: number) => `${fmt(convert(v, s.base, this.unitOf(s)) ?? v)} ${unitText(this.unitOf(s))}`.trim();
-      return { lo: s.min, hi: s.max, log: s.log, value: s.value, name: s.label, loText: text(s.min), hiText: text(s.max) };
+      return { id: s.id, lo: s.min, hi: s.max, log: s.log, value: s.value, name: s.label, loText: text(s.min), hiText: text(s.max) };
     };
     const topology = topologyFor(limit);
     const xId = topology === 'surface' ? this.xAxis() : (ps[0]?.id ?? '');
@@ -501,6 +509,7 @@ export class Laboratory implements AfterViewInit, OnDestroy {
         next: (r) => {
           this.solving.set(false);
           this.solveNote.set(r.sentence);
+          this.audio.pulse();
           this.glide(free.id, convert(r.threshold, r.unit, free.base) ?? r.threshold);
         },
         error: (f: ApiFailure) => {
@@ -545,6 +554,33 @@ export class Laboratory implements AfterViewInit, OnDestroy {
     this.redraw();
   }
 
+  // ---------- direct manipulation and sound ----------
+
+  /** A dragged handle moves sliders: to a value kept inside the slider's range, or to a place on its track. */
+  protected applyDrag(updates: DragUpdate[]): void {
+    for (const u of updates) {
+      if (u.position !== undefined) {
+        const place = u.position;
+        this.update(u.id, (s) => ({ ...s, value: fromPosition(s, place * STEPS) }));
+      } else if (u.value !== undefined && Number.isFinite(u.value)) {
+        const v = u.value;
+        this.update(u.id, (s) => ({ ...s, value: Math.min(s.max, Math.max(s.min, v)) }));
+      }
+    }
+  }
+
+  protected toggleSound(): void {
+    if (this.sound()) {
+      this.audio.disable();
+      this.sound.set(false);
+      return;
+    }
+    const on = this.audio.enable();
+    this.sound.set(on);
+    const r = this.result();
+    if (on) this.audio.update(r?.ratio ?? null, r?.kind === 'impossible');
+  }
+
   // ---------- view ----------
 
   protected setMode(mode: 'apparatus' | 'boundary'): void {
@@ -581,6 +617,7 @@ export class Laboratory implements AfterViewInit, OnDestroy {
     this.view = null;
     this.bench?.dispose();
     this.bench = null;
+    this.audio.dispose();
     this.observatory?.dispose();
     this.observatory = null;
   }

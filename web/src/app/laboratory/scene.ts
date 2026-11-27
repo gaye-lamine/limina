@@ -25,6 +25,9 @@ import {
   WebGLRenderer,
 } from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { DragUpdate } from './drag-map';
+import { Glow } from './glow';
+import { DragController } from './pointer';
 import { LabTheme } from './theme';
 
 /** Where the camera starts and returns on "Reset view". */
@@ -50,6 +53,13 @@ export class Observatory {
   readonly scene = new Scene();
   /** Objects of the law under study; cleared between laws. */
   readonly stage = new Group();
+  /** Labels, drawn after the glow on top of the scene so they stay sharp. */
+  readonly overlay = new Group();
+  private readonly overlayScene = new Scene();
+  private readonly glow: Glow | null;
+  private readonly dragger: DragController;
+  /** Called with the slider updates of a handle being dragged. */
+  onDrag: ((updates: DragUpdate[]) => void) | null = null;
   private readonly camera: PerspectiveCamera;
   private readonly renderer: WebGLRenderer;
   private readonly controls: OrbitControls;
@@ -79,7 +89,16 @@ export class Observatory {
     this.scene.fog = new Fog(theme.bg, 40, 120);
     this.addObservatory(theme);
     this.scene.add(this.stage);
+    this.overlayScene.add(this.overlay);
 
+    // Before the orbit controls: a press on a handle turns the orbit off first.
+    this.dragger = new DragController(
+      this.renderer.domElement,
+      this.camera,
+      this.stage,
+      (on) => (this.controls.enabled = on),
+      (updates) => this.onDrag?.(updates),
+    );
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = !reducedMotion;
     this.controls.dampingFactor = 0.08;
@@ -88,6 +107,9 @@ export class Observatory {
     this.controls.maxPolarAngle = Math.PI * 0.49;
     this.controls.target.set(0, 0, 0);
     this.controls.update();
+
+    this.glow = Glow.create(this.renderer, this.scene, this.camera, width, height);
+    host.dataset['glow'] = this.glow ? 'on' : 'off';
 
     this.resize = new ResizeObserver(() => this.onResize());
     this.resize.observe(host);
@@ -130,6 +152,7 @@ export class Observatory {
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(width, height, false);
+    this.glow?.setSize(width, height);
   }
 
   private loop = (): void => {
@@ -137,11 +160,18 @@ export class Observatory {
     this.frame = requestAnimationFrame(this.loop);
     this.controls.update();
     this.onFrame?.(performance.now() / 1000);
-    this.renderer.render(this.scene, this.camera);
+    if (this.glow) this.glow.render();
+    else this.renderer.render(this.scene, this.camera);
+    // The labels on top, without glow.
+    this.renderer.autoClear = false;
+    this.renderer.clearDepth();
+    this.renderer.render(this.overlayScene, this.camera);
+    this.renderer.autoClear = true;
     // The live GPU resources, twice a second, for the release checks of the end-to-end tests.
     if (this.frame % 30 === 0) {
       this.host.dataset['geometries'] = String(this.renderer.info.memory.geometries);
       this.host.dataset['textures'] = String(this.renderer.info.memory.textures);
+      this.host.dataset['handles'] = JSON.stringify(this.dragger.handlesOnScreen());
     }
   };
 
@@ -194,7 +224,11 @@ export class Observatory {
     this.disposed = true;
     cancelAnimationFrame(this.frame);
     this.resize.disconnect();
+    this.dragger.dispose();
     this.controls.dispose();
+    this.glow?.dispose();
+    this.overlayScene.traverse((o: Object3D) => releaseObject(o));
+    this.overlayScene.clear();
     this.scene.traverse((o: Object3D) => releaseObject(o));
     this.scene.clear();
     this.renderer.renderLists.dispose();

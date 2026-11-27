@@ -18,6 +18,8 @@ export interface Scale {
   hi: number;
   log: boolean;
   to: (v: number) => number;
+  /** The value at a scene coordinate (inverse of `to`, without its clamp): for dragging. */
+  from: (c: number) => number;
 }
 
 export function scale(lo: number, hi: number, out0: number, out1: number, log = isLog(lo, hi)): Scale {
@@ -33,6 +35,10 @@ export function scale(lo: number, hi: number, out0: number, out1: number, log = 
     to: (v: number) => {
       const t = (f(v) - a) / span;
       return out0 + Math.min(1.2, Math.max(-0.2, t)) * (out1 - out0);
+    },
+    from: (c: number) => {
+      const v = a + ((c - out0) / (out1 - out0 || 1)) * span;
+      return useLog ? 10 ** v : v;
     },
   };
 }

@@ -21,6 +21,7 @@ import {
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
+  Object3D,
   PlaneGeometry,
   Points,
   PointsMaterial,
@@ -50,6 +51,7 @@ import {
   undecayed,
   wellDepth,
 } from './apparatus';
+import { HANDLE_KEY, Handle, aperturePosition, radialClaim, radialDistance, sourceHeight, sourcePosition, wallPosition } from './drag-map';
 import { LabResult } from './lab-model';
 import { releaseObject } from './scene';
 import { LabTheme } from './theme';
@@ -75,6 +77,8 @@ export interface ApparatusData {
   initial: number | null;
   /** The pinned probe: its claimed over limit and whether the engine found it past the limit; null when none. */
   pinned: { ratio: number | null; impossible: boolean } | null;
+  /** The parameter whose place is `position` (moved by dragging a wall, the aperture or the source); null without one. */
+  positionParam: string | null;
 }
 
 /** What a bench shows, for the page and its tests. */
@@ -84,14 +88,23 @@ type Tick = (seconds: number) => void;
 
 export class ApparatusView {
   private readonly root = new Group();
+  /** The labels, drawn after the glow so they stay sharp. */
+  private readonly labels = new Group();
   private ticks: Tick[] = [];
 
   constructor(
     stage: Group,
     private readonly theme: LabTheme,
     private readonly reduced: boolean,
+    overlay: Group,
   ) {
     stage.add(this.root);
+    overlay.add(this.labels);
+  }
+
+  /** Marks an object as a draggable handle. */
+  private handle(o: Object3D, h: Handle): void {
+    o.userData[HANDLE_KEY] = h;
   }
 
   tick(seconds: number): void {
@@ -108,14 +121,17 @@ export class ApparatusView {
   }
 
   clear(): void {
-    this.root.traverse((o) => releaseObject(o));
-    this.root.clear();
+    for (const g of [this.root, this.labels]) {
+      g.traverse((o) => releaseObject(o));
+      g.clear();
+    }
     this.ticks = [];
   }
 
   dispose(): void {
     this.clear();
     this.root.removeFromParent();
+    this.labels.removeFromParent();
   }
 
   private impossible(d: ApparatusData): boolean {
@@ -125,7 +141,7 @@ export class ApparatusView {
   private label(text: string, at: Vector3, color = this.theme.textPrimary): void {
     const s = textSprite(text, color, 0.5);
     s.position.copy(at);
-    this.root.add(s);
+    this.labels.add(s);
   }
 
   // ---------- energy and heat ----------
@@ -138,14 +154,17 @@ export class ApparatusView {
       new CylinderGeometry(1.6, 1.6, 3, 40),
       new MeshStandardMaterial({ color: this.theme.conditional, emissive: this.theme.conditional, emissiveIntensity: 0.45, transparent: true, opacity: 0.85 }),
     );
-    hot.position.set(-6.5, 1.5, 0);
+    // The hot source stands at its parameter's place: dragging it up or down moves that slider.
+    hot.position.set(-6.5, sourceHeight(d.position), 0);
+    const param = d.positionParam;
+    if (param) this.handle(hot, { name: 'source', plane: 'vertical', map: (p) => [{ id: param, position: sourcePosition(p.y) }] });
     const cold = new Mesh(
       new CylinderGeometry(1.6, 1.6, 3, 40),
       new MeshStandardMaterial({ color: this.theme.accent, emissive: this.theme.accent, emissiveIntensity: 0.25, transparent: true, opacity: 0.7 }),
     );
     cold.position.set(6.5, 1.5, 0);
     this.root.add(hot, cold);
-    this.label(LAB.apparatus.source, new Vector3(-6.5, 3.6, 0));
+    this.label(LAB.apparatus.source, new Vector3(-6.5, hot.position.y + 2.1, 0));
     this.label(LAB.apparatus.sink, new Vector3(6.5, 3.6, 0));
 
     // The converter: a rotor whose speed follows the claimed over the limit.
@@ -283,6 +302,10 @@ export class ApparatusView {
     };
     place(this.reduced ? 2 : 0);
     this.root.add(probe);
+    // Dragging the probe away from or towards the body moves the claim: the limit sits at 4 units.
+    const bound = d.result?.bound ?? null;
+    const origin = { x: 0, y: 0, z: 0 };
+    this.handle(probe, { name: 'probe', plane: 'horizontal', map: (p) => radialClaim(radialDistance(p, origin), 4, bound) });
     this.ticks.push(place);
     this.label(escapes ? LAB.apparatus.escapes : LAB.apparatus.falls, path[path.length - 1].clone().add(new Vector3(0, 1, 0)), escapes ? this.theme.compatible : this.theme.impossible);
     if (d.pinned) {
@@ -307,6 +330,13 @@ export class ApparatusView {
     ring.rotation.x = Math.PI / 2;
     ring.position.copy(centre);
     this.root.add(ring);
+    // A wider, invisible ring to grab: dragging it in or out moves the claim (the limit at the reference radius).
+    const grip = new Mesh(new TorusGeometry(measured, 0.4, 8, 96), new MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }));
+    grip.rotation.x = Math.PI / 2;
+    grip.position.copy(centre);
+    const bound = d.result?.bound ?? null;
+    this.handle(grip, { name: 'ring', plane: 'horizontal', map: (p) => radialClaim(radialDistance(p, centre), reference, bound) });
+    this.root.add(grip);
     // A body on the orbit, and the measured radius as a spoke from the centre.
     const moon = new Mesh(new SphereGeometry(0.22, 20, 12), new MeshStandardMaterial({ color: this.theme.accent, emissive: this.theme.accent, emissiveIntensity: 0.9 }));
     const place = (t: number) => moon.position.set(centre.x + measured * Math.cos(t * 0.6), centre.y, centre.z + measured * Math.sin(t * 0.6));
@@ -353,6 +383,13 @@ export class ApparatusView {
     glass.scale.set(0.15, 1, 1);
     glass.position.copy(lens.position);
     this.root.add(lens, glass);
+    // Dragging the rim or the glass widens or narrows the aperture's parameter.
+    const param = d.positionParam;
+    if (param) {
+      const h: Handle = { name: 'aperture', plane: 'vertical', map: (p) => [{ id: param, position: aperturePosition(Math.hypot(p.y - 2, p.z)) }] };
+      this.handle(lens, h);
+      this.handle(glass, h);
+    }
     this.label(LAB.apparatus.aperture, new Vector3(-1.2, 2 + r + 0.6, 0));
     // The cone of light to the sensor.
     const cone = new Mesh(new CylinderGeometry(0.05, r, 6, 32, 1, true), new MeshBasicMaterial({ color: beam, transparent: true, opacity: 0.12, side: DoubleSide, depthWrite: false, blending: AdditiveBlending }));
@@ -441,6 +478,9 @@ export class ApparatusView {
       const edges = new LineSegments(new EdgesGeometry(box), new LineBasicMaterial({ color: this.theme.accent }));
       edges.position.copy(wall.position);
       this.root.add(wall, edges);
+      // Dragging a wall in or out tightens or widens the box, which is the first parameter's place.
+      const param = d.positionParam;
+      if (param) this.handle(wall, { name: 'wall', plane: 'horizontal', map: (p) => [{ id: param, position: wallPosition(p.x) }] });
     }
     this.label(LAB.apparatus.box, new Vector3(0, 5.6, 0));
     const amp = agitation(half);

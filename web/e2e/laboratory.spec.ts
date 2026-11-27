@@ -274,6 +274,118 @@ test('switching views releases what the other view drew', async ({ page }) => {
   expect(errors).toEqual([]);
 });
 
+/** The screen place of a named handle, in page pixels, once the observatory has published it. */
+async function handleAt(page: Page, name: string): Promise<{ x: number; y: number }> {
+  const stage = page.locator('.lab-stage');
+  let found: { x: number; y: number } | null = null;
+  await expect
+    .poll(
+      async () => {
+        const list = JSON.parse((await stage.getAttribute('data-handles')) ?? '[]') as { name: string; x: number; y: number }[];
+        const h = list.find((x) => x.name === name);
+        const box = await page.locator('canvas.lab-canvas').boundingBox();
+        found = h && box ? { x: box.x + h.x, y: box.y + h.y } : null;
+        return found !== null;
+      },
+      { timeout: 15_000 },
+    )
+    .toBe(true);
+  return found as unknown as { x: number; y: number };
+}
+
+/** Drags from a point by an offset in small steps, as a hand would. */
+async function drag(page: Page, from: { x: number; y: number }, dx: number, dy: number): Promise<void> {
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  for (let i = 1; i <= 8; i++) await page.mouse.move(from.x + (dx * i) / 8, from.y + (dy * i) / 8);
+  await page.mouse.up();
+}
+
+test('dragging the probe, then a wall, moves the sliders and asks the engine again', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openLab(page);
+  const law = page.locator('select.lab-law');
+  const verdict = page.locator('.lab-verdict');
+  const canvas = page.locator('canvas.lab-canvas');
+
+  // Mathematical boundary: the probe of Carnot; dragging it up raises the claim past the limit.
+  await law.selectOption('carnot');
+  await expect(verdict).toHaveText(VERDICT, { timeout: 30_000 });
+  await showView(page, 'boundary');
+  const claim = page.locator('#lab-track-claim');
+  const before = await claim.inputValue();
+  const probe = await handleAt(page, 'probe');
+  await page.mouse.move(probe.x, probe.y);
+  await expect.poll(() => canvas.evaluate((c) => (c as HTMLElement).style.cursor)).toBe('grab');
+  await drag(page, probe, 0, -260);
+  await expect.poll(() => claim.inputValue()).not.toBe(before);
+  expect(Number(await claim.inputValue())).toBeGreaterThan(Number(before));
+  await expect(verdict).toHaveText('IMPOSSIBLE', { timeout: 30_000 });
+
+  // Physical apparatus: Heisenberg's confinement walls; dragging one outward widens the box.
+  await law.selectOption('heisenberg');
+  await expect(verdict).toHaveText(VERDICT, { timeout: 30_000 });
+  await showView(page, 'apparatus');
+  const dp = page.locator('#lab-track-dp');
+  const width = await dp.inputValue();
+  await handleAt(page, 'wall');
+  // The wall on the right of the screen, dragged further right: away from the centre.
+  const box = (await canvas.boundingBox())!;
+  const walls = (JSON.parse((await page.locator('.lab-stage').getAttribute('data-handles')) ?? '[]') as { name: string; x: number; y: number }[]).filter((h) => h.name === 'wall');
+  const right = walls.reduce((a, b) => (b.x > a.x ? b : a));
+  await drag(page, { x: box.x + right.x, y: box.y + right.y }, 120, 0);
+  await expect.poll(() => dp.inputValue()).not.toBe(width);
+  await expect(verdict).toHaveText(VERDICT, { timeout: 30_000 });
+  // The keyboard still drives the same slider.
+  await dp.focus();
+  await dp.press('Home');
+  await expect(dp).toHaveValue('0');
+});
+
+test('the glow is on where the browser supports it, and the sound is off until asked', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.addInitScript(() => {
+    const w = window as unknown as { __audio: { created: number; closed: number }; AudioContext: typeof AudioContext };
+    w.__audio = { created: 0, closed: 0 };
+    const Original = w.AudioContext;
+    w.AudioContext = class extends Original {
+      constructor(options?: AudioContextOptions) {
+        super(options);
+        w.__audio.created++;
+      }
+      override close(): Promise<void> {
+        w.__audio.closed++;
+        return super.close();
+      }
+    };
+  });
+  const errors = collectErrors(page);
+  await openLab(page);
+  await expect(page.locator('.lab-stage')).toHaveAttribute('data-glow', /^(on|off)$/);
+  const audio = () => page.evaluate(() => (window as unknown as { __audio: { created: number; closed: number } }).__audio);
+  const sound = page.locator('.lab-sound');
+  await expect(sound).toHaveAttribute('aria-pressed', 'false');
+  await expect(sound).toHaveText('Sound: Off');
+  expect((await audio()).created).toBe(0);
+
+  // On by keyboard, then off: one context, closed.
+  await sound.focus();
+  await page.keyboard.press('Enter');
+  await expect(sound).toHaveAttribute('aria-pressed', 'true');
+  await expect(sound).toHaveText('Sound: On');
+  expect(await audio()).toEqual({ created: 1, closed: 0 });
+  await sound.click();
+  await expect(sound).toHaveAttribute('aria-pressed', 'false');
+  expect(await audio()).toEqual({ created: 1, closed: 1 });
+
+  // On again, then leaving the laboratory closes it.
+  await sound.click();
+  await page.locator('.lab-back').click();
+  await expect(page).toHaveURL(/\/$/);
+  await expect.poll(audio).toEqual({ created: 2, closed: 2 });
+  expect(errors).toEqual([]);
+});
+
 for (const size of SIZES) {
   test(`laboratory layout at ${size.name}`, async ({ page }) => {
     await page.setViewportSize({ width: size.width, height: size.height });
