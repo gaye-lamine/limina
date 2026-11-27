@@ -155,6 +155,163 @@
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+/* Forge a new law. */
+.lab-forge-panel,
+.lab-cascade {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+.lab-forge {
+  display: grid;
+  gap: var(--space-3);
+}
+.lab-forge-open {
+  justify-self: start;
+}
+.lab-forge-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.lab-forge-text {
+  width: 100%;
+  min-height: 96px;
+  padding: var(--space-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-1);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--text-13);
+  resize: vertical;
+}
+.lab-forge-text:focus-visible,
+.lab-forge-example:focus-visible,
+.lab-cascade-open:focus-visible,
+.lab-cascade-load:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.lab-forge-count {
+  justify-self: end;
+  margin: 0;
+}
+.lab-forge-examples {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.lab-forge-example {
+  width: 100%;
+  height: auto;
+  min-height: 32px;
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  white-space: normal;
+  text-align: left;
+  line-height: 1.35;
+  font-size: var(--text-12);
+}
+.lab-forge-submit {
+  justify-self: start;
+}
+.lab-forge-steps {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding-left: var(--space-5);
+  font-size: var(--text-13);
+  color: var(--text-secondary);
+}
+.lab-forge-step--done {
+  color: var(--text-primary);
+}
+.lab-forge-step--failed,
+.lab-forge-error {
+  color: var(--text-primary);
+}
+.lab-forge-error {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--v-impossible-bg);
+  box-shadow: inset 0 0 0 1px var(--v-impossible-border);
+  font-size: var(--text-13);
+}
+/* System stress test. */
+.lab-cascade-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.lab-cascade-list {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.lab-cascade-item {
+  display: flex;
+  gap: var(--space-1);
+  align-items: stretch;
+  border-radius: var(--radius-sm);
+  background: var(--surface-1);
+}
+.lab-cascade-item.is-first {
+  box-shadow: inset 0 0 0 1px var(--v-impossible-border);
+  background: var(--v-impossible-bg);
+}
+.lab-cascade-item.is-shown {
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.lab-cascade-open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+  padding: var(--space-2);
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  text-align: left;
+  font-size: var(--text-13);
+  cursor: pointer;
+}
+.lab-cascade-name {
+  flex-basis: 100%;
+  font-weight: 500;
+}
+.lab-cascade-ratio,
+.lab-cascade-shown {
+  color: var(--text-secondary);
+  font-size: var(--text-12);
+}
+.lab-cascade-first {
+  padding: 1px 8px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--v-impossible);
+  color: var(--text-primary);
+  font-size: var(--text-12);
+  font-weight: 600;
+}
+.lab-cascade-remove {
+  flex: none;
+  min-width: 32px;
+  padding: 0 var(--space-2);
+}
+.lab-cascade-load-value {
+  color: var(--text-secondary);
+}
 .lab-actions .lab-help,
 .lab-actions .lab-note {
   flex-basis: 100%;

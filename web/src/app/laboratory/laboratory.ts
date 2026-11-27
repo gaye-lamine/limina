@@ -5,6 +5,7 @@ import {
   ElementRef,
   NgZone,
   OnDestroy,
+  ViewEncapsulation,
   computed,
   inject,
   signal,
@@ -42,7 +43,9 @@ import {
   withValue,
 } from './lab-model';
 import { DragUpdate } from './drag-map';
-import { readInspect } from './inspect';
+import { Inspect, readCascade, readInspect } from './inspect';
+import { CurrentLaw, LabCascade } from './lab-cascade';
+import { LabForge } from './lab-forge';
 import { LabAudio } from './lab-audio';
 import { convert } from './lab-units';
 import { Observatory, webglAvailable } from './scene';
@@ -77,7 +80,9 @@ interface Pin {
   selector: 'app-laboratory',
   templateUrl: './laboratory.html',
   styleUrl: './laboratory.css',
-  imports: [NgTemplateOutlet],
+  imports: [NgTemplateOutlet, LabForge, LabCascade],
+  // The laboratory's styles (all prefixed lab-) also serve its forge and stress test panels.
+  encapsulation: ViewEncapsulation.None,
 })
 export class Laboratory implements AfterViewInit, OnDestroy {
   protected readonly t = LAB;
@@ -122,6 +127,15 @@ export class Laboratory implements AfterViewInit, OnDestroy {
   protected readonly pin = signal<Pin | null>(null);
   /** What the last draw put in the scene (exposed as data attributes for the end-to-end checks). */
   protected readonly drawn = signal<Drawn>({ hatchedCells: 0, zones: 0 });
+  private readonly forgePanel = viewChild(LabForge);
+  private readonly cascadePanel = viewChild(LabCascade);
+  /** The law on screen as the stress test takes it: its request at the current claim and its limit. */
+  protected readonly currentLaw = computed<CurrentLaw | null>(() => {
+    const limit = this.limit();
+    const claim = this.claim();
+    if (!limit || !claim) return null;
+    return { limit, request: evaluateRequest(limit, claim, this.params(), this.options()), bound: this.result()?.bound ?? null };
+  });
   /** Physical apparatus (the default) or mathematical boundary. */
   protected readonly mode = signal<'apparatus' | 'boundary'>('apparatus');
   /** What the physical apparatus shows (exposed as a data attribute for the end-to-end checks). */
@@ -177,12 +191,16 @@ export class Laboratory implements AfterViewInit, OnDestroy {
   });
 
   constructor() {
+    const cascade = readCascade(history.state);
+    if (!this.inspect && cascade.length > 0) this.inspect = cascade[0];
     this.api.getLimits().subscribe({
       next: (r) => {
         this.limits.set(r.limits);
         const wanted = this.inspect && r.limits.some((l) => l.id === this.inspect?.limit_id) ? this.inspect.limit_id : null;
         const first = wanted ?? this.groups()[0]?.laws[0]?.id;
         if (first) this.select(first);
+        // The claims sent by "Stress-test all laws in 3D Lab".
+        if (cascade.length > 0) setTimeout(() => this.cascadePanel()?.start(cascade, r.limits));
       },
       error: () => this.failed.set(true),
     });
@@ -552,6 +570,33 @@ export class Laboratory implements AfterViewInit, OnDestroy {
   protected clearPin(): void {
     this.pin.set(null);
     this.redraw();
+  }
+
+  // ---------- forge and stress test ----------
+
+  /** A draft was written and registered: reload the library, open it, say so. */
+  protected onForged(limitId: string): void {
+    this.api.getLimits().subscribe({
+      next: (r) => {
+        this.limits.set(r.limits);
+        const law = r.limits.find((l) => l.id === limitId);
+        if (!law) return;
+        this.select(limitId);
+        this.forgePanel()?.announce(law.title);
+      },
+      error: () => this.failed.set(true),
+    });
+  }
+
+  /** A law of the stress test, shown in 3D at its values under the current load. */
+  protected onOpenLaw(i: Inspect): void {
+    this.inspect = i;
+    this.select(i.limit_id);
+  }
+
+  /** A law became the first to break: the thud, when sound is on. */
+  protected onBreaking(): void {
+    this.audio.alarm();
   }
 
   // ---------- direct manipulation and sound ----------

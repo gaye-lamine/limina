@@ -1,0 +1,54 @@
+<section class="lab-cascade" aria-labelledby="lab-cascade-title">
+  <h2 class="lab-label" id="lab-cascade-title">{{ t.title }}</h2>
+  <p class="lab-help">{{ t.intro }}</p>
+  <div class="lab-cascade-actions">
+    <button type="button" class="btn btn-secondary lab-cascade-add" [disabled]="!canAdd()" (click)="addCurrent()">{{ t.add }}</button>
+    @if (members().length > 0) {
+      <button type="button" class="btn btn-ghost lab-cascade-clear" (click)="clear()">{{ t.clear }}</button>
+    }
+  </div>
+  @if (addNote()) {
+    <p class="lab-help">{{ addNote() }}</p>
+  }
+  @if (members().length > 0) {
+    <ul class="lab-cascade-list" aria-live="polite">
+      @for (m of members(); track m.limitId; let i = $index) {
+        <li class="lab-cascade-item" [class.is-first]="first() === m.limitId" [class.is-shown]="shownId() === m.limitId" [attr.data-limit]="m.limitId">
+          <button type="button" class="lab-cascade-open" [attr.aria-label]="t.open(m.title)" [attr.aria-current]="shownId() === m.limitId ? 'true' : null" (click)="show(m, i)">
+            <span class="lab-cascade-name">{{ m.title }}</span>
+            @if (results()[i]; as r) {
+              <span class="pill pill--{{ r.kind === 'outside' ? 'needs' : r.kind }} lab-cascade-verdict">{{ r.label }}</span>
+              <span class="lab-cascade-ratio num">{{ t.ratio }} {{ r.ratio === null ? '—' : fmt(r.ratio) }}</span>
+            }
+            @if (first() === m.limitId) {
+              <span class="lab-cascade-first">{{ t.first }}</span>
+            }
+            @if (shownId() === m.limitId) {
+              <span class="lab-cascade-shown">{{ t.shown }}</span>
+            }
+          </button>
+          <button type="button" class="btn btn-ghost lab-cascade-remove" [attr.aria-label]="t.remove(m.title)" (click)="remove(m.limitId)">×</button>
+        </li>
+      }
+    </ul>
+    @if (active()) {
+      <label class="lab-field">
+        <span class="lab-sub">{{ t.load }} <span class="num lab-cascade-load-value">{{ t.loadText(load()) }}</span></span>
+        <input
+          type="range"
+          class="lab-track lab-cascade-load"
+          [min]="min"
+          [max]="max"
+          step="1"
+          [value]="load()"
+          [attr.aria-valuetext]="t.loadText(load())"
+          aria-describedby="lab-cascade-load-help"
+          (input)="onLoad($event)"
+        />
+      </label>
+      <p class="lab-help" id="lab-cascade-load-help">{{ t.loadHelp }}</p>
+    } @else {
+      <p class="lab-help">{{ t.need }}</p>
+    }
+  }
+</section>

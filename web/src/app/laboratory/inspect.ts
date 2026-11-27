@@ -25,6 +25,27 @@ export function inspectOf(c: AnalyzedClaim): Inspect | null {
   return { limit_id: c.limit_id, claim: { value: c.value, unit: c.unit }, parameters, constraints: { ...c.constraints } };
 }
 
+/** Key of the claims sent to the System stress test in the navigation state. */
+export const CASCADE_KEY = 'liminaCascade';
+
+/** The analysed claims of a text that can be stress-tested together: a law and a value each, one per law, four at most. */
+export function cascadeOf(claims: AnalyzedClaim[]): Inspect[] {
+  const out: Inspect[] = [];
+  for (const c of claims) {
+    const i = inspectOf(c);
+    if (i && !out.some((x) => x.limit_id === i.limit_id)) out.push(i);
+    if (out.length === 4) break;
+  }
+  return out;
+}
+
+/** The claims of a stress test in a navigation state, each with the expected shape. */
+export function readCascade(state: unknown): Inspect[] {
+  const list = (state as Record<string, unknown> | null)?.[CASCADE_KEY];
+  if (!Array.isArray(list)) return [];
+  return list.map((x) => readInspect({ [INSPECT_KEY]: x })).filter((x): x is Inspect => x !== null).slice(0, 4);
+}
+
 /** The analysed claim in a navigation state, when it has the expected shape. */
 export function readInspect(state: unknown): Inspect | null {
   const s = (state as Record<string, unknown> | null)?.[INSPECT_KEY] as Inspect | undefined;

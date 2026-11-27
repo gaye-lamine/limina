@@ -386,6 +386,228 @@ test('the glow is on where the browser supports it, and the sound is off until a
   expect(errors).toEqual([]);
 });
 
+const FORGED = 'magnetic_pressure_forged';
+const MU0 = 1.25663706212e-6;
+
+/** A forged draft served by mocked routes: the library gains it, and its requests are answered like the API's. */
+async function mockForgedLaw(page: Page): Promise<void> {
+  let forged = false;
+  await page.route('**/v1/limits/author', (route) => {
+    forged = true;
+    return route.fulfill({
+      json: {
+        limit_id: FORGED,
+        status: 'draft',
+        attempts: 1,
+        definition: {},
+        errors: [],
+        overrides: [],
+        report: {
+          limit_id: FORGED,
+          status: 'draft',
+          validated: false,
+          dimension: 'passed',
+          formulas: [{ configuration: '', formula: 'B^2 / (2 mu0)', monotonicity: { B: 'Increasing' }, samples: 200, finite: true, non_negative: true }],
+          validity: [],
+        },
+      },
+    });
+  });
+  await page.route('**/v1/limits', async (route) => {
+    const res = await route.fetch();
+    const body = await res.json();
+    if (forged)
+      body.limits.push({
+        id: FORGED,
+        direction: 'Max',
+        title: 'Magnetic pressure on a coil',
+        formula: 'p <= B^2 / (2 mu0)',
+        statement: 'The magnetic pressure of a field B on a coil, B^2 / (2 mu0).',
+        claim_unit: 'Pa',
+        assumptions: [{ id: 'draft_formula', options: ['as_written', 'not_validated'] }],
+        parameters: [{ id: 'B', kind: 'Plain', required: true, units: ['T', 'mT'] }],
+        assumption_labels: { draft_formula: 'formula status' },
+        option_labels: { as_written: 'as written', not_validated: 'not validated' },
+        parameter_labels: { B: 'magnetic field' },
+        status: 'draft',
+      });
+    await route.fulfill({ response: res, json: body });
+  });
+  const boundAt = (b: number) => (b * b) / (2 * MU0);
+  await page.route('**/v1/evaluate', async (route) => {
+    const req = route.request().postDataJSON();
+    if (req.limit_id !== FORGED) return route.continue();
+    const bound = boundAt(req.parameters.B.value);
+    const e = { b_min: bound, b_max: bound, margin: null };
+    await route.fulfill({
+      json: {
+        verdict: req.claim.value > bound ? 'CONDITIONAL' : 'COMPATIBLE',
+        limit_id: FORGED,
+        engine_version: 'test',
+        wording: req.claim.value > bound ? 'inconsistent with limit magnetic pressure under assumptions formula status = as written' : 'does not exceed the bound',
+        bounds: { permissive: e, restrictive: e },
+        configurations: [],
+        missing_parameters: [],
+      },
+    });
+  });
+  await page.route('**/v1/curve', async (route) => {
+    const req = route.request().postDataJSON();
+    if (req.limit_id !== FORGED) return route.continue();
+    const [lo, hi] = req.range ?? [0.1, 10];
+    const n = req.points ?? 101;
+    const points = Array.from({ length: n }, (_, i) => {
+      const x = lo + ((hi - lo) * i) / (n - 1);
+      const v = boundAt(x);
+      return { x, b_min: v, b_max: v, decisive: v };
+    });
+    await route.fulfill({ json: { limit_id: FORGED, direction: 'Max', free_parameter: 'B', range: [lo, hi], points, kind: 'bound', validity_zones: [], spacing: 'linear' } });
+  });
+}
+
+test('forging a law explains a refusal and keeps the sentence', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.route('**/v1/limits/author', (route) =>
+    route.fulfill({
+      status: 422,
+      json: { error: { code: 'LimitNotAuthored', message: 'no valid definition after 3 attempts; last error: the definition does not match the schema' } },
+    }),
+  );
+  await openLab(page);
+  await page.locator('.lab-forge-open').click();
+  const box = page.locator('.lab-forge-text');
+  await expect(box).toBeFocused();
+  await page.locator('.lab-forge-example').first().click();
+  const sentence = await box.inputValue();
+  expect(sentence.length).toBeGreaterThan(20);
+  await page.locator('.lab-forge-submit').click();
+  const error = page.locator('.lab-forge-error');
+  await expect(error).toContainText('No valid law could be written from this sentence after 3 tries');
+  expect((await error.innerText()).toLowerCase()).not.toMatch(/(?<!heat )\b(engine|schema|llm|rust|api|server|json)\b/);
+  await expect(box).toHaveValue(sentence);
+  await expect(page.locator('.lab-forge-panel')).toBeVisible();
+  // Escape closes the panel and gives the focus back.
+  await box.press('Escape');
+  await expect(page.locator('.lab-forge-panel')).toHaveCount(0);
+  await expect(page.locator('.lab-forge-open')).toBeFocused();
+});
+
+test('a forged law opens at once, flagged as a draft, with its apparatus and boundary', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await mockForgedLaw(page);
+  await openLab(page);
+  await page.locator('.lab-forge-open').click();
+  await page.locator('.lab-forge-text').fill('The magnetic pressure B^2 / (2 mu0) of a field B, in pascals, cannot exceed the yield strength of the coil.');
+  await page.locator('.lab-forge-submit').click();
+  await expect(page.locator('.lab-forge-step').nth(2)).toHaveText('Checked on 200 sample points');
+  await expect(page.locator('select.lab-law')).toHaveValue(FORGED, { timeout: 30_000 });
+  await expect(page.locator('.lab-draft')).toHaveText('Draft: written by AI, not validated');
+  await expect(page.locator('.lab-forge-note')).toContainText('Magnetic pressure on a coil');
+  await expect(page.locator('#lab-track-B')).toBeVisible();
+  const stage = page.locator('.lab-stage');
+  await expect(page.locator('.lab-verdict')).toHaveText(VERDICT, { timeout: 30_000 });
+  await expect(stage).toHaveAttribute('data-view', 'apparatus');
+  await expect(stage).toHaveAttribute('data-apparatus', /^(flow|trajectory|wave|quantum)$/);
+  await expect(stage).toHaveAttribute('data-bench', /.+/);
+  await page.waitForTimeout(500);
+  await page.screenshot({ path: join(OUT, 'laboratory-forged-apparatus-1440x900.png') });
+  await showView(page, 'boundary');
+  await expect(stage).toHaveAttribute('data-topology', 'corridor');
+  await expect(page.locator('.lab-verdict')).not.toHaveText('IMPOSSIBLE');
+});
+
+test('the stress test names the first breaking limit and shows any law in 3D', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const errors = collectErrors(page);
+  await openLab(page);
+  const law = page.locator('select.lab-law');
+  const verdict = page.locator('.lab-verdict');
+  // Carnot pushed far past its limit, then Betz at its starting claim.
+  await law.selectOption('carnot');
+  await expect(verdict).toHaveText(VERDICT, { timeout: 30_000 });
+  const claim = page.locator('#lab-track-claim');
+  await claim.focus();
+  await claim.press('End');
+  await expect(verdict).toHaveText('IMPOSSIBLE', { timeout: 30_000 });
+  await page.locator('.lab-cascade-add').click();
+  await law.selectOption('betz');
+  await expect(verdict).toHaveText(VERDICT, { timeout: 30_000 });
+  await page.locator('.lab-cascade-add').click();
+  const items = page.locator('.lab-cascade-item');
+  await expect(items).toHaveCount(2);
+  const load = page.locator('.lab-cascade-load');
+  // Light load: nothing breaks.
+  await load.fill('20');
+  await expect(items.locator('.lab-cascade-verdict')).toHaveText([/^(COMPATIBLE|CONDITIONAL)$/, /^(COMPATIBLE|CONDITIONAL)$/], { timeout: 30_000 });
+  await expect(page.locator('.lab-cascade-first')).toHaveCount(0);
+  // Past 100 %: the most constrained law breaks first, and only it.
+  await load.fill('120');
+  const carnot = page.locator(".lab-cascade-item[data-limit='carnot']");
+  const betz = page.locator(".lab-cascade-item[data-limit='betz']");
+  await expect(carnot.locator('.lab-cascade-verdict')).toHaveText('IMPOSSIBLE', { timeout: 30_000 });
+  await expect(carnot.locator('.lab-cascade-first')).toHaveText('First breaking limit');
+  await expect(betz.locator('.lab-cascade-verdict')).toHaveText(/^(COMPATIBLE|CONDITIONAL)$/);
+  await expect(page.locator('.lab-cascade-first')).toHaveCount(1);
+  await page.screenshot({ path: join(OUT, 'laboratory-stress-test-1440x900.png') });
+  // Showing Betz in 3D keeps the stress test and its first breaking limit.
+  await betz.locator('.lab-cascade-open').click();
+  await expect(law).toHaveValue('betz');
+  await expect(page.locator('.lab-stage')).toHaveAttribute('data-apparatus', 'flow');
+  await expect(items).toHaveCount(2);
+  await expect(carnot.locator('.lab-cascade-first')).toBeVisible();
+  await expect(betz).toHaveClass(/is-shown/);
+  expect(errors).toEqual([]);
+});
+
+test('the analysis sends its laws to the stress test', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const claim = (limit_id: string, quantity: string, value: number, start: number, constraints: Record<string, string>, parameters: Record<string, unknown>) => ({
+    limit_id,
+    quantity,
+    value,
+    unit: 'dimensionless',
+    raw_value: value * 100,
+    raw_unit: '%',
+    evidence: { text: `${value * 100}%`, start, end: start + 3 },
+    constraints,
+    parameters,
+    notes: [],
+    flags: [],
+    status: 'evaluated',
+    result: null,
+    reason: null,
+    code: null,
+    trace: [],
+    law: { source: 'built_in', limit_id, sentence: null, attempts: [], comparison: null },
+  });
+  await page.route('**/v1/analyze', async (route) => {
+    const res = await page.request.post('http://localhost:3000/v1/evaluate', {
+      data: { limit_id: 'betz', claim: { value: 0.5, unit: 'dimensionless' }, constraints: { reference_area: ['unshrouded_rotor'] }, parameters: {} },
+    });
+    const betzResult = await res.json();
+    const carnotRes = await page.request.post('http://localhost:3000/v1/evaluate', {
+      data: { limit_id: 'carnot', claim: { value: 0.6, unit: 'dimensionless' }, constraints: { conversion_process: ['heat_engine_cycle'] }, parameters: { Th: { value: 600, unit: 'K' }, Tc: { value: 300, unit: 'K' } } },
+    });
+    const carnotResult = await carnotRes.json();
+    const a = claim('betz', 'power coefficient', 0.5, 10, { reference_area: 'unshrouded_rotor' }, {});
+    const b = claim('carnot', 'efficiency', 0.6, 40, { conversion_process: 'heat_engine_cycle' }, {
+      Th: { value: 600, raw_value: 600, unit: 'K', evidence: null, flags: [] },
+      Tc: { value: 300, raw_value: 300, unit: 'K', evidence: null, flags: [] },
+    });
+    await route.fulfill({ json: { claims: [{ ...a, result: betzResult }, { ...b, result: carnotResult }], missing: [], extraction: { model: 'test', cached: true, ms: 1 } } });
+  });
+  await page.goto('/');
+  await page.locator('#wb-text').fill('The rotor reaches 50% and the engine between 600 K and 300 K reaches 60% efficiency.');
+  await page.locator('.wb-analyze').click();
+  const stress = page.locator('.stress-button');
+  await expect(stress).toBeVisible({ timeout: 60_000 });
+  await stress.click();
+  await expect(page).toHaveURL(/\/laboratory$/);
+  await expect(page.locator('.lab-cascade-item')).toHaveCount(2, { timeout: 30_000 });
+  await expect(page.locator('.lab-cascade-verdict')).toHaveCount(2, { timeout: 30_000 });
+  await expect(page.locator('select.lab-law')).toHaveValue('betz');
+});
+
 for (const size of SIZES) {
   test(`laboratory layout at ${size.name}`, async ({ page }) => {
     await page.setViewportSize({ width: size.width, height: size.height });

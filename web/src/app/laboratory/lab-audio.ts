@@ -88,6 +88,11 @@ export class LabAudio {
     this.wasPast = impossible;
   }
 
+  /** The low thud of a limit crossed, on its own (the stress test's first breaking limit). */
+  alarm(): void {
+    this.blip(70, 0.35, 0.9, 'triangle');
+  }
+
   /** The soft ping of Find Breaking Point. */
   pulse(): void {
     this.blip(660, 0.25, 0.35, 'sine');

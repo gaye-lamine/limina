@@ -98,6 +98,7 @@
           </button>
         </div>
       </div>
+      <app-lab-forge (forged)="onForged($event)" />
       @if (isDraft()) {
         <p class="lab-draft">{{ t.draftBadge }}</p>
       }
@@ -181,6 +182,7 @@
         <button type="button" class="btn btn-secondary lab-reset" (click)="resetView()" [disabled]="!viewReady()">{{ t.resetView }}</button>
         <button type="button" class="btn btn-ghost lab-back" (click)="back()">{{ t.back }}</button>
       </div>
+      <app-lab-cascade [current]="currentLaw()" [shownId]="selectedId()" (openLaw)="onOpenLaw($event)" (breaking)="onBreaking()" />
       <p class="lab-help">{{ t.zones }}</p>
       <p class="lab-help">{{ t.help }}</p>
       <p class="lab-help">{{ t.dragHelp }}</p>

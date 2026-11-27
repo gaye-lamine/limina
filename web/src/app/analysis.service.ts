@@ -3,6 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { Observable, catchError, throwError } from 'rxjs';
 import {
   AnalyzeResponse,
+  AuthorResponse,
   CurveResponse,
   PipelineInfo,
   SolveResponse,
@@ -60,6 +61,11 @@ export class AnalysisService {
 
   analyze(text: string): Observable<AnalyzeResponse> {
     return this.post<AnalyzeResponse>('/v1/analyze', { text });
+  }
+
+  /** `POST /v1/limits/author`: a draft law written from a sentence, checked and registered (in memory) by the API. */
+  author(text: string): Observable<AuthorResponse> {
+    return this.post<AuthorResponse>('/v1/limits/author', { text });
   }
 
   solve(request: SolveRequest): Observable<SolveResponse> {

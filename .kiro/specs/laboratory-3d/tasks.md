@@ -38,3 +38,7 @@
 - [x] 6.1 Draggable handles (`drag-map.ts`, `pointer.ts`): boundary probe and chamber core; walls, ring, field probe, hot source, aperture; orbit off while dragging; grab cursors; keyboard unchanged; unit tests of the maps; e2e drags of the Carnot probe and a Heisenberg wall.
 - [x] 6.2 Glow (`glow.ts`): bloom between render and output passes, labels in an overlay drawn after it, direct rendering without float targets, disposal; WebGL round trip still releases its context.
 - [x] 6.3 Sound (`lab-audio.ts`): off by default, keyboard toggle, tone, thud on IMPOSSIBLE, ping on breaking point; context closed when off and on leaving; unit tests with a fake context, e2e count of created and closed contexts.
+
+## Phase 6, pass B: forge and stress test
+- [x] 6.4 Forge a new law (`forge.ts`, `lab-forge.ts`, `AnalysisService.author`): panel, examples, plain progress and refusals, draft opened with apparatus and boundary; unit tests; e2e refusal (mocked 422) and success (mocked draft routes).
+- [x] 6.5 System stress test (`cascade.ts`, `lab-cascade.ts`): two to four bound laws, System load 20-150 %, engine verdicts and ratios, First breaking limit with sound, show any law in 3D; "Stress-test all laws in 3D Lab" from the analysis; unit tests; e2e in the laboratory and from a mocked analysis.

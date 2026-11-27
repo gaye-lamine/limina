@@ -134,6 +134,9 @@
         <button type="button" class="btn btn-ghost download-button" (click)="download()" [disabled]="entries().length === 0 || downloading()">
           <lucide-icon [img]="icons.Download" [size]="16" aria-hidden="true" />{{ downloading() ? u.downloading : u.download }}
         </button>
+        @if (stressClaims().length >= 2) {
+          <button type="button" class="btn btn-ghost stress-button" (click)="stressTest()">{{ u.stressTest }}</button>
+        }
         <button type="button" class="btn btn-secondary new-button" (click)="newAnalysis()">{{ u.newAnalysis }}</button>
       </div>
     </section>

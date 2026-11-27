@@ -1,0 +1,60 @@
+<div class="lab-forge">
+  <button
+    #opener
+    type="button"
+    class="btn btn-secondary lab-forge-open"
+    [attr.aria-expanded]="open()"
+    aria-controls="lab-forge-panel"
+    (click)="toggle()"
+  >
+    {{ t.open }}
+  </button>
+  @if (open()) {
+    <section id="lab-forge-panel" class="lab-forge-panel" role="region" aria-labelledby="lab-forge-title" (keydown)="onKey($event)">
+      <div class="lab-forge-head">
+        <h2 class="lab-label" id="lab-forge-title">{{ t.title }}</h2>
+        <button type="button" class="btn btn-ghost lab-forge-close" (click)="close()">{{ t.close }}</button>
+      </div>
+      <p class="lab-help">{{ t.intro }}</p>
+      <label class="lab-field">
+        <span class="lab-sub">{{ t.label }}</span>
+        <textarea
+          #box
+          class="lab-forge-text"
+          rows="4"
+          [attr.maxlength]="max"
+          [value]="text()"
+          (input)="onInput($event)"
+          [attr.aria-describedby]="error() ? 'lab-forge-error' : null"
+        ></textarea>
+      </label>
+      <p class="lab-help num lab-forge-count">{{ t.count(chars(), max) }}</p>
+      <div class="lab-field">
+        <span class="lab-sub" id="lab-forge-examples">{{ t.suggestions }}</span>
+        <ul class="lab-forge-examples" aria-labelledby="lab-forge-examples">
+          @for (s of t.examples; track $index) {
+            <li><button type="button" class="chip lab-forge-example" (click)="useExample(s)">{{ s }}</button></li>
+          }
+        </ul>
+      </div>
+      <button type="button" class="btn btn-primary lab-forge-submit" [disabled]="!ready()" (click)="submit()">
+        {{ busy() ? t.running : t.submit }}
+      </button>
+      <div aria-live="polite">
+        @if (steps().length > 0) {
+          <ol class="lab-forge-steps">
+            @for (s of steps(); track $index) {
+              <li class="lab-forge-step lab-forge-step--{{ s.state }}">{{ s.text }}</li>
+            }
+          </ol>
+        }
+        @if (error()) {
+          <p class="lab-forge-error" id="lab-forge-error" role="alert">{{ error() }}</p>
+        }
+        @if (note()) {
+          <p class="lab-note lab-forge-note">{{ note() }}</p>
+        }
+      </div>
+    </section>
+  }
+</div>

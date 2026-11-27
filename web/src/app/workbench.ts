@@ -16,7 +16,7 @@ import { CountUp } from './count-up';
 import { formatValue } from './chart-geometry';
 import { Explorer } from './explorer';
 import { IMAGE_TYPES, imageProblem, prepareImage } from './image-input';
-import { INSPECT_KEY, inspectOf } from './laboratory/inspect';
+import { CASCADE_KEY, INSPECT_KEY, cascadeOf, inspectOf } from './laboratory/inspect';
 import { ReviewExport } from './review-export';
 import {
   OptionResult,
@@ -228,6 +228,19 @@ export class Workbench {
   }
 
   /** "Inspect in 3D Lab": opens the laboratory with this claim's law, values and assumptions. */
+  /** The claims of the text that can be stress-tested together: a bound law (not a predicted value) and a value each, one per law. */
+  protected readonly stressClaims = computed(() => {
+    const bound = new Set(this.limits().filter((l) => l.direction !== 'Equal').map((l) => l.id));
+    const claims = this.entries().flatMap((e) => (e.kind === 'claim' && e.claim.limit_id && bound.has(e.claim.limit_id) ? [e.claim] : []));
+    return cascadeOf(claims);
+  });
+
+  /** "Stress-test all laws in 3D Lab": opens the laboratory's System stress test with these claims. */
+  protected stressTest(): void {
+    const list = this.stressClaims();
+    if (list.length >= 2) void this.router.navigateByUrl('/laboratory', { state: { [CASCADE_KEY]: list } });
+  }
+
   protected inspectInLab(c: AnalyzedClaim): void {
     const inspect = inspectOf(c);
     if (inspect) void this.router.navigateByUrl('/laboratory', { state: { [INSPECT_KEY]: inspect } });

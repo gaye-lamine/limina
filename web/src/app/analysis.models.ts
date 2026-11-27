@@ -92,6 +92,21 @@ export interface SolveResponse {
   sentence: string;
 }
 
+/** Body of a successful `POST /v1/limits/author` (the fields the laboratory reads). */
+export interface AuthorResponse {
+  limit_id: string;
+  status: 'draft';
+  attempts: number;
+  report: {
+    limit_id: string;
+    validated: boolean;
+    /** "passed", or the reason the units were refused. */
+    dimension: string;
+    formulas: { configuration: string; formula: string | null; samples: number; finite: boolean | null; non_negative: boolean | null }[];
+    validity: { condition: string; held: number; failed: number }[];
+  };
+}
+
 export interface CurvePoint {
   x: number;
   b_min: number | null;
