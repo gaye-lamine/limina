@@ -4,7 +4,7 @@
 
 Limina reads a physical performance claim (press release, product page), extracts the numbers, and checks them against a deterministic library of fundamental physical limits (Carnot, Betz, Shockley–Queisser, etc.). The verdict is always computed by the deterministic engine, never by an LLM: the language model only reads numbers out of a text and rephrases a result that is already computed.
 
-**Status:** working prototype built for the Kiroween 2026 hackathon. The engine, the DSL, the API with extraction and authoring, the web app and the 3D laboratory are implemented; the MCP server is not built.
+**Status:** working prototype built for the Kiroween 2026 hackathon. The engine, the DSL, the API with extraction and authoring, the web app, the 3D laboratory and an MCP server (`limina-mcp`) are implemented.
 
 What it does, in four screens of one web app:
 
@@ -281,6 +281,38 @@ cargo run -q -p limina-cli -- check demo/spec-heat-pump.md --format json
 Each claim prints `file:line:col: severity: VERDICT limit`, then the claim and the bound, the engine wording, a line `to settle this, state: ...` when an assumption or a temperature is missing (mode, reference area), and, where the inverse solver answers, a line such as "Not inconsistent with limit carnot only if Th is at least 750 K". Exit code 0: no inconsistency; 1: at least one IMPOSSIBLE; 2: the analysis could not run (no key, network failure, extraction failed), which wins over 1. CONDITIONAL and needs-input claims are warnings. The file is read paragraph by paragraph (paragraphs without a digit are skipped), and an unusable model answer is asked again up to 3 times; a paragraph that still fails is reported at its line and the check goes on. `demo/spec-heat-pump.md` is an illustrative note with four claims. The live test: `cargo test -p limina-cli --test live -- --ignored --nocapture`.
 
 The Kiro hook `.kiro/hooks/physics-lint.json` (PostFileSave, markdown files under `docs/` or `demo/`) asks the agent to run `limina check` on the saved file, show the report, and for each finding propose either to state the missing assumption or to ask the author; it never changes a number to make a claim pass. The steering file `.kiro/steering/physics-claims.md` applies to the same files.
+
+## MCP server
+
+`limina-mcp` is a Model Context Protocol server on stdio, built on the official Rust SDK (`rmcp`, pinned at 3.12.0). It is a thin client of the Limina HTTP API: every verdict, bound and threshold it returns is the API's answer, passed on unchanged, and no verdict logic is repeated in it. It holds no key and sends no credential; its only setting is `LIMINA_API_URL` (default `http://127.0.0.1:3000`). Language-model keys stay with the API.
+
+| Tool | What it does | API route |
+| --- | --- | --- |
+| `list_limits` | The library: id, title, direction, claim unit, formula, statement | `GET /v1/limits` |
+| `explain_limit(id)` | One limit in full: assumptions, parameters, validity, limitations, references | `GET /v1/limits` |
+| `evaluate_claim(limit_id, value, unit, constraints, parameters)` | The engine's verdict for a claim | `POST /v1/evaluate` |
+| `solve_threshold(limit_id, claim, free_parameter, constraints, parameters)` | The value of one parameter at which the bound meets the claim | `POST /v1/solve` |
+| `analyze_text(text)` | Reads claims out of a paragraph and checks them; says so explicitly when the server has no extraction key | `POST /v1/analyze` |
+
+Use it from Kiro. Start the API (`cargo run -p limina-api`), build the server once so Kiro starts it at once (`cargo build -p limina-mcp`), and register it in `.kiro/settings/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "limina": {
+      "command": "cargo",
+      "args": ["run", "--quiet", "-p", "limina-mcp"],
+      "env": {
+        "LIMINA_API_URL": "http://127.0.0.1:3000"
+      },
+      "disabled": false,
+      "autoApprove": ["list_limits", "explain_limit"]
+    }
+  }
+}
+```
+
+`cargo` must be on the `PATH` of Kiro and the workspace folder must be the repository root. To use the public deployment instead of a local API, set `LIMINA_API_URL` to `https://limina.backnd-api.cloud` (the public server limits the model routes per address). `cargo test -p limina-mcp` starts the real binary against a mock of the API. A recorded stdio session is in `docs/mcp-demo.md`.
 
 ## Run the web app
 
