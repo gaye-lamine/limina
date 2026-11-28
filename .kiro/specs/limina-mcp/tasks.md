@@ -7,4 +7,4 @@
 - [x] Tests against a mock HTTP server: tool list, forwarded bodies, unchanged answers, API errors, unreachable API, no credential sent.
 - [x] README section with the configuration.
 - [x] `docs/mcp-demo.md`: a recorded stdio session.
-- [ ] Register the server in `.kiro/settings/mcp.json` and call each tool from Kiro. Not done in the session that built the crate: writing under `.kiro/settings/` was refused by a permission rule.
+- [x] Register the server in `.kiro/settings/mcp.json` and call each tool from Kiro. Done: the five tools were called from a Kiro session and their raw tool entries and results are in `docs/mcp-demo.md`. The registration file itself is local and is not committed.
